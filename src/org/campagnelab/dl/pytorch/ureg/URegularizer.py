@@ -19,7 +19,7 @@ class URegularizer:
         self.num_activations += num
         # print("activations: " + str(self.num_activations))
 
-    def __init__(self, model, mini_batch_size, num_inputs, alpha, learning_rate):
+    def __init__(self, model, mini_batch_size, num_features=64, alpha=0.5, learning_rate=0.1):
         self.mini_batch_size = mini_batch_size
         self.model = model
         self.num_activations = 0
@@ -30,6 +30,8 @@ class URegularizer:
         self.enabled = True
         self.use_cuda = torch.cuda.is_available()
         self.scheduler =None
+        self.checkpointModel=None
+        self.num_features=num_features
         # def count_activations(i, o):
         #     self.add_activations(len(o))
         #
@@ -65,31 +67,34 @@ class URegularizer:
         :param val_loss: the validation/test loss
         :return: None
         """
-        self.scheduler.step(val_loss, epoch)
+        if self.scheduler is not None:
+            self.scheduler.step(val_loss, epoch)
 
-    def create_which_one_model(self, mini_batch_size, num_activations):
-
+    def create_which_one_model(self,  num_activations):
+        num_features=self.num_features
         if self.which_one_model is None:
-            num_features=round(num_activations / 2)
-            num_features=64
-            self.which_one_model = Sequential(
-                torch.nn.Dropout(p=0.5),
-                torch.nn.Linear(num_activations, num_features),
-                torch.nn.Dropout(p=0.5),
-                torch.nn.ReLU(),
-                torch.nn.Linear(num_features, num_features),
-                torch.nn.Dropout(p=0.5),
-                torch.nn.ReLU(),
-                torch.nn.Linear(num_features, 2),
-                torch.nn.Dropout(p=0.5),
-                torch.nn.ReLU(),
-                torch.nn.Softmax())
+
+            if self.checkpointModel is not None:
+                self.which_one_model =self.checkpointModel
+            else:
+                self.which_one_model = Sequential(
+                    torch.nn.Dropout(p=0.5),
+                    torch.nn.Linear(num_activations, num_features),
+                    torch.nn.Dropout(p=0.5),
+                    torch.nn.ReLU(),
+                    torch.nn.Linear(num_features, num_features),
+                    torch.nn.Dropout(p=0.5),
+                    torch.nn.ReLU(),
+                    torch.nn.Linear(num_features, 2),
+                    torch.nn.Dropout(p=0.5),
+                    torch.nn.ReLU(),
+                    torch.nn.Softmax())
             print("done building which_one_model:"+str(self.which_one_model))
             if self.use_cuda: self.which_one_model.cuda()
             # self.optimizer = torch.optim.Adam(self.which_one_model.parameters(),
             #                                   lr=self.learning_rate)
             self.optimizer = torch.optim.SGD(self.which_one_model.parameters(), lr=0.1, momentum=0.9);
-            self.scheduler=ReduceLROnPlateau(self.optimizer, 'min', factor=0.5, patience=1, verbose=True)
+            self.scheduler=ReduceLROnPlateau(self.optimizer, 'min', factor=0.5, patience=0, verbose=True)
             self.loss_ys = torch.nn.CrossEntropyLoss()  # 0 is supervised
             self.loss_yu = torch.nn.CrossEntropyLoss()  # (yu, torch.ones(mini_batch_size))  # 1 is unsupervised
             if self.use_cuda:
@@ -152,7 +157,7 @@ class URegularizer:
         # print("has gradient: " + str(hasattr(supervised_output.grad, "data")))  # prints False
 
 
-        self.create_which_one_model(mini_batch_size, num_activations_supervised)
+        self.create_which_one_model(num_activations_supervised)
 
         # predict which dataset (s or u) the samples were from:
 
@@ -182,3 +187,6 @@ class URegularizer:
         loss = supervised_loss * (1 - self.alpha) + self.alpha * self.regularizationLoss
         # print("loss: {0:.2f} supervised: {1:.2f} unsupervised: {2:.2f} ".format(loss.data[0], supervised_loss.data[0], self.regularizationLoss.data[0]))
         return (loss, supervised_loss.data[0], self.regularizationLoss.data[0])
+
+    def resume(self, saved_model):
+        self.checkpoint_model=saved_model

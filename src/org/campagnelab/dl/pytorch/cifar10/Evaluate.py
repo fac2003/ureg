@@ -27,6 +27,7 @@ from __future__ import print_function
 import argparse
 import os
 
+import sys
 import torch.backends.cudnn as cudnn
 import torch.optim as optim
 import torchvision
@@ -37,9 +38,15 @@ from org.campagnelab.dl.pytorch.cifar10.models import *
 from org.campagnelab.dl.pytorch.ureg.URegularizer import URegularizer
 from org.campagnelab.dl.pytorch.cifar10.utils import progress_bar
 
-parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Training')
+parser = argparse.ArgumentParser(description='Evaluate ureg against CIFAR10')
 parser.add_argument('--lr', default=0.1, type=float, help='learning rate')
 parser.add_argument('--resume', '-r', action='store_true', help='resume from checkpoint')
+parser.add_argument('--ureg', '-u', action='store_true', help='Enable unsupervised regularization (ureg)')
+parser.add_argument('--mini-batch-size',  action='store_true', help='Size of the mini-batch',default=128)
+parser.add_argument('--num-training', '-n', type=int, help='Maximum number of training examples to use',default=sys.maxsize)
+parser.add_argument('--num-validation', '-x', type=int,  help='Maximum number of training examples to use',default=sys.maxsize)
+parser.add_argument('--ureg-num-features', type=int,  help='Number of features in the ureg model',default=64)
+parser.add_argument('--ureg-alpha', type=float,  help='Mixing coefficient (between 0 and 1) for ureg loss component',default=0.5)
 args = parser.parse_args()
 
 use_cuda = torch.cuda.is_available()
@@ -61,7 +68,7 @@ transform_test = transforms.Compose([
     transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
 ])
 
-mini_batch_size=128
+mini_batch_size=args.mini_batch_size
 trainset = torchvision.datasets.CIFAR10(root='./data', train=True, download=True, transform=transform_train)
 trainloader = torch.utils.data.DataLoader(trainset, batch_size=mini_batch_size, shuffle=True, num_workers=2)
 
@@ -82,6 +89,11 @@ if args.resume:
     net = checkpoint['net']
     best_acc = checkpoint['acc']
     start_epoch = checkpoint['epoch']
+    ureg_enabled=checkpoint['ureg']
+    if ureg_enabled:
+        ureg = URegularizer(net, mini_batch_size, 0, 0.5, 0.1)
+        ureg.enable()
+        ureg.resume(checkpoint['ureg_model'])
 else:
     print('==> Building model..')
     # net = VGG('VGG19')
@@ -94,6 +106,7 @@ else:
     # net = DPN92()
     # net = ShuffleNetG2()
     # net = SENet18()
+    ureg_enabled=args.ureg
 
 if use_cuda:
     net.cuda()
@@ -102,10 +115,17 @@ if use_cuda:
 
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=0.9, weight_decay=5e-4)
-ureg = URegularizer(net, mini_batch_size, 0, 0.5, 0.1)
-ureg.enable()
-scheduler = ReduceLROnPlateau(optimizer, 'min', factor=0.5, patience=1, verbose=True)
+ureg = URegularizer(net, mini_batch_size, num_features=args.ureg_num_features, alpha=args.ureg_alpha, learning_rate=args.lr)
+if args.ureg:
+    ureg.enable()
+    print("ureg is enabled with alpha={}".format(args.ureg_alpha))
+else:
+    ureg.disable()
+    print("ureg is disabled")
 
+scheduler = ReduceLROnPlateau(optimizer, 'min', factor=0.5, patience=0, verbose=True)
+max_training_examples=args.num_training
+max_validation_examples=args.num_validation
 # Training
 def train(epoch):
     unsupiter = iter(unsuploader)
@@ -117,6 +137,7 @@ def train(epoch):
     correct = 0
     total = 0
     for batch_idx, (inputs, targets) in enumerate(trainloader):
+
         if use_cuda:
             inputs, targets = inputs.cuda(), targets.cuda()
         optimizer.zero_grad()
@@ -159,6 +180,10 @@ def train(epoch):
                      100. * correct / total,
                      correct,
                      total))
+        if (batch_idx+1) * mini_batch_size > max_training_examples:
+            break
+
+    print()
 
 def test(epoch):
     global best_acc
@@ -167,6 +192,7 @@ def test(epoch):
     correct = 0
     total = 0
     for batch_idx, (inputs, targets) in enumerate(testloader):
+
         if use_cuda:
             inputs, targets = inputs.cuda(), targets.cuda()
         inputs, targets = Variable(inputs, volatile=True), Variable(targets)
@@ -181,6 +207,9 @@ def test(epoch):
         progress_bar(batch_idx, len(testloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
             % (test_loss/(batch_idx+1), 100.*correct/total, correct, total))
 
+        if ((batch_idx+1) * mini_batch_size) > max_validation_examples:
+            break
+    print()
     # Apply learning rate schedule:
     scheduler.step(test_loss, epoch=epoch)
     ureg.schedule(test_loss,epoch)
@@ -192,6 +221,8 @@ def test(epoch):
             'net': net.module if is_parallel else net,
             'acc': acc,
             'epoch': epoch,
+            'ureg': ureg_enabled,
+            'ureg_model': ureg.which_one_model
         }
         if not os.path.isdir('checkpoint'):
             os.mkdir('checkpoint')

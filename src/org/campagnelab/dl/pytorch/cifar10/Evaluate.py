@@ -239,7 +239,7 @@ def test(epoch):
             'acc': acc,
             'epoch': epoch,
             'ureg': ureg_enabled,
-            'ureg_model': ureg.which_one_model
+            'ureg_model': ureg._which_one_model
         }
         if not os.path.isdir('checkpoint'):
             os.mkdir('checkpoint')

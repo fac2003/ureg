@@ -26,6 +26,8 @@ from __future__ import print_function
 
 import argparse
 import os
+import random
+import string
 
 import sys
 import torch.backends.cudnn as cudnn
@@ -42,15 +44,20 @@ parser = argparse.ArgumentParser(description='Evaluate ureg against CIFAR10')
 parser.add_argument('--lr', default=0.1, type=float, help='learning rate')
 parser.add_argument('--resume', '-r', action='store_true', help='resume from checkpoint')
 parser.add_argument('--ureg', '-u', action='store_true', help='Enable unsupervised regularization (ureg)')
-parser.add_argument('--mini-batch-size',  action='store_true', help='Size of the mini-batch',default=128)
-parser.add_argument('--num-training', '-n', type=int, help='Maximum number of training examples to use',default=sys.maxsize)
-parser.add_argument('--num-validation', '-x', type=int,  help='Maximum number of training examples to use',default=sys.maxsize)
-parser.add_argument('--ureg-num-features', type=int,  help='Number of features in the ureg model',default=64)
-parser.add_argument('--ureg-alpha', type=float,  help='Mixing coefficient (between 0 and 1) for ureg loss component',default=0.5)
+parser.add_argument('--mini-batch-size', action='store_true', help='Size of the mini-batch', default=128)
+parser.add_argument('--num-training', '-n', type=int, help='Maximum number of training examples to use',
+                    default=sys.maxsize)
+parser.add_argument('--num-validation', '-x', type=int, help='Maximum number of training examples to use',
+                    default=sys.maxsize)
+parser.add_argument('--ureg-num-features', type=int, help='Number of features in the ureg model', default=64)
+parser.add_argument('--ureg-alpha', type=float, help='Mixing coefficient (between 0 and 1) for ureg loss component',
+                    default=0.5)
+parser.add_argument('--checkpoint-key', help='random key to save/load checkpoint',
+                    default=''.join(random.choices( string.ascii_uppercase, k=5)))
 args = parser.parse_args()
 
 use_cuda = torch.cuda.is_available()
-is_parallel=False
+is_parallel = False
 best_acc = 0  # best test accuracy
 start_epoch = 0  # start from epoch 0 or last checkpoint epoch
 
@@ -68,7 +75,7 @@ transform_test = transforms.Compose([
     transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
 ])
 
-mini_batch_size=args.mini_batch_size
+mini_batch_size = args.mini_batch_size
 trainset = torchvision.datasets.CIFAR10(root='./data', train=True, download=True, transform=transform_train)
 trainloader = torch.utils.data.DataLoader(trainset, batch_size=mini_batch_size, shuffle=True, num_workers=2)
 
@@ -85,11 +92,12 @@ if args.resume:
     # Load checkpoint.
     print('==> Resuming from checkpoint..')
     assert os.path.isdir('checkpoint'), 'Error: no checkpoint directory found!'
-    checkpoint = torch.load('./checkpoint/ckpt.t7')
+    checkpoint = torch.load('./checkpoint/ckpt_{}.t7'.format(args.checkpoint_key))
     net = checkpoint['net']
     best_acc = checkpoint['acc']
     start_epoch = checkpoint['epoch']
-    ureg_enabled=checkpoint['ureg']
+    ureg_enabled = checkpoint['ureg']
+
     if ureg_enabled:
         ureg = URegularizer(net, mini_batch_size, 0, 0.5, 0.1)
         ureg.enable()
@@ -106,16 +114,17 @@ else:
     # net = DPN92()
     # net = ShuffleNetG2()
     # net = SENet18()
-    ureg_enabled=args.ureg
+    ureg_enabled = args.ureg
 
 if use_cuda:
     net.cuda()
-    #net = torch.nn.DataParallel(net, device_ids=range(torch.cuda.device_count()))
-    cudnn.benchmark = True
+# net = torch.nn.DataParallel(net, device_ids=range(torch.cuda.device_count()))
+cudnn.benchmark = True
 
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=0.9, weight_decay=5e-4)
-ureg = URegularizer(net, mini_batch_size, num_features=args.ureg_num_features, alpha=args.ureg_alpha, learning_rate=args.lr)
+ureg = URegularizer(net, mini_batch_size, num_features=args.ureg_num_features, alpha=args.ureg_alpha,
+                    learning_rate=args.lr)
 if args.ureg:
     ureg.enable()
     print("ureg is enabled with alpha={}".format(args.ureg_alpha))
@@ -124,11 +133,17 @@ else:
     print("ureg is disabled")
 
 scheduler = ReduceLROnPlateau(optimizer, 'min', factor=0.5, patience=0, verbose=True)
-max_training_examples=args.num_training
-max_validation_examples=args.num_validation
+max_training_examples = args.num_training
+max_validation_examples = args.num_validation
+
+unsupiter = iter(unsuploader)
+
+
+
 # Training
-def train(epoch):
-    unsupiter = iter(unsuploader)
+
+
+def train(epoch, unsupiter):
     print('\nEpoch: %d' % epoch)
     net.train()
     total_loss = 0
@@ -154,16 +169,13 @@ def train(epoch):
             unsupiter = iter(unsuploader)
             ufeatures, ulabels = next(unsupiter)
 
-        if use_cuda: ufeatures=ufeatures.cuda()
+        if use_cuda: ufeatures = ufeatures.cuda()
         # then use it to calculate the unsupervised regularization contribution to the loss:
         uinputs = Variable(ufeatures)
         loss, supervised_loss, regularization_loss = ureg.regularization_loss(loss, inputs, uinputs)
 
-
         loss.backward()
         optimizer.step()
-
-
 
         total_loss += loss.data[0]
         strain_loss += supervised_loss
@@ -175,15 +187,16 @@ def train(epoch):
         denominator = batch_idx + 1
         progress_bar(batch_idx, len(trainloader), 'loss: %.3f s: %.3f u: %.3f | Acc: %.3f%% (%d/%d)'
                      % ((total_loss / denominator),
-                     (strain_loss / denominator),
-                     (utrain_loss / denominator),
-                     100. * correct / total,
-                     correct,
-                     total))
-        if (batch_idx+1) * mini_batch_size > max_training_examples:
+                        (strain_loss / denominator),
+                        (utrain_loss / denominator),
+                        100. * correct / total,
+                        correct,
+                        total))
+        if (batch_idx + 1) * mini_batch_size > max_training_examples:
             break
 
     print()
+
 
 def test(epoch):
     global best_acc
@@ -205,16 +218,16 @@ def test(epoch):
         correct += predicted.eq(targets.data).cpu().sum()
 
         progress_bar(batch_idx, len(testloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
-            % (test_loss/(batch_idx+1), 100.*correct/total, correct, total))
+                     % (test_loss / (batch_idx + 1), 100. * correct / total, correct, total))
 
-        if ((batch_idx+1) * mini_batch_size) > max_validation_examples:
+        if ((batch_idx + 1) * mini_batch_size) > max_validation_examples:
             break
     print()
     # Apply learning rate schedule:
     scheduler.step(test_loss, epoch=epoch)
-    ureg.schedule(test_loss,epoch)
+    ureg.schedule(test_loss, epoch)
     # Save checkpoint.
-    acc = 100.*correct/total
+    acc = 100. * correct / total
     if acc > best_acc:
         print('Saving..')
         state = {
@@ -226,11 +239,10 @@ def test(epoch):
         }
         if not os.path.isdir('checkpoint'):
             os.mkdir('checkpoint')
-        torch.save(state, './checkpoint/ckpt.t7')
+        torch.save(state, './checkpoint/ckpt_{}.t7'.format(args.checkpoint_key))
         best_acc = acc
 
 
-
-for epoch in range(start_epoch, start_epoch+200):
-    train(epoch)
+for epoch in range(start_epoch, start_epoch + 200):
+    train(epoch, unsupiter)
     test(epoch)

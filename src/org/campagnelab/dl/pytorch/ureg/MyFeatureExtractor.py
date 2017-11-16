@@ -19,6 +19,7 @@ class MyFeatureExtractor(nn.Module):
             self.match_all = False
             self.extracted_layers = extracted_layers
         self.remove_handles = []
+        self.use_cuda = torch.cuda.is_available()
 
 
     def register(self):
@@ -33,6 +34,8 @@ class MyFeatureExtractor(nn.Module):
             mini_batch_size = output.size()[0]
 
             flattened = output.view(mini_batch_size, -1)
+            if self.use_cuda:
+                flattened= flattened.cuda()
             #print("output.size={}".format(flattened.size()))
             self.outputs += [flattened]
             #print("obtaining outputs {} from module: # outputs {}".format(module, [len(o) for o in self.outputs]))

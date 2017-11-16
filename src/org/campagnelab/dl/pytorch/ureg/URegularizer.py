@@ -1,6 +1,8 @@
 import torch
 from torch.autograd import Variable
 from torch.nn import Sequential
+from torch import cat
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from org.campagnelab.dl.pytorch.ureg.MyFeatureExtractor import MyFeatureExtractor
 
@@ -27,6 +29,7 @@ class URegularizer:
         self.my_feature_extractor2 = None
         self.enabled = True
         self.use_cuda = torch.cuda.is_available()
+        self.scheduler =None
         # def count_activations(i, o):
         #     self.add_activations(len(o))
         #
@@ -55,25 +58,38 @@ class URegularizer:
             self.my_feature_extractor1 = MyFeatureExtractor(self.model, None)
             self.my_feature_extractor2 = MyFeatureExtractor(self.model, None)
 
+    def schedule(self, val_loss, epoch):
+        """
+        Apply the learning rate schedule
+        :param epoch: current epoch number
+        :param val_loss: the validation/test loss
+        :return: None
+        """
+        self.scheduler.step(val_loss, epoch)
+
     def create_which_one_model(self, mini_batch_size, num_activations):
 
         if self.which_one_model is None:
             num_features=round(num_activations / 2)
             num_features=64
             self.which_one_model = Sequential(
-
+                torch.nn.Dropout(p=0.5),
                 torch.nn.Linear(num_activations, num_features),
+                torch.nn.Dropout(p=0.5),
                 torch.nn.ReLU(),
-                torch.nn.Linear(round(num_features), round(num_features / 2)),
+                torch.nn.Linear(num_features, num_features),
+                torch.nn.Dropout(p=0.5),
                 torch.nn.ReLU(),
-                torch.nn.Linear(round(num_features / 2), 2),
+                torch.nn.Linear(num_features, 2),
+                torch.nn.Dropout(p=0.5),
+                torch.nn.ReLU(),
                 torch.nn.Softmax())
             print("done building which_one_model:"+str(self.which_one_model))
             if self.use_cuda: self.which_one_model.cuda()
             # self.optimizer = torch.optim.Adam(self.which_one_model.parameters(),
             #                                   lr=self.learning_rate)
-            self.optimizer = torch.optim.SGD(self.which_one_model.parameters(), lr=0.0001, momentum=0.9);
-
+            self.optimizer = torch.optim.SGD(self.which_one_model.parameters(), lr=0.1, momentum=0.9);
+            self.scheduler=ReduceLROnPlateau(self.optimizer, 'min', factor=0.5, patience=1, verbose=True)
             self.loss_ys = torch.nn.CrossEntropyLoss()  # 0 is supervised
             self.loss_yu = torch.nn.CrossEntropyLoss()  # (yu, torch.ones(mini_batch_size))  # 1 is unsupervised
             if self.use_cuda:

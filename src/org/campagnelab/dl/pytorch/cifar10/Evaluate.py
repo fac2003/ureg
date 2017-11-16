@@ -31,6 +31,7 @@ import torch.backends.cudnn as cudnn
 import torch.optim as optim
 import torchvision
 import torchvision.transforms as transforms
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from org.campagnelab.dl.pytorch.cifar10.models import *
 from org.campagnelab.dl.pytorch.ureg.URegularizer import URegularizer
@@ -103,6 +104,7 @@ criterion = nn.CrossEntropyLoss()
 optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=0.9, weight_decay=5e-4)
 ureg = URegularizer(net, mini_batch_size, 0, 0.5, 0.1)
 ureg.enable()
+scheduler = ReduceLROnPlateau(optimizer, 'min', factor=0.5, patience=1, verbose=True)
 
 # Training
 def train(epoch):
@@ -139,6 +141,8 @@ def train(epoch):
 
         loss.backward()
         optimizer.step()
+
+
 
         total_loss += loss.data[0]
         strain_loss += supervised_loss
@@ -177,6 +181,9 @@ def test(epoch):
         progress_bar(batch_idx, len(testloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
             % (test_loss/(batch_idx+1), 100.*correct/total, correct, total))
 
+    # Apply learning rate schedule:
+    scheduler.step(test_loss, epoch=epoch)
+    ureg.schedule(test_loss,epoch)
     # Save checkpoint.
     acc = 100.*correct/total
     if acc > best_acc:

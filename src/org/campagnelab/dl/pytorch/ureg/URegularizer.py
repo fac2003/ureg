@@ -4,6 +4,7 @@ from torch.nn import Sequential
 from torch import cat
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
+from org.campagnelab.dl.pytorch.cifar10.utils import init_params
 from org.campagnelab.dl.pytorch.ureg.MyFeatureExtractor import MyFeatureExtractor
 
 
@@ -29,9 +30,11 @@ class URegularizer:
         self.my_feature_extractor2 = None
         self.enabled = True
         self.use_cuda = torch.cuda.is_available()
-        self.scheduler =None
-        self.checkpointModel=None
-        self.num_features=num_features
+        self.scheduler = None
+        self.checkpointModel = None
+        self.num_features = num_features
+        self.epoch_counter=0
+        self._forget_every_n_epoch =None
         # def count_activations(i, o):
         #     self.add_activations(len(o))
         #
@@ -48,6 +51,15 @@ class URegularizer:
         self.alpha = alpha
         # define the model tasked with predicting if activations are generated from
         # a sample in the training or unsupervised set:
+
+    def forget_model(self, N_epoch):
+        """
+        Reset the weights of the which_one_model model after N epoch of training. We need to reset once in a while
+         to focus on the recent history of activations, not remember the distant past.
+        :param N_epoch:
+        :return:
+        """
+        self._forget_every_n_epoch=N_epoch
 
     def disable(self):
         self.enabled = False
@@ -70,12 +82,12 @@ class URegularizer:
         if self.scheduler is not None:
             self.scheduler.step(val_loss, epoch)
 
-    def create_which_one_model(self,  num_activations):
-        num_features=self.num_features
+    def create_which_one_model(self, num_activations):
+        num_features = self.num_features
         if self.which_one_model is None:
 
             if self.checkpointModel is not None:
-                self.which_one_model =self.checkpointModel
+                self.which_one_model = self.checkpointModel
             else:
                 self.which_one_model = Sequential(
                     torch.nn.Dropout(p=0.5),
@@ -89,12 +101,12 @@ class URegularizer:
                     torch.nn.Dropout(p=0.5),
                     torch.nn.ReLU(),
                     torch.nn.Softmax())
-            print("done building which_one_model:"+str(self.which_one_model))
+            print("done building which_one_model:" + str(self.which_one_model))
             if self.use_cuda: self.which_one_model.cuda()
             # self.optimizer = torch.optim.Adam(self.which_one_model.parameters(),
             #                                   lr=self.learning_rate)
             self.optimizer = torch.optim.SGD(self.which_one_model.parameters(), lr=0.1, momentum=0.9);
-            self.scheduler=ReduceLROnPlateau(self.optimizer, 'min', factor=0.5, patience=0, verbose=True)
+            self.scheduler = ReduceLROnPlateau(self.optimizer, 'min', factor=0.5, patience=0, verbose=True)
             self.loss_ys = torch.nn.CrossEntropyLoss()  # 0 is supervised
             self.loss_yu = torch.nn.CrossEntropyLoss()  # (yu, torch.ones(mini_batch_size))  # 1 is unsupervised
             if self.use_cuda:
@@ -144,14 +156,14 @@ class URegularizer:
         unsupervised_output = torch.cat(unsupervised_output, dim=1)
 
         if self.use_cuda:
-            supervised_output=supervised_output.cuda()
-            unsupervised_output=unsupervised_output.cuda()
+            supervised_output = supervised_output.cuda()
+            unsupervised_output = unsupervised_output.cuda()
 
         # print("length of output: "+str(len(supervised_output)))
         num_activations_supervised = supervised_output.size()[1]
         num_activations_unsupervised = unsupervised_output.size()[1]
-        #print("num_activations: {}".format(str(num_activations_supervised)))
-        #print("num_activations: {}".format(str(num_activations_unsupervised)))
+        # print("num_activations: {}".format(str(num_activations_supervised)))
+        # print("num_activations: {}".format(str(num_activations_unsupervised)))
 
         # supervised_output = Variable(supervised_output.data, requires_grad = True)
         # print("has gradient: " + str(hasattr(supervised_output.grad, "data")))  # prints False
@@ -189,4 +201,13 @@ class URegularizer:
         return (loss, supervised_loss.data[0], self.regularizationLoss.data[0])
 
     def resume(self, saved_model):
-        self.checkpoint_model=saved_model
+        self.checkpoint_model = saved_model
+
+    def new_epoch(self, epoch):
+
+            if self._forget_every_n_epoch is not None:
+                self.epoch_counter+=1
+                if self.epoch_counter>self._forget_every_n_epoch:
+                    # reset the weights of the which_one_model:
+                    self.epoch_counter=0
+                    init_params(self.which_one_model)

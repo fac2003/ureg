@@ -54,6 +54,7 @@ parser.add_argument('--ureg-alpha', type=float, help='Mixing coefficient (betwee
                     default=0.5)
 parser.add_argument('--checkpoint-key', help='random key to save/load checkpoint',
                     default=''.join(random.choices( string.ascii_uppercase, k=5)))
+parser.add_argument("--ureg-reset-every-n-epoch",type=int, help='Reset weights of the ureg model every n epochs.')
 args = parser.parse_args()
 
 use_cuda = torch.cuda.is_available()
@@ -127,7 +128,9 @@ ureg = URegularizer(net, mini_batch_size, num_features=args.ureg_num_features, a
                     learning_rate=args.lr)
 if args.ureg:
     ureg.enable()
-    print("ureg is enabled with alpha={}".format(args.ureg_alpha))
+    ureg.forget_model(args.ureg_reset_every_n_epoch)
+    print("ureg is enabled with alpha={}, reset every {} epochs. ".format(args.ureg_alpha, args.ureg_reset_every_n_epoch))
+
 else:
     ureg.disable()
     print("ureg is disabled")
@@ -151,6 +154,7 @@ def train(epoch, unsupiter):
     utrain_loss = 0
     correct = 0
     total = 0
+    ureg.new_epoch(epoch)
     for batch_idx, (inputs, targets) in enumerate(trainloader):
 
         if use_cuda:

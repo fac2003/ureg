@@ -219,10 +219,11 @@ class URegularizer:
                     self._adjust_learning_rate(self._learning_rate)
 
     def _adjust_learning_rate(self, learning_rate):
-        for i, param_group in enumerate(self._optimizer.param_groups):
-            old_lr = float(param_group['lr'])
-            new_lr = learning_rate
-            if old_lr - new_lr > self._eps:
-                param_group['lr'] = new_lr
-                print('Adjusting learning rate to {:.4e}'
-                          .format( new_lr))
+        if self._optimizer is not None:
+            for i, param_group in enumerate(self._optimizer.param_groups):
+                old_lr = float(param_group['lr'])
+                new_lr = learning_rate
+                if old_lr - new_lr > self._eps:
+                    param_group['lr'] = new_lr
+                    print('Adjusting learning rate to {:.4e}'
+                              .format( new_lr))

@@ -33,10 +33,11 @@ class URegularizer:
         self._scheduler = None
         self._checkpointModel = None
         self._num_features = num_features
+        self._epoch_counter = 0
+        self._forget_every_n_epoch = None
+        self._optimizer = None
+        self._eps = 1E-8
         self._epoch_counter=0
-        self._forget_every_n_epoch =None
-        self._optimizer=None
-        self._eps=1E-8
         # def count_activations(i, o):
         #     self.add_activations(len(o))
         #
@@ -61,7 +62,7 @@ class URegularizer:
         :param N_epoch:
         :return:
         """
-        self._forget_every_n_epoch=N_epoch
+        self._forget_every_n_epoch = N_epoch
 
     def disable(self):
         self._enabled = False
@@ -88,8 +89,8 @@ class URegularizer:
         num_features = self._num_features
         if self._which_one_model is None:
             if (self._checkpointModel):
-                self._which_one_model=self._checkpointModel
-                self._checkpointModel=None
+                self._which_one_model = self._checkpointModel
+                self._checkpointModel = None
             else:
                 self._which_one_model = Sequential(
                     torch.nn.Dropout(p=0.5),
@@ -110,7 +111,7 @@ class URegularizer:
             # self.optimizer = torch.optim.Adam(self.which_one_model.parameters(),
             #                                   lr=self.learning_rate)
             self._optimizer = torch.optim.SGD(self._which_one_model.parameters(), lr=0.1, momentum=0.9);
-            #self._scheduler = ReduceLROnPlateau(self._optimizer, 'min', factor=0.5, patience=0, verbose=True)
+            # self._scheduler = ReduceLROnPlateau(self._optimizer, 'min', factor=0.5, patience=0, verbose=True)
             self.loss_ys = torch.nn.CrossEntropyLoss()  # 0 is supervised
             self.loss_yu = torch.nn.CrossEntropyLoss()  # (yu, torch.ones(mini_batch_size))  # 1 is unsupervised
             if self._use_cuda:
@@ -209,14 +210,14 @@ class URegularizer:
 
     def new_epoch(self, epoch):
 
-            if self._forget_every_n_epoch is not None:
-                self._epoch_counter+=1
-                # halve the learning rate for each extra epoch we don't reset:
-                self._adjust_learning_rate(self._learning_rate/(2^self._epoch_counter))
-                if self._epoch_counter>self._forget_every_n_epoch:
-                    # reset the learning rate of the which_one_model:
-                    self._epoch_counter=0
-                    self._adjust_learning_rate(self._learning_rate)
+        if self._forget_every_n_epoch is not None:
+            self._epoch_counter += 1
+            # halve the learning rate for each extra epoch we don't reset:
+            self._adjust_learning_rate(self._learning_rate / (pow(2, self._epoch_counter)))
+            if self._epoch_counter > self._forget_every_n_epoch:
+                # reset the learning rate of the which_one_model:
+                self._epoch_counter = 0
+                self._adjust_learning_rate(self._learning_rate)
 
     def _adjust_learning_rate(self, learning_rate):
         if self._optimizer is not None:
@@ -226,4 +227,4 @@ class URegularizer:
                 if old_lr - new_lr > self._eps:
                     param_group['lr'] = new_lr
                     print('Adjusting learning rate to {:.4e}'
-                              .format( new_lr))
+                          .format(new_lr))

@@ -56,6 +56,7 @@ parser.add_argument('--checkpoint-key', help='random key to save/load checkpoint
                     default=''.join(random.choices( string.ascii_uppercase, k=5)))
 parser.add_argument("--ureg-reset-every-n-epoch",type=int, help='Reset weights of the ureg model every n epochs.')
 parser.add_argument('--ureg-learning-rate', default=0.01, type=float, help='ureg learning rate')
+parser.add_argument('--lr-patience', default=10, type=int, help='number of epochs to wait before applying LR schedule when loss does not improve.')
 
 args = parser.parse_args()
 
@@ -138,7 +139,7 @@ else:
     ureg.disable()
     print("ureg is disabled")
 
-scheduler = ReduceLROnPlateau(optimizer, 'min', factor=0.5, patience=0, verbose=True)
+scheduler = ReduceLROnPlateau(optimizer, 'min', factor=0.5, patience=args.lr_patience, verbose=True)
 max_training_examples = args.num_training
 max_validation_examples = args.num_validation
 

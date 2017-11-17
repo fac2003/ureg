@@ -55,6 +55,8 @@ parser.add_argument('--ureg-alpha', type=float, help='Mixing coefficient (betwee
 parser.add_argument('--checkpoint-key', help='random key to save/load checkpoint',
                     default=''.join(random.choices( string.ascii_uppercase, k=5)))
 parser.add_argument("--ureg-reset-every-n-epoch",type=int, help='Reset weights of the ureg model every n epochs.')
+parser.add_argument('--ureg-learning-rate', default=0.01, type=float, help='ureg learning rate')
+
 args = parser.parse_args()
 
 use_cuda = torch.cuda.is_available()
@@ -100,7 +102,8 @@ if args.resume:
     ureg_enabled = checkpoint['ureg']
 
     if ureg_enabled:
-        ureg = URegularizer(net, mini_batch_size, 0, 0.5, 0.1)
+        ureg = URegularizer(net, mini_batch_size,args.ureg_num_features,
+                            args.ureg_alpha, args.ureg_learning_rate)
         ureg.enable()
         ureg.resume(checkpoint['ureg_model'])
 else:
@@ -125,7 +128,7 @@ cudnn.benchmark = True
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=0.9, weight_decay=5e-4)
 ureg = URegularizer(net, mini_batch_size, num_features=args.ureg_num_features, alpha=args.ureg_alpha,
-                    learning_rate=args.lr)
+                    learning_rate=args.ureg_learning_rate)
 if args.ureg:
     ureg.enable()
     ureg.forget_model(args.ureg_reset_every_n_epoch)

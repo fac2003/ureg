@@ -36,6 +36,7 @@ class URegularizer:
         self._epoch_counter=0
         self._forget_every_n_epoch =None
         self._optimizer=None
+        self._eps=1E-8
         # def count_activations(i, o):
         #     self.add_activations(len(o))
         #
@@ -86,25 +87,30 @@ class URegularizer:
     def create_which_one_model(self, num_activations):
         num_features = self._num_features
         if self._which_one_model is None:
+            if (self._checkpointModel):
+                self._which_one_model=self._checkpointModel
+                self._checkpointModel=None
+            else:
+                self._which_one_model = Sequential(
+                    torch.nn.Dropout(p=0.5),
+                    torch.nn.Linear(num_activations, num_features),
+                    torch.nn.Dropout(p=0.5),
+                    torch.nn.ReLU(),
+                    torch.nn.Linear(num_features, num_features),
+                    torch.nn.Dropout(p=0.5),
+                    torch.nn.ReLU(),
+                    torch.nn.Linear(num_features, 2),
+                    torch.nn.Dropout(p=0.5),
+                    torch.nn.ReLU(),
+                    torch.nn.Softmax())
+                init_params(self._which_one_model)
 
-            self._which_one_model = Sequential(
-                torch.nn.Dropout(p=0.5),
-                torch.nn.Linear(num_activations, num_features),
-                torch.nn.Dropout(p=0.5),
-                torch.nn.ReLU(),
-                torch.nn.Linear(num_features, num_features),
-                torch.nn.Dropout(p=0.5),
-                torch.nn.ReLU(),
-                torch.nn.Linear(num_features, 2),
-                torch.nn.Dropout(p=0.5),
-                torch.nn.ReLU(),
-                torch.nn.Softmax())
             print("done building which_one_model:" + str(self._which_one_model))
             if self._use_cuda: self._which_one_model.cuda()
             # self.optimizer = torch.optim.Adam(self.which_one_model.parameters(),
             #                                   lr=self.learning_rate)
             self._optimizer = torch.optim.SGD(self._which_one_model.parameters(), lr=0.1, momentum=0.9);
-            self._scheduler = ReduceLROnPlateau(self._optimizer, 'min', factor=0.5, patience=0, verbose=True)
+            #self._scheduler = ReduceLROnPlateau(self._optimizer, 'min', factor=0.5, patience=0, verbose=True)
             self.loss_ys = torch.nn.CrossEntropyLoss()  # 0 is supervised
             self.loss_yu = torch.nn.CrossEntropyLoss()  # (yu, torch.ones(mini_batch_size))  # 1 is unsupervised
             if self._use_cuda:
@@ -209,3 +215,13 @@ class URegularizer:
                     # reset the weights of the which_one_model:
                     self._epoch_counter=0
                     self._which_one_model=None
+                    self._adjust_learning_rate(self._learning_rate)
+
+    def _adjust_learning_rate(self, learning_rate):
+        for i, param_group in enumerate(self._optimizer.param_groups):
+            old_lr = float(param_group['lr'])
+            new_lr = learning_rate
+            if old_lr - new_lr > self._eps:
+                param_group['lr'] = new_lr
+                print('Adjusting learning rate to {:.4e}'
+                          .format( new_lr))

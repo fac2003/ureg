@@ -8,6 +8,7 @@ from org.campagnelab.dl.pytorch.cifar10.utils import init_params
 from org.campagnelab.dl.pytorch.ureg.MyFeatureExtractor import MyFeatureExtractor
 
 
+
 class URegularizer:
     """
     Unsupervised regularizer. This class estimates a regularization term using
@@ -19,6 +20,14 @@ class URegularizer:
     def add_activations(self, num):
         self._num_activations += num
         # print("activations: " + str(self.num_activations))
+
+    def _estimate_accuracy(self,ys, ys_true):
+        _, predicted = torch.max(ys.data, 1)
+        self._n_total += ys_true.size(0)
+        self._n_correct += predicted.eq(ys_true.data).cpu().sum()
+
+    def ureg_accuracy(self):
+        return self._n_correct/self._n_total
 
     def __init__(self, model, mini_batch_size, num_features=64, alpha=0.5, learning_rate=0.1):
         self._mini_batch_size = mini_batch_size
@@ -38,6 +47,8 @@ class URegularizer:
         self._optimizer = None
         self._eps = 1E-8
         self._epoch_counter=0
+        self._n_total=0
+        self._n_correct=0
         # def count_activations(i, o):
         #     self.add_activations(len(o))
         #
@@ -88,29 +99,29 @@ class URegularizer:
     def create_which_one_model(self, num_activations):
         num_features = self._num_features
         if self._which_one_model is None:
-            if (self._checkpointModel):
-                self._which_one_model = self._checkpointModel
-                self._checkpointModel = None
-            else:
-                self._which_one_model = Sequential(
-                    torch.nn.Dropout(p=0.5),
-                    torch.nn.Linear(num_activations, num_features),
-                    torch.nn.Dropout(p=0.5),
-                    torch.nn.ReLU(),
-                    torch.nn.Linear(num_features, num_features),
-                    torch.nn.Dropout(p=0.5),
-                    torch.nn.ReLU(),
-                    torch.nn.Linear(num_features, 2),
-                    torch.nn.Dropout(p=0.5),
-                    torch.nn.ReLU(),
-                    torch.nn.Softmax())
-                init_params(self._which_one_model)
+            # if (self._checkpointModel):
+            #     self._which_one_model = self._checkpointModel
+            #     self._checkpointModel = None
+            # else:
+            self._which_one_model = Sequential(
+                torch.nn.Dropout(p=0.5),
+                torch.nn.Linear(num_activations, num_features),
+                torch.nn.Dropout(p=0.5),
+                torch.nn.ReLU(),
+                torch.nn.Linear(num_features, num_features),
+                torch.nn.Dropout(p=0.5),
+                torch.nn.ReLU(),
+                torch.nn.Linear(num_features, 2),
+                torch.nn.Dropout(p=0.5),
+                torch.nn.ReLU(),
+                torch.nn.Softmax())
+            init_params(self._which_one_model)
 
             print("done building which_one_model:" + str(self._which_one_model))
             if self._use_cuda: self._which_one_model.cuda()
             # self.optimizer = torch.optim.Adam(self.which_one_model.parameters(),
             #                                   lr=self.learning_rate)
-            self._optimizer = torch.optim.SGD(self._which_one_model.parameters(), lr=0.1, momentum=0.9);
+            self._optimizer = torch.optim.SGD(self._which_one_model.parameters(), lr=self._learning_rate, momentum=0.9);
             # self._scheduler = ReduceLROnPlateau(self._optimizer, 'min', factor=0.5, patience=0, verbose=True)
             self.loss_ys = torch.nn.CrossEntropyLoss()  # 0 is supervised
             self.loss_yu = torch.nn.CrossEntropyLoss()  # (yu, torch.ones(mini_batch_size))  # 1 is unsupervised
@@ -177,7 +188,7 @@ class URegularizer:
         self.create_which_one_model(num_activations_supervised)
 
         # predict which dataset (s or u) the samples were from:
-
+        self._which_one_model.train()
         ys = self._which_one_model(supervised_output)
         yu = self._which_one_model(unsupervised_output)
 
@@ -185,20 +196,20 @@ class URegularizer:
 
         # step the whichOne model's parameters in the direction that
         # reduces the loss:
-        # zeroes = Variable(, requires_grad=False)
 
         total_which_model_loss = self.loss_ys(ys, self.ys_true) + \
                                  self.loss_yu(yu, self.yu_true)
-        # print("total_which_model_loss: "+str(total_which_model_loss.data[0]))
         self._optimizer.zero_grad()
         total_which_model_loss.backward(retain_graph=True)
         self._optimizer.step()
 
+        # now we use the model:
+        self._which_one_model.eval()
         # the more the activations on the supervised set deviate from the unsupervised data,
         # the more we need to regularize:
         self.regularizationLoss = -self.loss_ys(ys, self.ys_true)
-        #       self.regularizationLoss=0
-        # print("loss {} regularizationLoss: {}".format(loss.data, str(self.regularizationLoss.data[0])))
+        self._estimate_accuracy(ys,self.ys_true)
+
         # return the output on the supervised sample:
         supervised_loss = loss
         loss = supervised_loss * (1 - self._alpha) + self._alpha * self.regularizationLoss
@@ -209,12 +220,14 @@ class URegularizer:
         self.checkpoint_model = saved_model
 
     def new_epoch(self, epoch):
-
+        self._n_total=0
+        self._n_correct=0
         if self._forget_every_n_epoch is not None:
             self._epoch_counter += 1
             # halve the learning rate for each extra epoch we don't reset:
             self._adjust_learning_rate(self._learning_rate / (pow(2, self._epoch_counter)))
             if self._epoch_counter > self._forget_every_n_epoch:
+                self._which_one_model=None
                 # reset the learning rate of the which_one_model:
                 self._epoch_counter = 0
                 self._adjust_learning_rate(self._learning_rate)

@@ -44,7 +44,7 @@ parser = argparse.ArgumentParser(description='Evaluate ureg against CIFAR10')
 parser.add_argument('--lr', default=0.1, type=float, help='learning rate')
 parser.add_argument('--resume', '-r', action='store_true', help='resume from checkpoint')
 parser.add_argument('--ureg', '-u', action='store_true', help='Enable unsupervised regularization (ureg)')
-parser.add_argument('--mini-batch-size', action='store_true', help='Size of the mini-batch', default=128)
+parser.add_argument('--mini-batch-size', type=int, help='Size of the mini-batch', default=128)
 parser.add_argument('--num-training', '-n', type=int, help='Maximum number of training examples to use',
                     default=sys.maxsize)
 parser.add_argument('--num-validation', '-x', type=int, help='Maximum number of training examples to use',
@@ -59,6 +59,8 @@ parser.add_argument('--ureg-learning-rate', default=0.01, type=float, help='ureg
 parser.add_argument('--lr-patience', default=10, type=int, help='number of epochs to wait before applying LR schedule when loss does not improve.')
 
 args = parser.parse_args()
+
+print("Executing "+args.checkpoint_key)
 
 use_cuda = torch.cuda.is_available()
 is_parallel = False
@@ -148,7 +150,7 @@ unsupiter = iter(unsuploader)
 best_test_loss=100
 
 metrics = ["epoch", "checkpoint", "training_loss", "test_loss", "training_accuracy", "test_accuracy", "supervised_loss",
-           "unsupervised_loss"]
+           "unsupervised_loss", "delta_loss","ureg_accuracy"]
 
 with open("all-perfs-{}.tsv".format(args.checkpoint_key), "a") as perf_file:
         perf_file.write("\t".join(map(str, metrics)))
@@ -167,17 +169,17 @@ def format_nice(n):
     except:
             return n
 
-def log_performance_metrics(epoch, training_loss, supervised_loss, unsupervised_loss, training_accuracy, test_loss, test_accuracy):
-
+def log_performance_metrics(epoch, training_loss, supervised_loss, unsupervised_loss, training_accuracy,
+                            test_loss, test_accuracy,ureg_accuracy):
+    delta_loss=test_loss-supervised_loss
+    metrics = [epoch, args.checkpoint_key, training_loss, test_loss, training_accuracy, test_accuracy, supervised_loss,
+               unsupervised_loss, delta_loss,ureg_accuracy]
     with open("all-perfs-{}.tsv".format( args.checkpoint_key), "a") as perf_file:
-        metrics = [epoch, args.checkpoint_key, training_loss, test_loss, training_accuracy, test_accuracy, supervised_loss, unsupervised_loss]
         perf_file.write("\t".join(map(format_nice,metrics)))
         perf_file.write("\n")
     if test_loss<best_test_loss:
         best_test_score=test_loss
         with open("best-perf-{}.tsv".format( args.checkpoint_key), "a") as perf_file:
-            metrics = [epoch, args.checkpoint_key, training_loss, test_loss, training_accuracy, test_accuracy,
-                       supervised_loss, unsupervised_loss]
             perf_file.write("\t".join(map(format_nice, metrics)))
             perf_file.write("\n")
 
@@ -298,7 +300,7 @@ def test(epoch):
         torch.save(state, './checkpoint/ckpt_{}.t7'.format(args.checkpoint_key))
         best_acc = acc
 
-    return (test_loss, test_accuracy)
+    return (test_loss, test_accuracy, ureg.ureg_accuracy())
 
 for epoch in range(start_epoch, start_epoch + 200):
 

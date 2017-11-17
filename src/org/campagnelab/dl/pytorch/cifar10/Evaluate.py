@@ -158,18 +158,26 @@ with open("best-perf-{}.tsv".format(args.checkpoint_key), "a") as perf_file:
         perf_file.write("\t".join(map(str, metrics)))
         perf_file.write("\n")
 
+def format_nice(n):
+    if n == int(n):
+        return str(n)
+    if isinstance(n, numbers.Number):
+        return "{0:.4f}".format(n)
+    if n is String:
+       return n
+
 def log_performance_metrics(epoch, training_loss, supervised_loss, unsupervised_loss, training_accuracy, test_loss, test_accuracy):
 
     with open("all-perfs-{}.tsv".format( args.checkpoint_key), "a") as perf_file:
         metrics = [epoch, args.checkpoint_key, training_loss, test_loss, training_accuracy, test_accuracy, supervised_loss, unsupervised_loss]
-        perf_file.write("\t".join(map(str,metrics)))
+        perf_file.write("\t".join(map(format_nice,metrics)))
         perf_file.write("\n")
     if test_loss<best_test_loss:
         best_test_score=test_loss
         with open("best-perf-{}.tsv".format( args.checkpoint_key), "a") as perf_file:
             metrics = [epoch, args.checkpoint_key, training_loss, test_loss, training_accuracy, test_accuracy,
                        supervised_loss, unsupervised_loss]
-            perf_file.write("\t".join(map(str, metrics)))
+            perf_file.write("\t".join(map(format_nice, metrics)))
             perf_file.write("\n")
 
 # Training

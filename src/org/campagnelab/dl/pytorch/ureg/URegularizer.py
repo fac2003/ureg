@@ -35,6 +35,7 @@ class URegularizer:
         self._num_features = num_features
         self._epoch_counter=0
         self._forget_every_n_epoch =None
+        self._optimizer=None
         # def count_activations(i, o):
         #     self.add_activations(len(o))
         #
@@ -48,7 +49,7 @@ class URegularizer:
         #     handle.remove()
 
         num_input_features = self._num_activations
-        self.alpha = alpha
+        self._alpha = alpha
         # define the model tasked with predicting if activations are generated from
         # a sample in the training or unsupervised set:
 
@@ -86,27 +87,24 @@ class URegularizer:
         num_features = self._num_features
         if self._which_one_model is None:
 
-            if self._checkpointModel is not None:
-                self._which_one_model = self._checkpointModel
-            else:
-                self._which_one_model = Sequential(
-                    torch.nn.Dropout(p=0.5),
-                    torch.nn.Linear(num_activations, num_features),
-                    torch.nn.Dropout(p=0.5),
-                    torch.nn.ReLU(),
-                    torch.nn.Linear(num_features, num_features),
-                    torch.nn.Dropout(p=0.5),
-                    torch.nn.ReLU(),
-                    torch.nn.Linear(num_features, 2),
-                    torch.nn.Dropout(p=0.5),
-                    torch.nn.ReLU(),
-                    torch.nn.Softmax())
+            self._which_one_model = Sequential(
+                torch.nn.Dropout(p=0.5),
+                torch.nn.Linear(num_activations, num_features),
+                torch.nn.Dropout(p=0.5),
+                torch.nn.ReLU(),
+                torch.nn.Linear(num_features, num_features),
+                torch.nn.Dropout(p=0.5),
+                torch.nn.ReLU(),
+                torch.nn.Linear(num_features, 2),
+                torch.nn.Dropout(p=0.5),
+                torch.nn.ReLU(),
+                torch.nn.Softmax())
             print("done building which_one_model:" + str(self._which_one_model))
             if self._use_cuda: self._which_one_model.cuda()
             # self.optimizer = torch.optim.Adam(self.which_one_model.parameters(),
             #                                   lr=self.learning_rate)
-            self.optimizer = torch.optim.SGD(self._which_one_model.parameters(), lr=0.1, momentum=0.9);
-            self._scheduler = ReduceLROnPlateau(self.optimizer, 'min', factor=0.5, patience=0, verbose=True)
+            self._optimizer = torch.optim.SGD(self._which_one_model.parameters(), lr=0.1, momentum=0.9);
+            self._scheduler = ReduceLROnPlateau(self._optimizer, 'min', factor=0.5, patience=0, verbose=True)
             self.loss_ys = torch.nn.CrossEntropyLoss()  # 0 is supervised
             self.loss_yu = torch.nn.CrossEntropyLoss()  # (yu, torch.ones(mini_batch_size))  # 1 is unsupervised
             if self._use_cuda:
@@ -185,9 +183,9 @@ class URegularizer:
         total_which_model_loss = self.loss_ys(ys, self.ys_true) + \
                                  self.loss_yu(yu, self.yu_true)
         # print("total_which_model_loss: "+str(total_which_model_loss.data[0]))
-        self.optimizer.zero_grad()
+        self._optimizer.zero_grad()
         total_which_model_loss.backward(retain_graph=True)
-        self.optimizer.step()
+        self._optimizer.step()
 
         # the more the activations on the supervised set deviate from the unsupervised data,
         # the more we need to regularize:
@@ -196,7 +194,7 @@ class URegularizer:
         # print("loss {} regularizationLoss: {}".format(loss.data, str(self.regularizationLoss.data[0])))
         # return the output on the supervised sample:
         supervised_loss = loss
-        loss = supervised_loss * (1 - self.alpha) + self.alpha * self.regularizationLoss
+        loss = supervised_loss * (1 - self._alpha) + self._alpha * self.regularizationLoss
         # print("loss: {0:.2f} supervised: {1:.2f} unsupervised: {2:.2f} ".format(loss.data[0], supervised_loss.data[0], self.regularizationLoss.data[0]))
         return (loss, supervised_loss.data[0], self.regularizationLoss.data[0])
 
@@ -210,4 +208,4 @@ class URegularizer:
                 if self._epoch_counter>self._forget_every_n_epoch:
                     # reset the weights of the which_one_model:
                     self._epoch_counter=0
-                    init_params(self._which_one_model)
+                    self._which_one_model=None

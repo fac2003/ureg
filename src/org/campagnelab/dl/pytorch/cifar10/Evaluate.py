@@ -141,7 +141,32 @@ max_validation_examples = args.num_validation
 
 unsupiter = iter(unsuploader)
 
+best_test_loss=100
 
+metrics = ["epoch", "checkpoint", "training_loss", "test_loss", "training_accuracy", "test_accuracy", "supervised_loss",
+           "unsupervised_loss"]
+
+with open("all-perfs-{}.tsv".format(args.checkpoint_key), "a") as perf_file:
+        perf_file.write("\t".join(map(str, metrics)))
+        perf_file.write("\n")
+
+with open("best-perf-{}.tsv".format(args.checkpoint_key), "a") as perf_file:
+        perf_file.write("\t".join(map(str, metrics)))
+        perf_file.write("\n")
+
+def log_performance_metrics(epoch, training_loss, supervised_loss, unsupervised_loss, training_accuracy, test_loss, test_accuracy):
+
+    with open("all-perfs-{}.tsv".format( args.checkpoint_key), "a") as perf_file:
+        metrics = [epoch, args.checkpoint_key, training_loss, test_loss, training_accuracy, test_accuracy, supervised_loss, unsupervised_loss]
+        perf_file.write("\t".join(map(str,metrics)))
+        perf_file.write("\n")
+    if test_loss<best_test_loss:
+        best_test_score=test_loss
+        with open("best-perf-{}.tsv".format( args.checkpoint_key), "a") as perf_file:
+            metrics = [epoch, args.checkpoint_key, training_loss, test_loss, training_accuracy, test_accuracy,
+                       supervised_loss, unsupervised_loss]
+            perf_file.write("\t".join(map(str, metrics)))
+            perf_file.write("\n")
 
 # Training
 
@@ -155,6 +180,10 @@ def train(epoch, unsupiter):
     correct = 0
     total = 0
     ureg.new_epoch(epoch)
+    training_loss = None
+    supervised_loss = None
+    unsupervised_loss = None
+    training_accuracy = None
     for batch_idx, (inputs, targets) in enumerate(trainloader):
 
         if use_cuda:
@@ -189,25 +218,32 @@ def train(epoch, unsupiter):
         correct += predicted.eq(targets.data).cpu().sum()
 
         denominator = batch_idx + 1
+        training_loss = total_loss / denominator
+        supervised_loss = strain_loss / denominator
+        unsupervised_loss = utrain_loss / denominator
+        training_accuracy = 100. * correct / total
         progress_bar(batch_idx, len(trainloader), 'loss: %.3f s: %.3f u: %.3f | Acc: %.3f%% (%d/%d)'
-                     % ((total_loss / denominator),
-                        (strain_loss / denominator),
-                        (utrain_loss / denominator),
-                        100. * correct / total,
+                     % ((training_loss),
+                        (supervised_loss),
+                        (unsupervised_loss),
+                        training_accuracy,
                         correct,
                         total))
         if (batch_idx + 1) * mini_batch_size > max_training_examples:
             break
 
     print()
+    return (training_loss, supervised_loss, unsupervised_loss, training_accuracy)
 
 
 def test(epoch):
     global best_acc
     net.eval()
-    test_loss = 0
+    test_loss_accumulator = 0
     correct = 0
     total = 0
+    test_accuracy=None
+    test_loss=None
     for batch_idx, (inputs, targets) in enumerate(testloader):
 
         if use_cuda:
@@ -216,17 +252,20 @@ def test(epoch):
         outputs = net(inputs)
         loss = criterion(outputs, targets)
 
-        test_loss += loss.data[0]
+        test_loss_accumulator += loss.data[0]
         _, predicted = torch.max(outputs.data, 1)
         total += targets.size(0)
         correct += predicted.eq(targets.data).cpu().sum()
 
+        test_accuracy = 100. * correct / total
+        test_loss = test_loss_accumulator / (batch_idx + 1)
         progress_bar(batch_idx, len(testloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
-                     % (test_loss / (batch_idx + 1), 100. * correct / total, correct, total))
+                     % (test_loss, test_accuracy, correct, total))
 
         if ((batch_idx + 1) * mini_batch_size) > max_validation_examples:
             break
     print()
+
     # Apply learning rate schedule:
     scheduler.step(test_loss, epoch=epoch)
     ureg.schedule(test_loss, epoch)
@@ -246,7 +285,11 @@ def test(epoch):
         torch.save(state, './checkpoint/ckpt_{}.t7'.format(args.checkpoint_key))
         best_acc = acc
 
+    return (test_loss, test_accuracy)
 
 for epoch in range(start_epoch, start_epoch + 200):
-    train(epoch, unsupiter)
-    test(epoch)
+
+    perfs=train(epoch, unsupiter)
+    perfs+=test(epoch)
+    log_performance_metrics(epoch, *perfs)
+

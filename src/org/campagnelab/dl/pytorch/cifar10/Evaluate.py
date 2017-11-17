@@ -159,12 +159,13 @@ with open("best-perf-{}.tsv".format(args.checkpoint_key), "a") as perf_file:
         perf_file.write("\n")
 
 def format_nice(n):
-    if n == int(n):
-        return str(n)
-    if isinstance(n, numbers.Number):
-        return "{0:.4f}".format(n)
-    if n is String:
-       return n
+    try:
+        if n == int(n):
+            return str(n)
+        if n == float(n):
+            return "{0:.4f}".format(n)
+    except:
+            return n
 
 def log_performance_metrics(epoch, training_loss, supervised_loss, unsupervised_loss, training_accuracy, test_loss, test_accuracy):
 

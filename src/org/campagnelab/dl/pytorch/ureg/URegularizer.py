@@ -211,10 +211,11 @@ class URegularizer:
 
             if self._forget_every_n_epoch is not None:
                 self._epoch_counter+=1
+                # halve the learning rate for each extra epoch we don't reset:
+                self._adjust_learning_rate(self._learning_rate/(2^self._epoch_counter))
                 if self._epoch_counter>self._forget_every_n_epoch:
-                    # reset the weights of the which_one_model:
+                    # reset the learning rate of the which_one_model:
                     self._epoch_counter=0
-                    self._which_one_model=None
                     self._adjust_learning_rate(self._learning_rate)
 
     def _adjust_learning_rate(self, learning_rate):

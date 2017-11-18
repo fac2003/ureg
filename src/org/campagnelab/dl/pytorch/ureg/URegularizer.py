@@ -21,8 +21,8 @@ class URegularizer:
         # print("activations: " + str(self.num_activations))
 
     def _estimate_accuracy(self, ys, ys_true):
-        _, predicted = torch.max(ys.data, 0)
-        _, truth = torch.max(ys_true.data, 0)
+        _, predicted = torch.max(ys.data, 1)
+        _, truth = torch.max(ys_true.data, 1)
         self._n_correct += predicted.eq(truth).cpu().sum()
         self._n_total += self._mini_batch_size
 
@@ -209,7 +209,7 @@ class URegularizer:
         self._which_one_model.train()
         ys = self._which_one_model(supervised_output)
         yu = self._which_one_model(unsupervised_output)
-
+        #print("ys: {} yu: {}".format(ys.data,yu.data))
         # derive the loss of binary classifications:
 
         # step the whichOne model's parameters in the direction that
@@ -217,10 +217,10 @@ class URegularizer:
 
         loss_ys = self.loss_ys(ys, self.ys_true)
         loss_yu = self.loss_yu(yu, self.yu_true)
-        total_which_model_loss = loss_ys + \
-                                 loss_yu
+        #total_which_model_loss = loss_ys + \
+        #                         loss_yu
         #print("loss_ys: {} loss_yu: {} ".format(loss_ys.data[0],loss_yu.data[0]))
-        #total_which_model_loss =torch.max(loss_ys,loss_yu)
+        total_which_model_loss =torch.max(loss_ys,loss_yu)
         self._accumulator_total_which_model_loss += total_which_model_loss.data[0] / self._mini_batch_size
 
         total_which_model_loss.backward(retain_graph=True)
@@ -230,8 +230,9 @@ class URegularizer:
         self._which_one_model.eval()
         # the more the activations on the supervised set deviate from the unsupervised data,
         # the more we need to regularize:
-        self.regularizationLoss = self.loss_ys(ys, self.ys_uncertain)
+        ys = self._which_one_model(supervised_output)
         self._estimate_accuracy(ys, self.ys_true)
+        self.regularizationLoss = self.loss_ys(ys, self.ys_uncertain)
         # self._alpha = 0.5 - (0.5 - self._last_epoch_accuracy)
         # return the output on the supervised sample:
         supervised_loss = loss

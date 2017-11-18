@@ -32,6 +32,8 @@ class URegularizer:
         accuracy = self._n_correct / self._n_total
         print("ureg accuracy={0:.3f} correct: {1}/{2}".format(accuracy, self._n_correct, self._n_total))
         self._last_epoch_accuracy = accuracy
+        self._n_total = 0
+        self._n_correct=0
         return accuracy
 
     def __init__(self, model, mini_batch_size, num_features=64, alpha=0.5, learning_rate=0.1):
@@ -202,7 +204,7 @@ class URegularizer:
 
 
         self.create_which_one_model(num_activations_supervised)
-
+        self._optimizer.zero_grad()
         # predict which dataset (s or u) the samples were from:
         self._which_one_model.train()
         ys = self._which_one_model(supervised_output)
@@ -213,11 +215,14 @@ class URegularizer:
         # step the whichOne model's parameters in the direction that
         # reduces the loss:
 
-        total_which_model_loss = self.loss_ys(ys, self.ys_true) + \
-                                 self.loss_yu(yu, self.yu_true)
-
+        loss_ys = self.loss_ys(ys, self.ys_true)
+        loss_yu = self.loss_yu(yu, self.yu_true)
+        total_which_model_loss = loss_ys + \
+                                 loss_yu
+        #print("loss_ys: {} loss_yu: {} ".format(loss_ys.data[0],loss_yu.data[0]))
+        #total_which_model_loss =torch.max(loss_ys,loss_yu)
         self._accumulator_total_which_model_loss += total_which_model_loss.data[0] / self._mini_batch_size
-        self._optimizer.zero_grad()
+
         total_which_model_loss.backward(retain_graph=True)
         self._optimizer.step()
 

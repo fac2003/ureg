@@ -57,6 +57,8 @@ parser.add_argument('--checkpoint-key', help='random key to save/load checkpoint
 parser.add_argument("--ureg-reset-every-n-epoch",type=int, help='Reset weights of the ureg model every n epochs.')
 parser.add_argument('--ureg-learning-rate', default=0.01, type=float, help='ureg learning rate')
 parser.add_argument('--lr-patience', default=10, type=int, help='number of epochs to wait before applying LR schedule when loss does not improve.')
+parser.add_argument('--model', default="PreActResNet18", type=str, help='The model to instantiate. One of VGG16,	ResNet18, ResNet50, ResNet101,ResNeXt29, ResNeXt29, DenseNet121, PreActResNet18, DPN92')
+
 
 args = parser.parse_args()
 
@@ -91,6 +93,9 @@ unsuploader = torch.utils.data.DataLoader(unsupset, batch_size=mini_batch_size, 
 
 classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
 
+
+
+
 # Model
 if args.resume:
     # Load checkpoint.
@@ -108,17 +113,49 @@ if args.resume:
         ureg.enable()
         ureg.resume(checkpoint['ureg_model'])
 else:
-    print('==> Building model..')
-    # net = VGG('VGG19')
-    # net = ResNet18()
-    net = PreActResNet18()
-    # net = GoogLeNet()
-    # net = DenseNet121()
-    # net = ResNeXt29_2x64d()
-    # net = MobileNet()
-    # net = DPN92()
-    # net = ShuffleNetG2()
-    # net = SENet18()
+    print('==> Building model {}'.format(args.model))
+
+
+    def vgg():
+        return   VGG('VGG19')
+    def resnet18():
+        return  ResNet18()
+    def preactresnet18():
+        return   PreActResNet18()
+    def googlenet():
+        return  GoogLeNet()
+    def densenet121():
+        return  DenseNet121()
+    def resnetx29():
+        return  ResNeXt29_2x64d()
+    def mobilenet():
+        return   MobileNet()
+    def dpn92():
+        return DPN92()
+    def shufflenetg2():
+        return  ShuffleNetG2()
+    def senet18():
+        return  SENet18()
+
+    models={
+        "VGG19": vgg,
+        "ResNet18": resnet18,
+        "PreActResNet18":preactresnet18,
+        "GoogLeNet": googlenet,
+        "DenseNet121": densenet121,
+        "ResNeXt29": resnetx29,
+        "MobileNet": mobilenet,
+        "DPN92":dpn92,
+        "ShuffleNetG2":shufflenetg2,
+        "SENet18":senet18
+    }
+
+    function = models[args.model]
+    if function is None:
+        print("Wrong model name: "+args.model)
+        exit(1)
+    # construct the model specified on the command line:
+    net= function()
     ureg_enabled = args.ureg
 
 if use_cuda:

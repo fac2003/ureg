@@ -33,7 +33,7 @@ class URegularizer:
         print("ureg accuracy={0:.3f} correct: {1}/{2}".format(accuracy, self._n_correct, self._n_total))
         self._last_epoch_accuracy = accuracy
         self._n_total = 0
-        self._n_correct=0
+        self._n_correct = 0
         return accuracy
 
     def __init__(self, model, mini_batch_size, num_features=64, alpha=0.5, learning_rate=0.1):
@@ -57,7 +57,7 @@ class URegularizer:
         self._n_total = 0
         self._n_correct = 0
         self._last_epoch_accuracy = 0.5
-        self._accumulator_total_which_model_loss=0
+        self._accumulator_total_which_model_loss = 0
         # def count_activations(i, o):
         #     self.add_activations(len(o))
         #
@@ -114,11 +114,11 @@ class URegularizer:
             # else:
             self._which_one_model = Sequential(
                 torch.nn.Linear(num_activations, num_features),
-                #torch.nn.Dropout(0.5),
+                # torch.nn.Dropout(0.5),
                 torch.nn.ReLU(),
-                #torch.nn.Dropout(0.5),
+                # torch.nn.Dropout(0.5),
                 torch.nn.Linear(num_features, num_features),
-                #torch.nn.Dropout(0.5),
+                # torch.nn.Dropout(0.5),
                 torch.nn.ReLU(),
                 torch.nn.Linear(num_features, 2),
                 torch.nn.Softmax()
@@ -132,7 +132,7 @@ class URegularizer:
             # self.optimizer = torch.optim.Adam(self.which_one_model.parameters(),
             #                                   lr=self.learning_rate)
             self._optimizer = torch.optim.SGD(self._which_one_model.parameters(), lr=self._learning_rate, momentum=0.9,
-                                              );
+                                              weight_decay=0.01);
             # self._scheduler = ReduceLROnPlateau(self._optimizer, 'min', factor=0.5, patience=0, verbose=True)
             self.loss_ys = torch.nn.BCELoss()  # 0 is supervised
             self.loss_yu = torch.nn.BCELoss()  # (yu, torch.ones(mini_batch_size))  # 1 is unsupervised
@@ -153,7 +153,7 @@ class URegularizer:
             if self._use_cuda:
                 self.ys_true = self.ys_true.cuda()
                 self.yu_true = self.yu_true.cuda()
-                self.ys_uncertain=self.ys_uncertain.cuda()
+                self.ys_uncertain = self.ys_uncertain.cuda()
 
     def clean_outputs(self):
         self._my_feature_extractor1.clear_outputs()
@@ -209,7 +209,7 @@ class URegularizer:
         self._which_one_model.train()
         ys = self._which_one_model(supervised_output)
         yu = self._which_one_model(unsupervised_output)
-        #print("ys: {} yu: {}".format(ys.data,yu.data))
+        # print("ys: {} yu: {}".format(ys.data,yu.data))
         # derive the loss of binary classifications:
 
         # step the whichOne model's parameters in the direction that
@@ -219,7 +219,7 @@ class URegularizer:
         loss_yu = self.loss_yu(yu, self.yu_true)
         #total_which_model_loss = loss_ys + \
         #                         loss_yu
-        #print("loss_ys: {} loss_yu: {} ".format(loss_ys.data[0],loss_yu.data[0]))
+        # print("loss_ys: {} loss_yu: {} ".format(loss_ys.data[0],loss_yu.data[0]))
         total_which_model_loss =torch.max(loss_ys,loss_yu)
         self._accumulator_total_which_model_loss += total_which_model_loss.data[0] / self._mini_batch_size
 
@@ -231,8 +231,11 @@ class URegularizer:
         # the more the activations on the supervised set deviate from the unsupervised data,
         # the more we need to regularize:
         ys = self._which_one_model(supervised_output)
+        yu = self._which_one_model(unsupervised_output)
+
         self._estimate_accuracy(ys, self.ys_true)
-        self.regularizationLoss = self.loss_ys(ys, self.ys_uncertain)
+        self.regularizationLoss = torch.max(self.loss_ys(ys, self.ys_uncertain),
+                                            self.loss_yu(yu, self.ys_uncertain))
         # self._alpha = 0.5 - (0.5 - self._last_epoch_accuracy)
         # return the output on the supervised sample:
         supervised_loss = loss

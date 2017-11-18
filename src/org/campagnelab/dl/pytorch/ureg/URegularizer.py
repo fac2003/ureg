@@ -151,6 +151,7 @@ class URegularizer:
             if self._use_cuda:
                 self.ys_true = self.ys_true.cuda()
                 self.yu_true = self.yu_true.cuda()
+                self.ys_uncertain=self.ys_uncertain.cuda()
 
     def clean_outputs(self):
         self._my_feature_extractor1.clear_outputs()

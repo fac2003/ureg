@@ -186,7 +186,7 @@ max_validation_examples = args.num_validation
 unsupiter = iter(unsuploader)
 
 
-metrics = ["epoch", "checkpoint", "training_loss", "test_loss", "training_accuracy", "test_accuracy", "supervised_loss",
+metrics = ["epoch", "checkpoint", "training_loss",  "training_accuracy", "test_accuracy", "supervised_loss", "test_loss",
            "unsupervised_loss", "delta_loss","ureg_accuracy", "ureg_alpha"]
 
 with open("all-perfs-{}.tsv".format(args.checkpoint_key),"w") as perf_file:
@@ -210,7 +210,8 @@ best_test_loss=100
 def log_performance_metrics(epoch, training_loss, supervised_loss, unsupervised_loss, training_accuracy,
                             test_loss, test_accuracy, ureg_accuracy, alpha):
     delta_loss=test_loss-supervised_loss
-    metrics = [epoch, args.checkpoint_key, training_loss, test_loss, training_accuracy, test_accuracy, supervised_loss,
+    metrics = [epoch, args.checkpoint_key, training_loss, training_accuracy, test_accuracy,
+               supervised_loss,test_loss,
                unsupervised_loss, delta_loss,ureg_accuracy, alpha]
     with open("all-perfs-{}.tsv".format( args.checkpoint_key), "a") as perf_file:
         perf_file.write("\t".join(map(format_nice,metrics)))

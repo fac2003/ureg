@@ -21,12 +21,13 @@ class URegularizer:
         # print("activations: " + str(self.num_activations))
 
     def _estimate_accuracy(self, ys, ys_true):
-        _, predicted = torch.max(ys.data, 1)
-        self._n_correct += predicted.eq(ys_true.data).cpu().sum()
-        self._n_total += ys_true.size(0)
+        _, predicted = torch.max(ys.data, 0)
+        _, truth = torch.max(ys_true.data, 0)
+        self._n_correct += predicted.eq(truth).cpu().sum()
+        self._n_total += self._mini_batch_size
 
     def ureg_accuracy(self):
-        if self._n_total==0:
+        if self._n_total == 0:
             return float("nan")
         accuracy = self._n_correct / self._n_total
         print("ureg accuracy={0:.3f} correct: {1}/{2}".format(accuracy, self._n_correct, self._n_total))
@@ -54,6 +55,7 @@ class URegularizer:
         self._n_total = 0
         self._n_correct = 0
         self._last_epoch_accuracy = 0.5
+        self._accumulator_total_which_model_loss=0
         # def count_activations(i, o):
         #     self.add_activations(len(o))
         #
@@ -110,14 +112,17 @@ class URegularizer:
             # else:
             self._which_one_model = Sequential(
                 torch.nn.Linear(num_activations, num_features),
-                torch.nn.Dropout(0.5),
+                #torch.nn.Dropout(0.5),
                 torch.nn.ReLU(),
-                torch.nn.Dropout(0.5),
+                #torch.nn.Dropout(0.5),
                 torch.nn.Linear(num_features, num_features),
-                torch.nn.Dropout(0.5),
+                #torch.nn.Dropout(0.5),
                 torch.nn.ReLU(),
                 torch.nn.Linear(num_features, 2),
-                torch.nn.Softmax())
+                torch.nn.Softmax()
+            )
+            # (we will use BCEWithLogitsLoss on top of linar to get the cross entropy after
+            # applying a sigmoid).
             init_params(self._which_one_model)
 
             print("done building which_one_model:" + str(self._which_one_model))
@@ -125,16 +130,22 @@ class URegularizer:
             # self.optimizer = torch.optim.Adam(self.which_one_model.parameters(),
             #                                   lr=self.learning_rate)
             self._optimizer = torch.optim.SGD(self._which_one_model.parameters(), lr=self._learning_rate, momentum=0.9,
-                                              weight_decay=0.01);
+                                              );
             # self._scheduler = ReduceLROnPlateau(self._optimizer, 'min', factor=0.5, patience=0, verbose=True)
-            self.loss_ys = torch.nn.CrossEntropyLoss()  # 0 is supervised
-            self.loss_yu = torch.nn.CrossEntropyLoss()  # (yu, torch.ones(mini_batch_size))  # 1 is unsupervised
+            self.loss_ys = torch.nn.BCELoss()  # 0 is supervised
+            self.loss_yu = torch.nn.BCELoss()  # (yu, torch.ones(mini_batch_size))  # 1 is unsupervised
             if self._use_cuda:
                 self.loss_ys = self.loss_ys.cuda()
                 self.loss_yu = self.loss_yu.cuda()
 
-            self.ys_true = Variable(torch.LongTensor([0] * self._mini_batch_size), requires_grad=False)
-            self.yu_true = Variable(torch.LongTensor([1] * self._mini_batch_size), requires_grad=False)
+            zeros = torch.zeros(self._mini_batch_size)
+            ones = torch.ones(self._mini_batch_size)
+            self.ys_true = Variable(torch.transpose(torch.stack([ones, zeros]), 0, 1), requires_grad=False)
+            self.yu_true = Variable(torch.transpose(torch.stack([zeros, ones]), 0, 1), requires_grad=False)
+            uncertain_values = torch.zeros(self._mini_batch_size, 2)
+            uncertain_values.fill_(0.5)
+            self.ys_uncertain = Variable(uncertain_values, requires_grad=False)
+
             for index in range(self._mini_batch_size):
                 self.yu_true[index] = 1
             if self._use_cuda:
@@ -203,6 +214,8 @@ class URegularizer:
 
         total_which_model_loss = self.loss_ys(ys, self.ys_true) + \
                                  self.loss_yu(yu, self.yu_true)
+
+        self._accumulator_total_which_model_loss += total_which_model_loss.data[0] / self._mini_batch_size
         self._optimizer.zero_grad()
         total_which_model_loss.backward(retain_graph=True)
         self._optimizer.step()
@@ -211,7 +224,7 @@ class URegularizer:
         self._which_one_model.eval()
         # the more the activations on the supervised set deviate from the unsupervised data,
         # the more we need to regularize:
-        self.regularizationLoss = -self.loss_ys(ys, self.ys_true)
+        self.regularizationLoss = self.loss_ys(ys, self.ys_uncertain)
         self._estimate_accuracy(ys, self.ys_true)
         # self._alpha = 0.5 - (0.5 - self._last_epoch_accuracy)
         # return the output on the supervised sample:
@@ -226,6 +239,11 @@ class URegularizer:
     def new_epoch(self, epoch):
         self._n_total = 0
         self._n_correct = 0
+        print("epoch {0} which_one_model loss: {1:.4f}"
+              .format(epoch,
+                      self._accumulator_total_which_model_loss))
+
+        self._accumulator_total_which_model_loss = 0
         if self._forget_every_n_epoch is not None:
             self._epoch_counter += 1
             # halve the learning rate for each extra epoch we don't reset:
@@ -233,7 +251,7 @@ class URegularizer:
             if self._epoch_counter > self._forget_every_n_epoch:
                 # reset the learning rate of the which_one_model:
                 self._epoch_counter = 0
-                self._which_one_model=None
+                self._which_one_model = None
                 self._adjust_learning_rate(self._learning_rate)
 
     def _adjust_learning_rate(self, learning_rate):

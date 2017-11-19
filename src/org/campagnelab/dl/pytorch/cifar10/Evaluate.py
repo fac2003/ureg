@@ -37,7 +37,7 @@ import torchvision.transforms as transforms
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from org.campagnelab.dl.pytorch.cifar10.models import *
-from org.campagnelab.dl.pytorch.ureg.URegularizer import URegularizer
+from org.campagnelab.dl.pytorch.ureg import URegularizer
 from org.campagnelab.dl.pytorch.cifar10.utils import progress_bar
 
 parser = argparse.ArgumentParser(description='Evaluate ureg against CIFAR10')
@@ -53,16 +53,17 @@ parser.add_argument('--ureg-num-features', type=int, help='Number of features in
 parser.add_argument('--ureg-alpha', type=float, help='Mixing coefficient (between 0 and 1) for ureg loss component',
                     default=0.5)
 parser.add_argument('--checkpoint-key', help='random key to save/load checkpoint',
-                    default=''.join(random.choices( string.ascii_uppercase, k=5)))
-parser.add_argument("--ureg-reset-every-n-epoch",type=int, help='Reset weights of the ureg model every n epochs.')
+                    default=''.join(random.choices(string.ascii_uppercase, k=5)))
+parser.add_argument("--ureg-reset-every-n-epoch", type=int, help='Reset weights of the ureg model every n epochs.')
 parser.add_argument('--ureg-learning-rate', default=0.01, type=float, help='ureg learning rate')
-parser.add_argument('--lr-patience', default=10, type=int, help='number of epochs to wait before applying LR schedule when loss does not improve.')
-parser.add_argument('--model', default="PreActResNet18", type=str, help='The model to instantiate. One of VGG16,	ResNet18, ResNet50, ResNet101,ResNeXt29, ResNeXt29, DenseNet121, PreActResNet18, DPN92')
-
+parser.add_argument('--lr-patience', default=10, type=int,
+                    help='number of epochs to wait before applying LR schedule when loss does not improve.')
+parser.add_argument('--model', default="PreActResNet18", type=str,
+                    help='The model to instantiate. One of VGG16,	ResNet18, ResNet50, ResNet101,ResNeXt29, ResNeXt29, DenseNet121, PreActResNet18, DPN92')
 
 args = parser.parse_args()
 
-print("Executing "+args.checkpoint_key)
+print("Executing " + args.checkpoint_key)
 
 use_cuda = torch.cuda.is_available()
 is_parallel = False
@@ -96,9 +97,6 @@ unsuploader = torch.utils.data.DataLoader(unsupset, batch_size=mini_batch_size, 
 
 classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
 
-
-
-
 # Model
 if args.resume:
     # Load checkpoint.
@@ -111,7 +109,7 @@ if args.resume:
     ureg_enabled = checkpoint['ureg']
 
     if ureg_enabled:
-        ureg = URegularizer(net, mini_batch_size,args.ureg_num_features,
+        ureg = URegularizer(net, mini_batch_size, args.ureg_num_features,
                             args.ureg_alpha, args.ureg_learning_rate)
         ureg.enable()
         ureg.resume(checkpoint['ureg_model'])
@@ -120,45 +118,64 @@ else:
 
 
     def vgg():
-        return   VGG('VGG16')
+        return VGG('VGG16')
+
+
     def resnet18():
-        return  ResNet18()
+        return ResNet18()
+
+
     def preactresnet18():
-        return   PreActResNet18()
+        return PreActResNet18()
+
+
     def googlenet():
-        return  GoogLeNet()
+        return GoogLeNet()
+
+
     def densenet121():
-        return  DenseNet121()
+        return DenseNet121()
+
+
     def resnetx29():
-        return  ResNeXt29_2x64d()
+        return ResNeXt29_2x64d()
+
+
     def mobilenet():
-        return   MobileNet()
+        return MobileNet()
+
+
     def dpn92():
         return DPN92()
-    def shufflenetg2():
-        return  ShuffleNetG2()
-    def senet18():
-        return  SENet18()
 
-    models={
+
+    def shufflenetg2():
+        return ShuffleNetG2()
+
+
+    def senet18():
+        return SENet18()
+
+
+    models = {
         "VGG16": vgg,
         "ResNet18": resnet18,
-        "PreActResNet18":preactresnet18,
+        "PreActResNet18": preactresnet18,
         "GoogLeNet": googlenet,
         "DenseNet121": densenet121,
         "ResNeXt29": resnetx29,
         "MobileNet": mobilenet,
-        "DPN92":dpn92,
-        "ShuffleNetG2":shufflenetg2,
-        "SENet18":senet18
+        "DPN92": dpn92,
+        "ShuffleNetG2": shufflenetg2,
+        "SENet18": senet18
     }
 
     function = models[args.model]
     if function is None:
-        print("Wrong model name: "+args.model)
+        print("Wrong model name: " + args.model)
         exit(1)
     # construct the model specified on the command line:
-    net= function()
+    net = function()
     ureg_enabled = args.ureg
 
 if use_cuda:
@@ -168,12 +185,14 @@ cudnn.benchmark = True
 
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=0.9, weight_decay=5e-4)
-ureg = URegularizer(net, mini_batch_size, num_features=args.ureg_num_features, alpha=args.ureg_alpha,
+ureg = URegularizer(net, mini_batch_size, num_features=args.ureg_num_features,
+                    alpha=args.ureg_alpha,
                     learning_rate=args.ureg_learning_rate)
 if args.ureg:
     ureg.enable()
     ureg.forget_model(args.ureg_reset_every_n_epoch)
-    print("ureg is enabled with alpha={}, reset every {} epochs. ".format(args.ureg_alpha, args.ureg_reset_every_n_epoch))
+    print(
+        "ureg is enabled with alpha={}, reset every {} epochs. ".format(args.ureg_alpha, args.ureg_reset_every_n_epoch))
 
 else:
     ureg.disable()
@@ -185,17 +204,17 @@ max_validation_examples = args.num_validation
 
 unsupiter = iter(unsuploader)
 
+metrics = ["epoch", "checkpoint", "training_loss", "training_accuracy", "test_accuracy", "supervised_loss", "test_loss",
+           "unsupervised_loss", "delta_loss", "ureg_accuracy", "ureg_alpha"]
 
-metrics = ["epoch", "checkpoint", "training_loss",  "training_accuracy", "test_accuracy", "supervised_loss", "test_loss",
-           "unsupervised_loss", "delta_loss","ureg_accuracy", "ureg_alpha"]
+with open("all-perfs-{}.tsv".format(args.checkpoint_key), "w") as perf_file:
+    perf_file.write("\t".join(map(str, metrics)))
+    perf_file.write("\n")
 
-with open("all-perfs-{}.tsv".format(args.checkpoint_key),"w") as perf_file:
-        perf_file.write("\t".join(map(str, metrics)))
-        perf_file.write("\n")
+with open("best-perf-{}.tsv".format(args.checkpoint_key), "w") as perf_file:
+    perf_file.write("\t".join(map(str, metrics)))
+    perf_file.write("\n")
 
-with open("best-perf-{}.tsv".format(args.checkpoint_key),"w") as perf_file:
-        perf_file.write("\t".join(map(str, metrics)))
-        perf_file.write("\n")
 
 def format_nice(n):
     try:
@@ -204,23 +223,27 @@ def format_nice(n):
         if n == float(n):
             return "{0:.4f}".format(n)
     except:
-            return str(n)
+        return str(n)
 
-best_test_loss=100
+
+best_test_loss = 100
+
+
 def log_performance_metrics(epoch, training_loss, supervised_loss, unsupervised_loss, training_accuracy,
                             test_loss, test_accuracy, ureg_accuracy, alpha):
-    delta_loss=test_loss-supervised_loss
+    delta_loss = test_loss - supervised_loss
     metrics = [epoch, args.checkpoint_key, training_loss, training_accuracy, test_accuracy,
-               supervised_loss,test_loss,
-               unsupervised_loss, delta_loss,ureg_accuracy, alpha]
-    with open("all-perfs-{}.tsv".format( args.checkpoint_key), "a") as perf_file:
-        perf_file.write("\t".join(map(format_nice,metrics)))
+               supervised_loss, test_loss,
+               unsupervised_loss, delta_loss, ureg_accuracy, alpha]
+    with open("all-perfs-{}.tsv".format(args.checkpoint_key), "a") as perf_file:
+        perf_file.write("\t".join(map(format_nice, metrics)))
         perf_file.write("\n")
-    # if test_loss<best_test_loss:
-    #     best_test_loss=test_loss
-    #     with open("best-perf-{}.tsv".format( args.checkpoint_key), "a") as perf_file:
-    #         perf_file.write("\t".join(map(format_nice, metrics)))
-    #         perf_file.write("\n")
+        # if test_loss<best_test_loss:
+        #     best_test_loss=test_loss
+        #     with open("best-perf-{}.tsv".format( args.checkpoint_key), "a") as perf_file:
+        #         perf_file.write("\t".join(map(format_nice, metrics)))
+        #         perf_file.write("\n")
+
 
 # Training
 
@@ -244,7 +267,9 @@ def train(epoch, unsupiter):
             inputs, targets = inputs.cuda(), targets.cuda()
         optimizer.zero_grad()
         inputs, targets = Variable(inputs), Variable(targets)
+        optimizer.zero_grad()
         outputs = net(inputs)
+
         loss = criterion(outputs, targets)
 
         # the unsupervised regularization part goes here:
@@ -259,10 +284,17 @@ def train(epoch, unsupiter):
         if use_cuda: ufeatures = ufeatures.cuda()
         # then use it to calculate the unsupervised regularization contribution to the loss:
         uinputs = Variable(ufeatures)
+
         loss, supervised_loss, regularization_loss = ureg.regularization_loss(loss, inputs, uinputs)
 
+        params_before = net.parameters()
         loss.backward()
         optimizer.step()
+        params_after = net.parameters()
+        for b, a in zip(params_before, params_after):
+            # Make sure something changed.
+            if (str(a.data)!=(str(b.data))):
+                print("params: " + str(a.data)+" "+str(b.data))
 
         total_loss += loss.data[0]
         strain_loss += supervised_loss
@@ -296,8 +328,8 @@ def test(epoch):
     test_loss_accumulator = 0
     correct = 0
     total = 0
-    test_accuracy=None
-    test_loss=None
+    test_accuracy = None
+    test_loss = None
     for batch_idx, (inputs, targets) in enumerate(testloader):
 
         if use_cuda:
@@ -341,9 +373,8 @@ def test(epoch):
 
     return (test_loss, test_accuracy, ureg.ureg_accuracy(), ureg._alpha)
 
+
 for epoch in range(start_epoch, start_epoch + 200):
-
-    perfs=train(epoch, unsupiter)
-    perfs+=test(epoch)
+    perfs = train(epoch, unsupiter)
+    perfs += test(epoch)
     log_performance_metrics(epoch, *perfs)
-

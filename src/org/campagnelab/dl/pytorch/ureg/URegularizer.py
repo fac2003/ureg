@@ -160,6 +160,15 @@ class URegularizer:
         self._my_feature_extractor2.clear_outputs()
 
     def regularization_loss(self, loss, xs, xu):
+        """
+        Calculates the regularization loss and add it to
+        the provided loss (linear combination using  alpha as mixing factor).
+
+        :param loss: loss to be optimized without regularization
+        :param xs: supervised features.
+        :param xu: unsupervised features.
+        :return: a tuple with (loss (Variable), supervised_loss (float), regularizationLoss (float))
+        """
         if not self._enabled:
             return (loss, loss.data[0], 0.0)
 
@@ -236,8 +245,8 @@ class URegularizer:
         # self.regularizationLoss = torch.max(self.loss_ys(ys, self.ys_uncertain),
         #                                    self.loss_yu(yu, self.ys_uncertain))
         # self._alpha = 0.5 - (0.5 - self._last_epoch_accuracy)
-        self.regularizationLoss = (self.loss_ys(ys, self.ys_uncertain) *
-                                   self.loss_yu(yu, self.ys_uncertain))
+        self.regularizationLoss = (self.loss_ys(ys, self.yu_true) +
+                                   self.loss_yu(yu, self.ys_true)) / 2
         # return the output on the supervised sample:
         supervised_loss = loss
         loss = supervised_loss * (1 - self._alpha) + self._alpha * self.regularizationLoss

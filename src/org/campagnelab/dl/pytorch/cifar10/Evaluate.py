@@ -120,7 +120,7 @@ else:
 
 
     def vgg():
-        return   VGG('VGG19')
+        return   VGG('VGG16')
     def resnet18():
         return  ResNet18()
     def preactresnet18():
@@ -141,7 +141,7 @@ else:
         return  SENet18()
 
     models={
-        "VGG19": vgg,
+        "VGG16": vgg,
         "ResNet18": resnet18,
         "PreActResNet18":preactresnet18,
         "GoogLeNet": googlenet,

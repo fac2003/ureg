@@ -217,10 +217,9 @@ class URegularizer:
 
         loss_ys = self.loss_ys(ys, self.ys_true)
         loss_yu = self.loss_yu(yu, self.yu_true)
-        #total_which_model_loss = loss_ys + \
-        #                         loss_yu
+        total_which_model_loss = (loss_ys + loss_yu) / 2
         # print("loss_ys: {} loss_yu: {} ".format(loss_ys.data[0],loss_yu.data[0]))
-        total_which_model_loss =torch.max(loss_ys,loss_yu)
+        # total_which_model_loss =torch.max(loss_ys,loss_yu)
         self._accumulator_total_which_model_loss += total_which_model_loss.data[0] / self._mini_batch_size
 
         total_which_model_loss.backward(retain_graph=True)
@@ -234,9 +233,11 @@ class URegularizer:
         yu = self._which_one_model(unsupervised_output)
 
         self._estimate_accuracy(ys, self.ys_true)
-        self.regularizationLoss = torch.max(self.loss_ys(ys, self.ys_uncertain),
-                                            self.loss_yu(yu, self.ys_uncertain))
+        # self.regularizationLoss = torch.max(self.loss_ys(ys, self.ys_uncertain),
+        #                                    self.loss_yu(yu, self.ys_uncertain))
         # self._alpha = 0.5 - (0.5 - self._last_epoch_accuracy)
+        self.regularizationLoss = (self.loss_ys(ys, self.ys_uncertain) *
+                                   self.loss_yu(yu, self.ys_uncertain))
         # return the output on the supervised sample:
         supervised_loss = loss
         loss = supervised_loss * (1 - self._alpha) + self._alpha * self.regularizationLoss

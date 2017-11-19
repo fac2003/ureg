@@ -2,7 +2,7 @@ import unittest
 
 import torch
 from torch.autograd import Variable
-from torch.nn import Module, BCELoss
+from torch.nn import Module, BCELoss, Softmax
 
 from org.campagnelab.dl.pytorch.ureg.URegularizer import URegularizer
 from org.campagnelab.dl.pytorch.ureg.tests.SimpleModel import SimpleModel
@@ -12,7 +12,7 @@ class URegTest(unittest.TestCase):
     def setUp(self):
         self.model = SimpleModel(2, 1)
         self.criterion = BCELoss()
-        self.x = Variable(torch.cat([torch.rand(1), torch.ones(1)]))
+        self.x = Variable(torch.cat([torch.rand(1), torch.ones(1)]),requires_grad=True)
         self.y = self.model.forward(self.x)
         self.y_true = Variable(torch.ones(1), requires_grad=False)
         self.epsilon = 1e-6
@@ -39,7 +39,7 @@ class URegTest(unittest.TestCase):
         """
         ureg = URegularizer(self.model, 1, num_features=2,
                             alpha=1,  # gradient only from ureg.
-                            learning_rate=1)
+                            learning_rate=0.1)
 
         loss = self.criterion(self.y, self.y_true)
         xs = self.x

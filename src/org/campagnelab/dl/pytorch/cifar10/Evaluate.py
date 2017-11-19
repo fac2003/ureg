@@ -37,7 +37,7 @@ import torchvision.transforms as transforms
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from org.campagnelab.dl.pytorch.cifar10.models import *
-from org.campagnelab.dl.pytorch.ureg import URegularizer
+from org.campagnelab.dl.pytorch.ureg. URegularizer import URegularizer
 from org.campagnelab.dl.pytorch.cifar10.utils import progress_bar
 
 parser = argparse.ArgumentParser(description='Evaluate ureg against CIFAR10')

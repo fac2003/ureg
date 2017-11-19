@@ -1,8 +1,6 @@
 import torch
 from torch.autograd import Variable
 from torch.nn import Sequential
-from torch import cat
-from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from org.campagnelab.dl.pytorch.cifar10.utils import init_params
 from org.campagnelab.dl.pytorch.ureg.MyFeatureExtractor import MyFeatureExtractor
@@ -239,19 +237,22 @@ class URegularizer:
         # the more the activations on the supervised set deviate from the unsupervised data,
         # the more we need to regularize:
         ys = self._which_one_model(supervised_output)
-        yu = self._which_one_model(unsupervised_output)
+        #yu = self._which_one_model(unsupervised_output)
 
         self._estimate_accuracy(ys, self.ys_true)
         # self.regularizationLoss = torch.max(self.loss_ys(ys, self.ys_uncertain),
         #                                    self.loss_yu(yu, self.ys_uncertain))
         # self._alpha = 0.5 - (0.5 - self._last_epoch_accuracy)
-        self.regularizationLoss = (self.loss_ys(ys, self.yu_true) +
-                                   self.loss_yu(yu, self.ys_true)) / 2
+        rLoss = (self.loss_ys(ys, self.ys_uncertain))# +
+                                  # self.loss_yu(yu, self.ys_uncertain)) / 2
         # return the output on the supervised sample:
         supervised_loss = loss
-        loss = supervised_loss * (1 - self._alpha) + self._alpha * self.regularizationLoss
+        loss = supervised_loss * (1 - self._alpha) + self._alpha * rLoss
         # print("loss: {0:.2f} supervised: {1:.2f} unsupervised: {2:.2f} ".format(loss.data[0], supervised_loss.data[0], self.regularizationLoss.data[0]))
-        return (loss, supervised_loss.data[0], self.regularizationLoss.data[0])
+        return (loss, supervised_loss.data[0], rLoss.data[0])
+
+    def get_which_one_model(self):
+        return self._which_one_model
 
     def resume(self, saved_model):
         self.checkpoint_model = saved_model

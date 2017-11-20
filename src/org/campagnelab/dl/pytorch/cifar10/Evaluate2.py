@@ -41,7 +41,7 @@ from org.campagnelab.dl.pytorch.ureg.URegularizer import URegularizer
 from org.campagnelab.dl.pytorch.cifar10.utils import progress_bar
 
 parser = argparse.ArgumentParser(description='Evaluate ureg against CIFAR10')
-parser.add_argument('--lr', default=0.1, type=float, help='learning rate')
+parser.add_argument('--lr', default=0.005, type=float, help='learning rate')
 parser.add_argument('--resume', '-r', action='store_true', help='resume from checkpoint')
 parser.add_argument('--ureg', '-u', action='store_true', help='Enable unsupervised regularization (ureg)')
 parser.add_argument('--mini-batch-size', type=int, help='Size of the mini-batch', default=128)
@@ -55,11 +55,14 @@ parser.add_argument('--ureg-alpha', type=float, help='Mixing coefficient (betwee
 parser.add_argument('--checkpoint-key', help='random key to save/load checkpoint',
                     default=''.join(random.choices(string.ascii_uppercase, k=5)))
 parser.add_argument("--ureg-reset-every-n-epoch", type=int, help='Reset weights of the ureg model every n epochs.')
-parser.add_argument('--ureg-learning-rate', default=0.01, type=float, help='ureg learning rate')
+parser.add_argument('--ureg-learning-rate', default=0.1, type=float, help='ureg learning rate')
 parser.add_argument('--lr-patience', default=10, type=int,
                     help='number of epochs to wait before applying LR schedule when loss does not improve.')
 parser.add_argument('--model', default="PreActResNet18", type=str,
                     help='The model to instantiate. One of VGG16,	ResNet18, ResNet50, ResNet101,ResNeXt29, ResNeXt29, DenseNet121, PreActResNet18, DPN92')
+parser.add_argument('--shaving-epochs', default=1, type=int,
+                    help='number of shaving epochs.')
+
 
 args = parser.parse_args()
 
@@ -186,7 +189,7 @@ cudnn.benchmark = True
 
 criterion = nn.CrossEntropyLoss()
 optimizer_training = optim.SGD(net.parameters(), lr=args.lr, momentum=0.9, weight_decay=5e-4)
-optimizer_reg = optim.SGD(net.parameters(), lr=args.lr, momentum=0.9, weight_decay=5e-4)
+optimizer_reg = optim.SGD(net.parameters(), lr=args.ureg_learning_rate, momentum=0.9, weight_decay=5e-4)
 ureg = URegularizer(net, mini_batch_size, num_features=args.ureg_num_features,
                     alpha=args.ureg_alpha,
                     learning_rate=args.ureg_learning_rate)
@@ -333,52 +336,54 @@ def regularize(epoch, unsupiter):
     supervised_loss = 0
     trainiter=iter(trainloader)
     train_examples_used=0
-    for batch_idx, (inputs, targets) in enumerate(unsuploader):
+    for _ in range(args.shaving_steps):
+        print("New shaving step")
+        for batch_idx, (inputs, targets) in enumerate(unsuploader):
 
-        if use_cuda:
-            inputs, targets = inputs.cuda(), targets.cuda()
-        optimizer_reg.zero_grad()
-        uinputs, _ = Variable(inputs), Variable(targets)
+            if use_cuda:
+                inputs, targets = inputs.cuda(), targets.cuda()
+            optimizer_reg.zero_grad()
+            uinputs, _ = Variable(inputs), Variable(targets)
 
-        # don't use more training examples than allowed (-n) even if we don't use
-        # their labels:
-        if train_examples_used>args.num_training:
-            trainiter = iter(trainloader)
-            train_examples_used=0
-        try:
-            # first, read a minibatch from the unsupervised dataset:
-            features, ulabels = next(trainiter)
+            # don't use more training examples than allowed (-n) even if we don't use
+            # their labels:
+            if train_examples_used>args.num_training:
+                trainiter = iter(trainloader)
+                train_examples_used=0
+            try:
+                # first, read a minibatch from the unsupervised dataset:
+                features, ulabels = next(trainiter)
 
-        except StopIteration:
-            trainiter = iter(trainloader)
-            features, _ = next(trainiter)
-        train_examples_used += 1
-        if use_cuda: features = features.cuda()
+            except StopIteration:
+                trainiter = iter(trainloader)
+                features, _ = next(trainiter)
+            train_examples_used += 1
+            if use_cuda: features = features.cuda()
 
-        # then use it to calculate the unsupervised regularization contribution to the loss:
-        inputs = Variable(features)
-        regularization_loss = ureg.regularization_loss(inputs, uinputs)
-        if regularization_loss is not None:
+            # then use it to calculate the unsupervised regularization contribution to the loss:
+            inputs = Variable(features)
+            regularization_loss = ureg.regularization_loss(inputs, uinputs)
+            if regularization_loss is not None:
 
-            regularization_loss.backward()
-            optimizer_reg.step()
-            optimized_loss = regularization_loss
-            average_total_loss += optimized_loss.data[0]
-        else:
-            optimized_loss = supervised_loss
+                regularization_loss.backward()
+                optimizer_reg.step()
+                optimized_loss = regularization_loss
+                average_total_loss += optimized_loss.data[0]
+            else:
+                optimized_loss = supervised_loss
 
-        average_unsupervised_loss += (0 if regularization_loss is None
-                                      else  regularization_loss.data[0])
+            average_unsupervised_loss += (0 if regularization_loss is None
+                                          else  regularization_loss.data[0])
 
-        denominator = batch_idx + 1
-        average_total_loss = average_total_loss / denominator
-        average_unsupervised_loss = average_unsupervised_loss / denominator
+            denominator = batch_idx + 1
+            average_total_loss = average_total_loss / denominator
+            average_unsupervised_loss = average_unsupervised_loss / denominator
 
-        progress_bar(batch_idx, len(trainloader), ' u: %.3f'
-                     % (average_unsupervised_loss,))
+            progress_bar(batch_idx, len(trainloader), ' u: %.3f'
+                         % (average_unsupervised_loss,))
+            print()
 
-    print()
-    return (average_unsupervised_loss)
+    return (average_unsupervised_loss,)
 
 
 def test(epoch):

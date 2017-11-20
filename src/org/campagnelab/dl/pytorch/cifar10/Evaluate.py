@@ -211,13 +211,14 @@ unsupiter = iter(unsuploader)
 metrics = ["epoch", "checkpoint", "training_loss", "training_accuracy", "test_accuracy", "supervised_loss", "test_loss",
            "unsupervised_loss", "delta_loss", "ureg_accuracy", "ureg_alpha"]
 
-with open("all-perfs-{}.tsv".format(args.checkpoint_key), "w") as perf_file:
-    perf_file.write("\t".join(map(str, metrics)))
-    perf_file.write("\n")
+if not args.resume:
+    with open("all-perfs-{}.tsv".format(args.checkpoint_key), "w") as perf_file:
+        perf_file.write("\t".join(map(str, metrics)))
+        perf_file.write("\n")
 
-with open("best-perf-{}.tsv".format(args.checkpoint_key), "w") as perf_file:
-    perf_file.write("\t".join(map(str, metrics)))
-    perf_file.write("\n")
+    with open("best-perf-{}.tsv".format(args.checkpoint_key), "w") as perf_file:
+        perf_file.write("\t".join(map(str, metrics)))
+        perf_file.write("\n")
 
 
 def format_nice(n):
@@ -233,21 +234,21 @@ def format_nice(n):
 best_test_loss = 100
 
 
-def log_performance_metrics(epoch, training_loss, supervised_loss, unsupervised_loss, training_accuracy,
+def log_performance_metrics(epoch, training_loss, supervised_loss, training_accuracy, unsupervised_loss,
                             test_loss, test_accuracy, ureg_accuracy, alpha):
+    global best_acc
     delta_loss = test_loss - supervised_loss
-    metrics = [epoch, args.checkpoint_key, training_loss, training_accuracy, test_accuracy,
-               supervised_loss, test_loss,
+    metrics = [epoch, args.checkpoint_key, training_accuracy, test_accuracy,
+               supervised_loss, training_loss, test_loss,
                unsupervised_loss, delta_loss, ureg_accuracy, alpha]
     with open("all-perfs-{}.tsv".format(args.checkpoint_key), "a") as perf_file:
         perf_file.write("\t".join(map(format_nice, metrics)))
         perf_file.write("\n")
-        # if test_loss<best_test_loss:
-        #     best_test_loss=test_loss
-        #     with open("best-perf-{}.tsv".format( args.checkpoint_key), "a") as perf_file:
-        #         perf_file.write("\t".join(map(format_nice, metrics)))
-        #         perf_file.write("\n")
 
+    if test_accuracy>= best_acc:
+         with open("best-perf-{}.tsv".format( args.checkpoint_key), "a") as perf_file:
+             perf_file.write("\t".join(map(format_nice, metrics)))
+             perf_file.write("\n")
 
 # Training
 

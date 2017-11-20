@@ -55,7 +55,8 @@ parser.add_argument('--ureg-alpha', type=float, help='Mixing coefficient (betwee
 parser.add_argument('--checkpoint-key', help='random key to save/load checkpoint',
                     default=''.join(random.choices(string.ascii_uppercase, k=5)))
 parser.add_argument("--ureg-reset-every-n-epoch", type=int, help='Reset weights of the ureg model every n epochs.')
-parser.add_argument('--ureg-learning-rate', default=0.1, type=float, help='ureg learning rate')
+parser.add_argument('--ureg-learning-rate', default=0.01, type=float, help='ureg learning rate')
+parser.add_argument('--shave-lr', default=0.1, type=float, help='shave learning rate')
 parser.add_argument('--lr-patience', default=10, type=int,
                     help='number of epochs to wait before applying LR schedule when loss does not improve.')
 parser.add_argument('--model', default="PreActResNet18", type=str,
@@ -189,7 +190,7 @@ cudnn.benchmark = True
 
 criterion = nn.CrossEntropyLoss()
 optimizer_training = optim.SGD(net.parameters(), lr=args.lr, momentum=0.9, weight_decay=5e-4)
-optimizer_reg = optim.SGD(net.parameters(), lr=args.ureg_learning_rate, momentum=0.9, weight_decay=5e-4)
+optimizer_reg = optim.SGD(net.parameters(), lr=args.shave_lr, momentum=0.9, weight_decay=5e-4)
 ureg = URegularizer(net, mini_batch_size, num_features=args.ureg_num_features,
                     alpha=args.ureg_alpha,
                     learning_rate=args.ureg_learning_rate)
@@ -215,13 +216,14 @@ unsupiter = iter(unsuploader)
 metrics = ["epoch", "checkpoint", "training_loss", "training_accuracy", "test_accuracy", "supervised_loss", "test_loss",
            "unsupervised_loss", "delta_loss", "ureg_accuracy", "ureg_alpha"]
 
-with open("all-perfs-{}.tsv".format(args.checkpoint_key), "w") as perf_file:
-    perf_file.write("\t".join(map(str, metrics)))
-    perf_file.write("\n")
+if not args.resume:
+    with open("all-perfs-{}.tsv".format(args.checkpoint_key), "w") as perf_file:
+        perf_file.write("\t".join(map(str, metrics)))
+        perf_file.write("\n")
 
-with open("best-perf-{}.tsv".format(args.checkpoint_key), "w") as perf_file:
-    perf_file.write("\t".join(map(str, metrics)))
-    perf_file.write("\n")
+    with open("best-perf-{}.tsv".format(args.checkpoint_key), "w") as perf_file:
+        perf_file.write("\t".join(map(str, metrics)))
+        perf_file.write("\n")
 
 
 def format_nice(n):
@@ -239,6 +241,7 @@ best_test_loss = 100
 
 def log_performance_metrics(epoch, training_loss, supervised_loss, training_accuracy, unsupervised_loss,
                             test_loss, test_accuracy, ureg_accuracy, alpha):
+    global best_acc
     delta_loss = test_loss - supervised_loss
     metrics = [epoch, args.checkpoint_key, training_loss, training_accuracy, test_accuracy,
                supervised_loss, test_loss,
@@ -246,11 +249,11 @@ def log_performance_metrics(epoch, training_loss, supervised_loss, training_accu
     with open("all-perfs-{}.tsv".format(args.checkpoint_key), "a") as perf_file:
         perf_file.write("\t".join(map(format_nice, metrics)))
         perf_file.write("\n")
-        # if test_loss<best_test_loss:
-        #     best_test_loss=test_loss
-        #     with open("best-perf-{}.tsv".format( args.checkpoint_key), "a") as perf_file:
-        #         perf_file.write("\t".join(map(format_nice, metrics)))
-        #         perf_file.write("\n")
+
+    if test_accuracy>= best_acc:
+         with open("best-perf-{}.tsv".format( args.checkpoint_key), "a") as perf_file:
+             perf_file.write("\t".join(map(format_nice, metrics)))
+             perf_file.write("\n")
 
 
 # Training
@@ -269,6 +272,7 @@ def train(epoch, unsupiter):
     training_accuracy = 0
     supervised_loss = 0
     optimized_loss = 0
+
     for batch_idx, (inputs, targets) in enumerate(trainloader):
 
         if use_cuda:

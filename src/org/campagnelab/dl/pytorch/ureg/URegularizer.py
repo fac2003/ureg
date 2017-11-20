@@ -287,9 +287,9 @@ class URegularizer:
     def new_epoch(self, epoch):
         self._n_total = 0
         self._n_correct = 0
-        print("epoch {0} which_one_model loss: {1:.4f}"
-              .format(epoch,
-                      self._accumulator_total_which_model_loss))
+        #print("epoch {0} which_one_model loss: {1:.4f}"
+        #      .format(epoch,
+        #              self._accumulator_total_which_model_loss))
 
         self._accumulator_total_which_model_loss = 0
         if self._forget_every_n_epoch is not None:

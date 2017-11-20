@@ -114,6 +114,7 @@ if args.resume:
         ureg.set_num_examples(args.num_training, len(unsuploader))
         ureg.enable()
         ureg.resume(checkpoint['ureg_model'])
+        ureg.set_num_examples(args.num_training, len(unsuploader))
 else:
     print('==> Building model {}'.format(args.model))
 
@@ -189,6 +190,7 @@ optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=0.9, weight_decay=5
 ureg = URegularizer(net, mini_batch_size, num_features=args.ureg_num_features,
                     alpha=args.ureg_alpha,
                     learning_rate=args.ureg_learning_rate)
+ureg.set_num_examples(args.num_training, len(unsuploader))
 if args.ureg:
     ureg.enable()
     ureg.set_num_examples(args.num_training, len(unsuploader))

@@ -199,6 +199,7 @@ if args.ureg:
 
 else:
     ureg.disable()
+    ureg.set_num_examples(args.num_training, len(unsuploader))
     print("ureg is disabled")
 
 scheduler_train = ReduceLROnPlateau(optimizer_training, 'min', factor=0.5, patience=args.lr_patience, verbose=True)
@@ -233,7 +234,7 @@ def format_nice(n):
 best_test_loss = 100
 
 
-def log_performance_metrics(epoch, training_loss, supervised_loss, unsupervised_loss, training_accuracy,
+def log_performance_metrics(epoch, training_loss, supervised_loss, training_accuracy, unsupervised_loss,
                             test_loss, test_accuracy, ureg_accuracy, alpha):
     delta_loss = test_loss - supervised_loss
     metrics = [epoch, args.checkpoint_key, training_loss, training_accuracy, test_accuracy,
@@ -316,8 +317,7 @@ def train(epoch, unsupiter):
             break
 
     print()
-    return (average_total_loss, average_supervised_loss,
-            average_unsupervised_loss, training_accuracy)
+    return (average_total_loss, average_supervised_loss, training_accuracy)
 
 
 def regularize(epoch, unsupiter):
@@ -340,7 +340,8 @@ def regularize(epoch, unsupiter):
         optimizer_reg.zero_grad()
         uinputs, _ = Variable(inputs), Variable(targets)
 
-        # the unsupervised regularization part goes here:
+        # don't use more training examples than allowed (-n) even if we don't use
+        # their labels:
         if train_examples_used>args.num_training:
             trainiter = iter(trainloader)
             train_examples_used=0
@@ -377,8 +378,7 @@ def regularize(epoch, unsupiter):
                      % (average_unsupervised_loss,))
 
     print()
-    return (average_total_loss, average_supervised_loss,
-            average_unsupervised_loss, training_accuracy)
+    return (average_unsupervised_loss)
 
 
 def test(epoch):
@@ -437,6 +437,9 @@ def test(epoch):
 
 for epoch in range(start_epoch, start_epoch + 200):
     perfs = train(epoch, unsupiter)
-    regularize(epoch, unsupiter)
+    if (args.ureg):
+        perfs += regularize(epoch, unsupiter)
+    else:
+        perfs += (float('nan'))
     perfs += test(epoch)
     log_performance_metrics(epoch, *perfs)

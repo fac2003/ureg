@@ -264,7 +264,6 @@ def train(epoch, unsupiter):
     average_unsupervised_loss = 0
     correct = 0
     total = 0
-    ureg.new_epoch(epoch)
     average_total_loss = 0
     unsupervised_loss = 0
     training_accuracy = 0
@@ -326,8 +325,6 @@ def train(epoch, unsupiter):
 def regularize(epoch, unsupiter):
     print('\nRegularizing, epoch: %d' % epoch)
     net.train()
-
-    ureg.new_epoch(epoch)
     average_total_loss = 0
     supervised_loss = 0
     trainiter=iter(trainloader)

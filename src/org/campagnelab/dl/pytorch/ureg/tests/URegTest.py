@@ -15,7 +15,7 @@ class URegTest(unittest.TestCase):
         self.x = Variable(torch.cat([torch.rand(1), torch.ones(1)]),requires_grad=True)
         self.y = self.model.forward(self.x)
         self.y_true = Variable(torch.ones(1), requires_grad=False)
-        self.epsilon = 1e-6
+        self.epsilon = 1e-12
 
     def test_grad_not_null(self):
         """

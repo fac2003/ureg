@@ -243,7 +243,7 @@ class URegularizer:
         # self.regularizationLoss = torch.max(self.loss_ys(ys, self.ys_uncertain),
         #                                    self.loss_yu(yu, self.ys_uncertain))
         # self._alpha = 0.5 - (0.5 - self._last_epoch_accuracy)
-        rLoss = (self.loss_ys(ys, self.ys_uncertain))# +
+        rLoss = (self.loss_ys(ys, self.ys_uncertain))
                                   # self.loss_yu(yu, self.ys_uncertain)) / 2
         # return the output on the supervised sample:
         supervised_loss = loss

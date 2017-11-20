@@ -19,6 +19,8 @@ class URegularizer:
         # print("activations: " + str(self.num_activations))
 
     def _estimate_accuracy(self, ys, ys_true):
+        if (ys.size()[0]!=self._mini_batch_size):
+            return
         _, predicted = torch.max(ys.data, 1)
         _, truth = torch.max(ys_true.data, 1)
         self._n_correct += predicted.eq(truth).cpu().sum()

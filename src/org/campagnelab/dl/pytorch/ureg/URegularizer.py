@@ -131,11 +131,11 @@ class URegularizer:
             # else:
             self._which_one_model = Sequential(
                 torch.nn.Linear(num_activations, num_features),
-                # torch.nn.Dropout(0.5),
+                torch.nn.Dropout(0.5),
                 torch.nn.ReLU(),
-                # torch.nn.Dropout(0.5),
+                torch.nn.Dropout(0.5),
                 torch.nn.Linear(num_features, num_features),
-                # torch.nn.Dropout(0.5),
+                torch.nn.Dropout(0.5),
                 torch.nn.ReLU(),
                 torch.nn.Linear(num_features, 2),
                 torch.nn.Softmax()

@@ -326,18 +326,16 @@ def train(epoch, unsupiter):
 def regularize(epoch, unsupiter):
     print('\nRegularizing, epoch: %d' % epoch)
     net.train()
-    average_supervised_loss = 0
-    average_unsupervised_loss = 0
-    correct = 0
-    total = 0
+
     ureg.new_epoch(epoch)
     average_total_loss = 0
-    training_accuracy = 0
     supervised_loss = 0
     trainiter=iter(trainloader)
     train_examples_used=0
-    for _ in range(args.shaving_steps):
-        print("New shaving step")
+    for shaving_index in range(args.shaving_epochs):
+        print("Shaving step {}".format(shaving_index))
+        average_unsupervised_loss = 0
+        denominator=0
         for batch_idx, (inputs, targets) in enumerate(unsuploader):
 
             if use_cuda:

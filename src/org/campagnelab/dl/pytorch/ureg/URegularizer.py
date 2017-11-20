@@ -73,6 +73,8 @@ class URegularizer:
         self._n_correct = 0
         self._last_epoch_accuracy = 0.5
         self._accumulator_total_which_model_loss = 0
+        self.num_training = 0
+        self.num_unsupervised_examples = 0
         # def count_activations(i, o):
         #     self.add_activations(len(o))
         #
@@ -245,7 +247,14 @@ class URegularizer:
         :param xu: unsupervised features.
         :return: a tuple with (loss (Variable), supervised_loss (float), regularizationLoss (float))
         """
+        if len(xu) != len(xs):
+            print("mismatch between inputs (sizes={} != {}), ignoring this regularization step"
+                  .format(xs.size(), xu.size()))
+            return None
+
+
         supervised_output = self.extract_activations(xs)  # print("length of output: "+str(len(supervised_output)))
+        unsupervised_output = self.extract_activations(xu)  # print("length of output: "+str(len(supervised_output)))
         num_activations_supervised = supervised_output.size()[1]
 
         self.create_which_one_model(num_activations_supervised)
@@ -255,12 +264,13 @@ class URegularizer:
         # the more the activations on the supervised set deviate from the unsupervised data,
         # the more we need to regularize:
         ys = self._which_one_model(supervised_output)
-        #yu = self._which_one_model(unsupervised_output)
-
-        # self.regularizationLoss = torch.max(self.loss_ys(ys, self.ys_uncertain),
-        #                                    self.loss_yu(yu, self.ys_uncertain))
+        yu = self._which_one_model(unsupervised_output)
+        a=self.num_training/(self.num_training+self.num_unsupervised_examples)
+        b=self.num_unsupervised_examples/(self.num_training+self.num_unsupervised_examples)
+        rLoss = (1/b)*self.loss_ys(ys, self.ys_uncertain)+\
+                         +(1/a)* self.loss_yu(yu, self.ys_uncertain)
         # self._alpha = 0.5 - (0.5 - self._last_epoch_accuracy)
-        rLoss = (self.loss_ys(ys, self.ys_uncertain))
+        #rLoss = (self.loss_ys(ys, self.ys_uncertain))
                                   # self.loss_yu(yu, self.ys_uncertain)) / 2
         # return the regularization loss:
         return rLoss
@@ -301,3 +311,7 @@ class URegularizer:
                     param_group['lr'] = new_lr
                     print('Adjusting learning rate to {:.4e}'
                           .format(new_lr))
+
+    def set_num_examples(self, num_training, num_unsupervised_examples):
+        self.num_training=num_training
+        self.num_unsupervised_examples=num_unsupervised_examples

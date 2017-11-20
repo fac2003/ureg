@@ -37,7 +37,7 @@ import torchvision.transforms as transforms
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from org.campagnelab.dl.pytorch.cifar10.models import *
-from org.campagnelab.dl.pytorch.ureg. URegularizer import URegularizer
+from org.campagnelab.dl.pytorch.ureg.URegularizer import URegularizer
 from org.campagnelab.dl.pytorch.cifar10.utils import progress_bar
 
 parser = argparse.ArgumentParser(description='Evaluate ureg against CIFAR10')
@@ -111,6 +111,7 @@ if args.resume:
     if ureg_enabled:
         ureg = URegularizer(net, mini_batch_size, args.ureg_num_features,
                             args.ureg_alpha, args.ureg_learning_rate)
+        ureg.set_num_examples(args.num_training, len(unsuploader))
         ureg.enable()
         ureg.resume(checkpoint['ureg_model'])
 else:
@@ -190,6 +191,7 @@ ureg = URegularizer(net, mini_batch_size, num_features=args.ureg_num_features,
                     learning_rate=args.ureg_learning_rate)
 if args.ureg:
     ureg.enable()
+    ureg.set_num_examples(args.num_training, len(unsuploader))
     ureg.forget_model(args.ureg_reset_every_n_epoch)
     print(
         "ureg is enabled with alpha={}, reset every {} epochs. ".format(args.ureg_alpha, args.ureg_reset_every_n_epoch))
@@ -260,8 +262,8 @@ def train(epoch, unsupiter):
     average_total_loss = 0
     unsupervised_loss = 0
     training_accuracy = 0
-    supervised_loss=0
-    optimized_loss=0
+    supervised_loss = 0
+    optimized_loss = 0
     for batch_idx, (inputs, targets) in enumerate(trainloader):
 
         if use_cuda:
@@ -272,7 +274,7 @@ def train(epoch, unsupiter):
         outputs = net(inputs)
 
         supervised_loss = criterion(outputs, targets)
-        supervised_loss *= (1.0-ureg._alpha)
+        supervised_loss *= (1.0 - ureg._alpha)
         supervised_loss.backward()
         optimizer.step()
         # the unsupervised regularization part goes here:
@@ -287,20 +289,106 @@ def train(epoch, unsupiter):
         if use_cuda: ufeatures = ufeatures.cuda()
         # then use it to calculate the unsupervised regularization contribution to the loss:
         uinputs = Variable(ufeatures)
-        regularization_loss = ureg.regularization_loss( inputs, uinputs)
-        regularization_loss*=ureg._alpha
-        regularization_loss.backward()
-        optimizer.step()
+        regularization_loss = ureg.regularization_loss(inputs, uinputs)
+        if regularization_loss is not None:
+            regularization_loss *= ureg._alpha
+            regularization_loss.backward()
+            optimizer.step()
 
-        optimized_loss=ureg.combine_losses(supervised_loss,regularization_loss )
-        #optimized_loss.backward()
-        #optimizer.step()
+            optimized_loss = ureg.combine_losses(supervised_loss, regularization_loss)
+        else:
+            optimized_loss = supervised_loss
+        # optimized_loss.backward()
+        # optimizer.step()
 
         ureg.train_ureg(inputs, uinputs)
 
         average_total_loss += optimized_loss.data[0]
         average_supervised_loss += supervised_loss.data[0]
-        average_unsupervised_loss += regularization_loss.data[0]
+        average_unsupervised_loss += (0 if regularization_loss is None
+                                      else  regularization_loss.data[0])
+        _, predicted = torch.max(outputs.data, 1)
+        total += targets.size(0)
+        correct += predicted.eq(targets.data).cpu().sum()
+
+        denominator = batch_idx + 1
+        average_total_loss = average_total_loss / denominator
+        average_supervised_loss = average_supervised_loss / denominator
+        average_unsupervised_loss = average_unsupervised_loss / denominator
+        training_accuracy = 100. * correct / total
+        progress_bar(batch_idx, len(trainloader), 'loss: %.3f s: %.3f u: %.3f | Acc: %.3f%% (%d/%d)'
+                     % (average_total_loss,
+                        average_supervised_loss,
+                        average_unsupervised_loss,
+                        training_accuracy,
+                        correct,
+                        total))
+        if (batch_idx + 1) * mini_batch_size > max_training_examples:
+            break
+
+    print()
+    return (average_total_loss, average_supervised_loss,
+            average_unsupervised_loss, training_accuracy)
+
+
+def train(epoch, unsupiter):
+    print('\nEpoch: %d' % epoch)
+    net.train()
+    average_total_loss = 0
+    average_supervised_loss = 0
+    average_unsupervised_loss = 0
+    correct = 0
+    total = 0
+    ureg.new_epoch(epoch)
+    average_total_loss = 0
+    unsupervised_loss = 0
+    training_accuracy = 0
+    supervised_loss = 0
+    optimized_loss = 0
+    for batch_idx, (inputs, targets) in enumerate(trainloader):
+
+        if use_cuda:
+            inputs, targets = inputs.cuda(), targets.cuda()
+        optimizer.zero_grad()
+        inputs, targets = Variable(inputs), Variable(targets)
+        optimizer.zero_grad()
+        outputs = net(inputs)
+
+        supervised_loss = criterion(outputs, targets)
+        supervised_loss *= (1.0 - ureg._alpha)
+        supervised_loss.backward()
+        optimizer.step()
+        # the unsupervised regularization part goes here:
+        try:
+            # first, read a minibatch from the unsupervised dataset:
+            ufeatures, ulabels = next(unsupiter)
+
+        except StopIteration:
+            unsupiter = iter(unsuploader)
+            ufeatures, ulabels = next(unsupiter)
+
+        optimizer.zero_grad()
+        if use_cuda: ufeatures = ufeatures.cuda()
+        # then use it to calculate the unsupervised regularization contribution to the loss:
+        uinputs = Variable(ufeatures)
+        regularization_loss = ureg.regularization_loss(inputs, uinputs)
+        if regularization_loss is not None:
+            regularization_loss *= ureg._alpha
+            regularization_loss.backward()
+            optimizer.step()
+
+            optimized_loss = ureg.combine_losses(supervised_loss, regularization_loss)
+        else:
+            optimized_loss = supervised_loss
+        # optimized_loss.backward()
+        # optimizer.step()
+
+        ureg.train_ureg(inputs, uinputs)
+
+        average_total_loss += optimized_loss.data[0]
+        average_supervised_loss += supervised_loss.data[0]
+        average_unsupervised_loss += (0 if regularization_loss is None
+                                      else  regularization_loss.data[0])
         _, predicted = torch.max(outputs.data, 1)
         total += targets.size(0)
         correct += predicted.eq(targets.data).cpu().sum()

@@ -247,6 +247,8 @@ class URegularizer:
         :param xu: unsupervised features.
         :return: a tuple with (loss (Variable), supervised_loss (float), regularizationLoss (float))
         """
+        if not self._enabled:
+            return None
         if len(xu) != len(xs):
             print("mismatch between inputs (sizes={} != {}), ignoring this regularization step"
                   .format(xs.size(), xu.size()))

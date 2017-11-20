@@ -234,13 +234,13 @@ def format_nice(n):
 best_test_loss = 100
 
 
-def log_performance_metrics(epoch, training_loss, supervised_loss, training_accuracy, unsupervised_loss,
+def log_performance_metrics(epoch, training_loss, supervised_loss, unsupervised_loss,training_accuracy,
                             test_loss, test_accuracy, ureg_accuracy, alpha):
     global best_acc
     delta_loss = test_loss - supervised_loss
-    metrics = [epoch, args.checkpoint_key, training_accuracy, test_accuracy,
-               supervised_loss, training_loss, test_loss,
-               unsupervised_loss, delta_loss, ureg_accuracy, alpha]
+
+    metrics = [epoch, args.checkpoint_key, training_loss,  training_accuracy, test_accuracy,
+               supervised_loss, test_loss, unsupervised_loss, delta_loss, ureg_accuracy, alpha]
     with open("all-perfs-{}.tsv".format(args.checkpoint_key), "a") as perf_file:
         perf_file.write("\t".join(map(format_nice, metrics)))
         perf_file.write("\n")
@@ -249,7 +249,6 @@ def log_performance_metrics(epoch, training_loss, supervised_loss, training_accu
          with open("best-perf-{}.tsv".format( args.checkpoint_key), "a") as perf_file:
              perf_file.write("\t".join(map(format_nice, metrics)))
              perf_file.write("\n")
-
 # Training
 
 

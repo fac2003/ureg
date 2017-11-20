@@ -44,8 +44,9 @@ class URegTest(unittest.TestCase):
         loss = self.criterion(self.y, self.y_true)
         xs = self.x
         xu = Variable(self.x.data + torch.ones(2))
-        (loss, supLoss, regularization_loss) = ureg.regularization_loss(loss, xs, xu)
-        loss.backward()
+        ureg.train_ureg(xs, xu)
+        regularization_loss = ureg.regularization_loss( xs, xu)
+        regularization_loss.backward()
 
         for param in self.model.parameters():
             print("parameter grad: {}".format(param.grad.data))

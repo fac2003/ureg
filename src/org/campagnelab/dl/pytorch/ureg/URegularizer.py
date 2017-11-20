@@ -24,6 +24,21 @@ class URegularizer:
         self._n_correct += predicted.eq(truth).cpu().sum()
         self._n_total += self._mini_batch_size
 
+    def estimate_accuracy(self,xs):
+        supervised_output = self.extract_activations(xs)  # print("length of output: "+str(len(supervised_output)))
+        num_activations_supervised = supervised_output.size()[1]
+
+        self.create_which_one_model(num_activations_supervised)
+
+        # now we use the model:
+        self._which_one_model.eval()
+        # the more the activations on the supervised set deviate from the unsupervised data,
+        # the more we need to regularize:
+        ys = self._which_one_model(supervised_output)
+        # yu = self._which_one_model(unsupervised_output)
+
+        self._estimate_accuracy(ys, self.ys_true)
+
     def ureg_accuracy(self):
         if self._n_total == 0:
             return float("nan")
@@ -157,50 +172,19 @@ class URegularizer:
         self._my_feature_extractor1.clear_outputs()
         self._my_feature_extractor2.clear_outputs()
 
-    def regularization_loss(self, loss, xs, xu):
-        """
-        Calculates the regularization loss and add it to
-        the provided loss (linear combination using  alpha as mixing factor).
-
-        :param loss: loss to be optimized without regularization
-        :param xs: supervised features.
-        :param xu: unsupervised features.
-        :return: a tuple with (loss (Variable), supervised_loss (float), regularizationLoss (float))
-        """
+    def train_ureg(self, xs, xu):
         if not self._enabled:
-            return (loss, loss.data[0], 0.0)
+            return
 
         if len(xu) != len(xs):
             print("mismatch between inputs (sizes={} != {}), ignoring this regularization step"
                   .format(xs.size(), xu.size()))
-            return (loss, loss.data[0], 0.0)
+            return
 
         mini_batch_size = len(xs)
 
-        # determine the number of activations in model:
-        self.create_feature_extractors()
-        # obtain activations for unsupervised samples:
-        self._my_feature_extractor1.register()
-        self._my_feature_extractor1.clear_outputs()
-        unsupervised_output = self._my_feature_extractor1.collect_outputs(xu, [])
-        self._my_feature_extractor1.cleanup()
-        self._my_feature_extractor1.clear_outputs()
-
-        self._my_feature_extractor2.register()
-        self._my_feature_extractor2.clear_outputs()
-        supervised_output = self._my_feature_extractor2.collect_outputs(xs, [])
-        self._my_feature_extractor2.cleanup()
-        self._my_feature_extractor2.clear_outputs()
-
-        # obtain activations for supervised samples:
-        supervised_output = torch.cat(supervised_output, dim=1)
-        unsupervised_output = torch.cat(unsupervised_output, dim=1)
-
-        if self._use_cuda:
-            supervised_output = supervised_output.cuda()
-            unsupervised_output = unsupervised_output.cuda()
-
-        # print("length of output: "+str(len(supervised_output)))
+        supervised_output = self.extract_activations(xs)# print("length of output: "+str(len(supervised_output)))
+        unsupervised_output = self.extract_activations( xu)# print("length of output: "+str(len(supervised_output)))
         num_activations_supervised = supervised_output.size()[1]
         num_activations_unsupervised = unsupervised_output.size()[1]
         # print("num_activations: {}".format(str(num_activations_supervised)))
@@ -232,6 +216,38 @@ class URegularizer:
         total_which_model_loss.backward(retain_graph=True)
         self._optimizer.step()
 
+    def extract_activations(self,  features):
+        # determine the number of activations in model:
+        self.create_feature_extractors()
+        # obtain activations for unsupervised samples:
+        self._my_feature_extractor1.register()
+        self._my_feature_extractor1.clear_outputs()
+        unsupervised_output = self._my_feature_extractor1.collect_outputs(features, [])
+        self._my_feature_extractor1.cleanup()
+        self._my_feature_extractor1.clear_outputs()
+        unsupervised_output = torch.cat(unsupervised_output, dim=1)
+
+        # obtain activations for supervised samples:
+        if self._use_cuda:
+            unsupervised_output = unsupervised_output.cuda()
+
+        return unsupervised_output
+
+    def regularization_loss(self, xs, xu):
+        """
+        Calculates the regularization loss and add it to
+        the provided loss (linear combination using  alpha as mixing factor).
+
+        :param loss: loss to be optimized without regularization
+        :param xs: supervised features.
+        :param xu: unsupervised features.
+        :return: a tuple with (loss (Variable), supervised_loss (float), regularizationLoss (float))
+        """
+        supervised_output = self.extract_activations(xs)  # print("length of output: "+str(len(supervised_output)))
+        num_activations_supervised = supervised_output.size()[1]
+
+        self.create_which_one_model(num_activations_supervised)
+
         # now we use the model:
         self._which_one_model.eval()
         # the more the activations on the supervised set deviate from the unsupervised data,
@@ -239,17 +255,16 @@ class URegularizer:
         ys = self._which_one_model(supervised_output)
         #yu = self._which_one_model(unsupervised_output)
 
-        self._estimate_accuracy(ys, self.ys_true)
         # self.regularizationLoss = torch.max(self.loss_ys(ys, self.ys_uncertain),
         #                                    self.loss_yu(yu, self.ys_uncertain))
         # self._alpha = 0.5 - (0.5 - self._last_epoch_accuracy)
         rLoss = (self.loss_ys(ys, self.ys_uncertain))
                                   # self.loss_yu(yu, self.ys_uncertain)) / 2
-        # return the output on the supervised sample:
-        supervised_loss = loss
-        loss = supervised_loss * (1 - self._alpha) + self._alpha * rLoss
-        # print("loss: {0:.2f} supervised: {1:.2f} unsupervised: {2:.2f} ".format(loss.data[0], supervised_loss.data[0], self.regularizationLoss.data[0]))
-        return (loss, supervised_loss.data[0], rLoss.data[0])
+        # return the regularization loss:
+        return rLoss
+
+    def combine_losses(self, supervised_loss, regularization_loss):
+        return supervised_loss * (1 - self._alpha) + self._alpha * regularization_loss
 
     def get_which_one_model(self):
         return self._which_one_model

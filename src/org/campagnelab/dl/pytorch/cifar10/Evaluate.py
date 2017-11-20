@@ -251,16 +251,17 @@ def log_performance_metrics(epoch, training_loss, supervised_loss, unsupervised_
 def train(epoch, unsupiter):
     print('\nEpoch: %d' % epoch)
     net.train()
-    total_loss = 0
-    strain_loss = 0
-    utrain_loss = 0
+    average_total_loss = 0
+    average_supervised_loss = 0
+    average_unsupervised_loss = 0
     correct = 0
     total = 0
     ureg.new_epoch(epoch)
-    training_loss = None
-    supervised_loss = None
-    unsupervised_loss = None
-    training_accuracy = None
+    average_total_loss = 0
+    unsupervised_loss = 0
+    training_accuracy = 0
+    supervised_loss=0
+    optimized_loss=0
     for batch_idx, (inputs, targets) in enumerate(trainloader):
 
         if use_cuda:
@@ -270,8 +271,10 @@ def train(epoch, unsupiter):
         optimizer.zero_grad()
         outputs = net(inputs)
 
-        loss = criterion(outputs, targets)
-
+        supervised_loss = criterion(outputs, targets)
+        supervised_loss *= (1.0-ureg._alpha)
+        supervised_loss.backward()
+        optimizer.step()
         # the unsupervised regularization part goes here:
         try:
             # first, read a minibatch from the unsupervised dataset:
@@ -284,34 +287,33 @@ def train(epoch, unsupiter):
         if use_cuda: ufeatures = ufeatures.cuda()
         # then use it to calculate the unsupervised regularization contribution to the loss:
         uinputs = Variable(ufeatures)
-
-        loss, supervised_loss, regularization_loss = ureg.regularization_loss(loss, inputs, uinputs)
-
-        params_before = net.parameters()
-        loss.backward()
+        regularization_loss = ureg.regularization_loss( inputs, uinputs)
+        regularization_loss*=ureg._alpha
+        regularization_loss.backward()
         optimizer.step()
-        params_after = net.parameters()
-        for b, a in zip(params_before, params_after):
-            # Make sure something changed.
-            if (str(a.data)!=(str(b.data))):
-                print("params: " + str(a.data)+" "+str(b.data))
 
-        total_loss += loss.data[0]
-        strain_loss += supervised_loss
-        utrain_loss += regularization_loss
+        optimized_loss=ureg.combine_losses(supervised_loss,regularization_loss )
+        #optimized_loss.backward()
+        #optimizer.step()
+
+        ureg.train_ureg(inputs, uinputs)
+
+        average_total_loss += optimized_loss.data[0]
+        average_supervised_loss += supervised_loss.data[0]
+        average_unsupervised_loss += regularization_loss.data[0]
         _, predicted = torch.max(outputs.data, 1)
         total += targets.size(0)
         correct += predicted.eq(targets.data).cpu().sum()
 
         denominator = batch_idx + 1
-        training_loss = total_loss / denominator
-        supervised_loss = strain_loss / denominator
-        unsupervised_loss = utrain_loss / denominator
+        average_total_loss = average_total_loss / denominator
+        average_supervised_loss = average_supervised_loss / denominator
+        average_unsupervised_loss = average_unsupervised_loss / denominator
         training_accuracy = 100. * correct / total
         progress_bar(batch_idx, len(trainloader), 'loss: %.3f s: %.3f u: %.3f | Acc: %.3f%% (%d/%d)'
-                     % ((training_loss),
-                        (supervised_loss),
-                        (unsupervised_loss),
+                     % (average_total_loss,
+                        average_supervised_loss,
+                        average_unsupervised_loss,
                         training_accuracy,
                         correct,
                         total))
@@ -319,7 +321,8 @@ def train(epoch, unsupiter):
             break
 
     print()
-    return (training_loss, supervised_loss, unsupervised_loss, training_accuracy)
+    return (average_total_loss, average_supervised_loss,
+            average_unsupervised_loss, training_accuracy)
 
 
 def test(epoch):
@@ -330,6 +333,7 @@ def test(epoch):
     total = 0
     test_accuracy = None
     test_loss = None
+    ureg.new_epoch(epoch)
     for batch_idx, (inputs, targets) in enumerate(testloader):
 
         if use_cuda:
@@ -342,7 +346,7 @@ def test(epoch):
         _, predicted = torch.max(outputs.data, 1)
         total += targets.size(0)
         correct += predicted.eq(targets.data).cpu().sum()
-
+        ureg.estimate_accuracy(inputs)
         test_accuracy = 100. * correct / total
         test_loss = test_loss_accumulator / (batch_idx + 1)
         progress_bar(batch_idx, len(testloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'

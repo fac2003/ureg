@@ -207,7 +207,6 @@ else:
     print("ureg is disabled")
 
 scheduler_train = ReduceLROnPlateau(optimizer_training, 'min', factor=0.5, patience=args.lr_patience, verbose=True)
-scheduler_reg = ReduceLROnPlateau(optimizer_reg, 'min', factor=0.5, patience=args.lr_patience, verbose=True)
 max_training_examples = args.num_training
 max_validation_examples = args.num_validation
 
@@ -426,7 +425,6 @@ def test(epoch):
 
     # Apply learning rate schedule:
     scheduler_train.step(test_loss, epoch=epoch)
-    scheduler_reg.step(test_loss, epoch=epoch)
     ureg.schedule(test_loss, epoch)
     # Save checkpoint.
     acc = 100. * correct / total

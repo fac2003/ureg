@@ -187,7 +187,7 @@ cudnn.benchmark = True
 
 criterion = nn.CrossEntropyLoss()
 optimizer_training = optim.SGD(net.parameters(), lr=args.lr, momentum=0.9, weight_decay=5e-4)
-optimizer_reg = optim.SGD(net.parameters(), lr=args.shave_lr, momentum=0.9, weight_decay=5e-4)
+optimizer_reg = optim.SGD(net.parameters(), lr=args.ureg_learning_rate, momentum=0.9, weight_decay=5e-4)
 ureg = URegularizer(net, mini_batch_size, num_features=args.ureg_num_features,
                     alpha=args.ureg_alpha,
                     learning_rate=args.ureg_learning_rate)
@@ -204,7 +204,6 @@ else:
     print("ureg is disabled")
 
 scheduler_training = ReduceLROnPlateau(optimizer_training, 'min', factor=0.5, patience=args.lr_patience, verbose=True)
-scheduler_reg = ReduceLROnPlateau(optimizer_reg, 'min', factor=0.5, patience=args.lr_patience, verbose=True)
 max_training_examples = args.num_training
 max_validation_examples = args.num_validation
 
@@ -218,7 +217,7 @@ if not args.resume:
         perf_file.write("\t".join(map(str, metrics)))
         perf_file.write("\n")
 
-    with open("best-perf-{}.tsv".format(args.checkpoint_key), "w") as perf_file:
+    with open("best-perfs-{}.tsv".format(args.checkpoint_key), "w") as perf_file:
         perf_file.write("\t".join(map(str, metrics)))
         perf_file.write("\n")
 
@@ -364,7 +363,6 @@ def test(epoch):
 
     # Apply learning rate schedules:
     scheduler_training.step(test_loss, epoch=epoch)
-    scheduler_reg.step(test_loss, epoch=epoch)
     ureg.schedule(test_loss, epoch)
     # Save checkpoint.
     acc = 100. * correct / total

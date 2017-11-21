@@ -238,9 +238,7 @@ def format_nice(n):
 
 best_test_loss = 100
 
-
-
-def log_performance_metrics(epoch, training_loss, supervised_loss, unsupervised_loss,training_accuracy,
+def log_performance_metrics(epoch, training_loss, supervised_loss, training_accuracy, unsupervised_loss,
                             test_loss, test_accuracy, ureg_accuracy, alpha):
     global best_acc
     delta_loss = test_loss - supervised_loss

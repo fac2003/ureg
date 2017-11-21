@@ -221,7 +221,7 @@ if not args.resume:
         perf_file.write("\t".join(map(str, metrics)))
         perf_file.write("\n")
 
-    with open("best-perf-{}.tsv".format(args.checkpoint_key), "w") as perf_file:
+    with open("best-perfs-{}.tsv".format(args.checkpoint_key), "w") as perf_file:
         perf_file.write("\t".join(map(str, metrics)))
         perf_file.write("\n")
 
@@ -324,6 +324,17 @@ def train(epoch, unsupiter):
 
 
 def regularize(epoch, unsupiter):
+    """
+    There is an issue with this method when the training set is larger than the regularization
+    set, then only up to the length of the unsup set is used in the training set. This limits
+    the amount of regularization possible. For instance, in cifar10, if 50,000 training samples
+    with 10,000 unsup (test set examples), then only the first 10,000 training samples are
+    considered in the regularization, not a random pairing of the complete training and the unsup
+    samples.
+    :param epoch:
+    :param unsupiter:
+    :return:
+    """
     print('\nRegularizing, epoch: %d' % epoch)
     net.train()
     average_total_loss = 0

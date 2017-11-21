@@ -63,6 +63,8 @@ parser.add_argument('--model', default="PreActResNet18", type=str,
                     help='The model to instantiate. One of VGG16,	ResNet18, ResNet50, ResNet101,ResNeXt29, ResNeXt29, DenseNet121, PreActResNet18, DPN92')
 parser.add_argument('--shaving-epochs', default=1, type=int,
                     help='number of shaving epochs.')
+parser.add_argument('--drop-ureg-model',action='store_true',
+                    help='Drop the ureg model at startup, only useful with --resume.')
 
 
 args = parser.parse_args()
@@ -117,7 +119,9 @@ if args.resume:
                             args.ureg_alpha, args.ureg_learning_rate)
         ureg.set_num_examples(args.num_training, len(unsuploader))
         ureg.enable()
-        ureg.resume(checkpoint['ureg_model'])
+        if not args.drop_ureg_model:
+            ureg.resume(checkpoint['ureg_model'])
+
 else:
     print('==> Building model {}'.format(args.model))
 

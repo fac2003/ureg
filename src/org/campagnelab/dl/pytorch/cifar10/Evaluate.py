@@ -60,6 +60,9 @@ parser.add_argument('--lr-patience', default=10, type=int,
                     help='number of epochs to wait before applying LR schedule when loss does not improve.')
 parser.add_argument('--model', default="PreActResNet18", type=str,
                     help='The model to instantiate. One of VGG16,	ResNet18, ResNet50, ResNet101,ResNeXt29, ResNeXt29, DenseNet121, PreActResNet18, DPN92')
+parser.add_argument('--drop-ureg-model',action='store_true',
+                    help='Drop the ureg model at startup, only useful with --resume.')
+
 
 args = parser.parse_args()
 
@@ -113,7 +116,9 @@ if args.resume:
                             args.ureg_alpha, args.ureg_learning_rate)
         ureg.set_num_examples(args.num_training, len(unsuploader))
         ureg.enable()
-        ureg.resume(checkpoint['ureg_model'])
+        if not args.drop_ureg_model:
+            ureg.resume(checkpoint['ureg_model'])
+
         ureg.set_num_examples(args.num_training, len(unsuploader))
 else:
     print('==> Building model {}'.format(args.model))
@@ -204,6 +209,7 @@ else:
     print("ureg is disabled")
 
 scheduler_training = ReduceLROnPlateau(optimizer_training, 'min', factor=0.5, patience=args.lr_patience, verbose=True)
+scheduler_reg = ReduceLROnPlateau(optimizer_reg, 'min', factor=0.5, patience=args.lr_patience, verbose=True)
 max_training_examples = args.num_training
 max_validation_examples = args.num_validation
 
@@ -227,7 +233,10 @@ def format_nice(n):
         if n == int(n):
             return str(n)
         if n == float(n):
-            return "{0:.4f}".format(n)
+            if n<0.001:
+                return "{0:.3E}".format(n)
+            else:
+                return "{0:.4f}  ".format(n)
     except:
         return str(n)
 
@@ -255,7 +264,7 @@ def log_performance_metrics(epoch, training_loss, supervised_loss, unsupervised_
 def train(epoch, unsupiter):
     print('\nEpoch: %d' % epoch)
     net.train()
-    average_total_loss = 0
+
     average_supervised_loss = 0
     average_unsupervised_loss = 0
     correct = 0
@@ -263,8 +272,7 @@ def train(epoch, unsupiter):
     average_total_loss = 0
     unsupervised_loss = 0
     training_accuracy = 0
-    supervised_loss = 0
-    optimized_loss = 0
+
     for batch_idx, (inputs, targets) in enumerate(trainloader):
 
         if use_cuda:
@@ -274,7 +282,7 @@ def train(epoch, unsupiter):
         outputs = net(inputs)
 
         supervised_loss = criterion(outputs, targets)
-        supervised_loss *= (1.0 - ureg._alpha)
+        supervised_loss *= ureg._alpha
         supervised_loss.backward()
         optimizer_training.step()
         # the unsupervised regularization part goes here:
@@ -295,8 +303,7 @@ def train(epoch, unsupiter):
             regularization_loss *= ureg._alpha
             regularization_loss.backward()
             optimizer_reg.step()
-
-            optimized_loss = ureg.combine_losses(supervised_loss, regularization_loss)
+            optimized_loss= regularization_loss
         else:
             optimized_loss = supervised_loss
 
@@ -326,6 +333,7 @@ def train(epoch, unsupiter):
             break
 
     print()
+    scheduler_reg.step(unsupervised_loss,epoch)
     return (average_total_loss, average_supervised_loss,
             average_unsupervised_loss, training_accuracy)
 

@@ -333,7 +333,7 @@ def train(epoch, unsupiter):
             break
 
     print()
-    scheduler_reg.step(unsupervised_loss,epoch)
+    scheduler_reg.step(average_unsupervised_loss,epoch)
     return (average_total_loss, average_supervised_loss,
             average_unsupervised_loss, training_accuracy)
 

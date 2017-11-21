@@ -37,6 +37,7 @@ import torchvision.transforms as transforms
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from org.campagnelab.dl.pytorch.cifar10.models import *
+from org.campagnelab.dl.pytorch.ureg.LRSchedules import LearningRateAnnealing
 from org.campagnelab.dl.pytorch.ureg.URegularizer import URegularizer
 from org.campagnelab.dl.pytorch.cifar10.utils import progress_bar
 
@@ -63,9 +64,8 @@ parser.add_argument('--model', default="PreActResNet18", type=str,
                     help='The model to instantiate. One of VGG16,	ResNet18, ResNet50, ResNet101,ResNeXt29, ResNeXt29, DenseNet121, PreActResNet18, DPN92')
 parser.add_argument('--shaving-epochs', default=1, type=int,
                     help='number of shaving epochs.')
-parser.add_argument('--drop-ureg-model',action='store_true',
+parser.add_argument('--drop-ureg-model', action='store_true',
                     help='Drop the ureg model at startup, only useful with --resume.')
-
 
 args = parser.parse_args()
 
@@ -210,7 +210,17 @@ else:
     ureg.set_num_examples(args.num_training, len(unsuploader))
     print("ureg is disabled")
 
-scheduler_train = ReduceLROnPlateau(optimizer_training, 'min', factor=0.5, patience=args.lr_patience, verbose=True)
+delegate_scheduler = ReduceLROnPlateau(optimizer_training, 'min', factor=0.5,
+                                       patience=args.lr_patience, verbose=True)
+
+if args.ureg_reset_every_n_epoch is None:
+    scheduler_train = delegate_scheduler
+else:
+    scheduler_train = LearningRateAnnealing(optimizer_training,
+                                            anneal_every_n_epoch=args.ureg_reset_every_n_epoch,
+                                            delegate=delegate_scheduler)
+
+scheduler_reg = ReduceLROnPlateau(optimizer_reg, 'min', factor=0.5, patience=args.lr_patience, verbose=True)
 max_training_examples = args.num_training
 max_validation_examples = args.num_validation
 
@@ -234,29 +244,33 @@ def format_nice(n):
         if n == int(n):
             return str(n)
         if n == float(n):
-            return "{0:.4f}".format(n)
+            if n < 0.001:
+                return "{0:.3E}".format(n)
+            else:
+                return "{0:.4f}  ".format(n)
     except:
         return str(n)
 
 
 best_test_loss = 100
 
+
 def log_performance_metrics(epoch, training_loss, supervised_loss, training_accuracy, unsupervised_loss,
                             test_loss, test_accuracy, ureg_accuracy, alpha):
     global best_acc
     delta_loss = test_loss - supervised_loss
 
-    metrics = [epoch, args.checkpoint_key, training_loss,  training_accuracy, test_accuracy,
+    metrics = [epoch, args.checkpoint_key, training_loss, training_accuracy, test_accuracy,
                supervised_loss, test_loss, unsupervised_loss, delta_loss, ureg_accuracy, alpha]
 
     with open("all-perfs-{}.tsv".format(args.checkpoint_key), "a") as perf_file:
         perf_file.write("\t".join(map(format_nice, metrics)))
         perf_file.write("\n")
 
-    if test_accuracy>= best_acc:
-         with open("best-perfs-{}.tsv".format( args.checkpoint_key), "a") as perf_file:
-             perf_file.write("\t".join(map(format_nice, metrics)))
-             perf_file.write("\n")
+    if test_accuracy >= best_acc:
+        with open("best-perfs-{}.tsv".format(args.checkpoint_key), "a") as perf_file:
+            perf_file.write("\t".join(map(format_nice, metrics)))
+            perf_file.write("\n")
 
 
 # Training
@@ -313,15 +327,15 @@ def train(epoch, unsupiter):
         training_accuracy = 100. * correct / total
         progress_bar(batch_idx, len(trainloader),
                      ('loss: %.3f s: %.3f u: %.3f | Acc: %.3f%% (%d/%d)'
-                     % (average_total_loss,
-                        average_supervised_loss,
-                        average_unsupervised_loss,
-                        training_accuracy,
-                        correct,
-                        total)))
+                      % (average_total_loss,
+                         average_supervised_loss,
+                         average_unsupervised_loss,
+                         training_accuracy,
+                         correct,
+                         total)))
         if (batch_idx + 1) * mini_batch_size > max_training_examples:
             break
-
+    scheduler_reg.step(average_supervised_loss, epoch)
     print()
     return (average_total_loss, average_supervised_loss, training_accuracy)
 
@@ -342,12 +356,12 @@ def regularize(epoch, unsupiter):
     net.train()
     average_total_loss = 0
     supervised_loss = 0
-    trainiter=iter(trainloader)
-    train_examples_used=0
+    trainiter = iter(trainloader)
+    train_examples_used = 0
     for shaving_index in range(args.shaving_epochs):
         print("Shaving step {}".format(shaving_index))
         average_unsupervised_loss = 0
-        denominator=0
+        denominator = 0
         for batch_idx, (inputs, targets) in enumerate(unsuploader):
 
             if use_cuda:
@@ -357,9 +371,9 @@ def regularize(epoch, unsupiter):
 
             # don't use more training examples than allowed (-n) even if we don't use
             # their labels:
-            if train_examples_used>args.num_training:
+            if train_examples_used > args.num_training:
                 trainiter = iter(trainloader)
-                train_examples_used=0
+                train_examples_used = 0
             try:
                 # first, read a minibatch from the unsupervised dataset:
                 features, ulabels = next(trainiter)
@@ -428,8 +442,8 @@ def test(epoch):
     print()
 
     # Apply learning rate schedule:
-    scheduler_train.step(test_loss, epoch=epoch)
-    ureg.schedule(test_loss, epoch)
+    scheduler_train.step(test_accuracy, epoch)
+    ureg.schedule(test_accuracy, epoch)
     # Save checkpoint.
     acc = 100. * correct / total
     if acc > best_acc:

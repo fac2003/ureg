@@ -1,3 +1,5 @@
+import random
+
 import torch
 from torch.autograd import Variable
 from torch.nn import Sequential
@@ -19,14 +21,14 @@ class URegularizer:
         # print("activations: " + str(self.num_activations))
 
     def _estimate_accuracy(self, ys, ys_true):
-        if (ys.size()[0]!=self._mini_batch_size):
+        if (ys.size()[0] != self._mini_batch_size):
             return
         _, predicted = torch.max(ys.data, 1)
         _, truth = torch.max(ys_true.data, 1)
         self._n_correct += predicted.eq(truth).cpu().sum()
         self._n_total += self._mini_batch_size
 
-    def estimate_accuracy(self,xs):
+    def estimate_accuracy(self, xs):
         supervised_output = self.extract_activations(xs)  # print("length of output: "+str(len(supervised_output)))
         num_activations_supervised = supervised_output.size()[1]
 
@@ -181,14 +183,12 @@ class URegularizer:
             return
 
         if len(xu) != len(xs):
-            print("mismatch between inputs (sizes={} != {}), ignoring this regularization step"
-                  .format(xs.size(), xu.size()))
-            return
+            xu, xs = self._adjust_batch_sizes(xs, xu)
 
         mini_batch_size = len(xs)
 
-        supervised_output = self.extract_activations(xs)# print("length of output: "+str(len(supervised_output)))
-        unsupervised_output = self.extract_activations( xu)# print("length of output: "+str(len(supervised_output)))
+        supervised_output = self.extract_activations(xs)  # print("length of output: "+str(len(supervised_output)))
+        unsupervised_output = self.extract_activations(xu)  # print("length of output: "+str(len(supervised_output)))
         num_activations_supervised = supervised_output.size()[1]
         num_activations_unsupervised = unsupervised_output.size()[1]
         # print("num_activations: {}".format(str(num_activations_supervised)))
@@ -220,7 +220,7 @@ class URegularizer:
         total_which_model_loss.backward(retain_graph=True)
         self._optimizer.step()
 
-    def extract_activations(self,  features):
+    def extract_activations(self, features):
         # determine the number of activations in model:
         self.create_feature_extractors()
         # obtain activations for unsupervised samples:
@@ -250,10 +250,7 @@ class URegularizer:
         if not self._enabled:
             return None
         if len(xu) != len(xs):
-            print("mismatch between inputs (sizes={} != {}), ignoring this regularization step"
-                  .format(xs.size(), xu.size()))
-            return None
-
+            xu, xs = self._adjust_batch_sizes(xs, xu)
 
         supervised_output = self.extract_activations(xs)  # print("length of output: "+str(len(supervised_output)))
         unsupervised_output = self.extract_activations(xu)  # print("length of output: "+str(len(supervised_output)))
@@ -267,13 +264,13 @@ class URegularizer:
         # the more we need to regularize:
         ys = self._which_one_model(supervised_output)
         yu = self._which_one_model(unsupervised_output)
-        a=self.num_training/(self.num_training+self.num_unsupervised_examples)
-        b=self.num_unsupervised_examples/(self.num_training+self.num_unsupervised_examples)
-        rLoss = (1/b)*self.loss_ys(ys, self.ys_uncertain)+\
-                         +(1/a)* self.loss_yu(yu, self.ys_uncertain)
+        a = self.num_training / (self.num_training + self.num_unsupervised_examples)
+        b = self.num_unsupervised_examples / (self.num_training + self.num_unsupervised_examples)
+        rLoss = (1 / b) * self.loss_ys(ys, self.ys_uncertain) + \
+                +(1 / a) * self.loss_yu(yu, self.ys_uncertain)
         # self._alpha = 0.5 - (0.5 - self._last_epoch_accuracy)
-        #rLoss = (self.loss_ys(ys, self.ys_uncertain))
-                                  # self.loss_yu(yu, self.ys_uncertain)) / 2
+        # rLoss = (self.loss_ys(ys, self.ys_uncertain))
+        # self.loss_yu(yu, self.ys_uncertain)) / 2
         # return the regularization loss:
         return rLoss
 
@@ -289,7 +286,7 @@ class URegularizer:
     def new_epoch(self, epoch):
         self._n_total = 0
         self._n_correct = 0
-        #print("epoch {0} which_one_model loss: {1:.4f}"
+        # print("epoch {0} which_one_model loss: {1:.4f}"
         #      .format(epoch,
         #              self._accumulator_total_which_model_loss))
 
@@ -315,5 +312,23 @@ class URegularizer:
                           .format(new_lr))
 
     def set_num_examples(self, num_training, num_unsupervised_examples):
-        self.num_training=num_training
-        self.num_unsupervised_examples=num_unsupervised_examples
+        self.num_training = num_training
+        self.num_unsupervised_examples = num_unsupervised_examples
+
+    def _adjust_batch_sizes(self, xs, xu):
+        """
+        Adjust the batch size of the smaller batch to make them compatible. Sample examples with resampling to make the smaller
+        batch as large as the other one.
+        :param xs: a minibatch of training data.
+        :param xu: a minibatch of unsupervised examples.
+        :return: xs, xu adjusted for size
+        """
+        assert len(xu) != len(xs), "batch size must not be equal"
+        max_len=max(len(xs) , len(xu))
+        if (len(xs) > len(xu)):
+            bag =[ xu[index] for index in range(len(xu))]
+            xu = torch.stack(random.choices(bag,k=max_len))
+        else:
+            bag = [xs[index] for index in range(len(xs))]
+            xs = torch.stack(random.choices(bag, k=max_len))
+        return xs, xu

@@ -298,7 +298,6 @@ class URegularizer:
             if self._epoch_counter > self._forget_every_n_epoch:
                 # reset the learning rate of the which_one_model:
                 self._epoch_counter = 0
-                self._which_one_model = None
                 self._adjust_learning_rate(self._learning_rate)
 
     def _adjust_learning_rate(self, learning_rate):

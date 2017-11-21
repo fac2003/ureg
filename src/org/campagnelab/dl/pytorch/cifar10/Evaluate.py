@@ -256,7 +256,7 @@ def log_performance_metrics(epoch, training_loss, supervised_loss, unsupervised_
         perf_file.write("\n")
 
     if test_accuracy>= best_acc:
-         with open("best-perf-{}.tsv".format( args.checkpoint_key), "a") as perf_file:
+         with open("best-perfs-{}.tsv".format( args.checkpoint_key), "a") as perf_file:
              perf_file.write("\t".join(map(format_nice, metrics)))
              perf_file.write("\n")
 # Training

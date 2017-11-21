@@ -30,6 +30,8 @@ import random
 import string
 
 import sys
+from collections import namedtuple
+
 import torch.backends.cudnn as cudnn
 import torch.optim as optim
 import torchvision
@@ -44,12 +46,14 @@ from org.campagnelab.dl.pytorch.cifar10.utils import progress_bar
 parser = argparse.ArgumentParser(description='Evaluate ureg against CIFAR10')
 parser.add_argument('--lr', default=0.005, type=float, help='learning rate')
 parser.add_argument('--resume', '-r', action='store_true', help='resume from checkpoint')
-parser.add_argument('--ureg', '-u', action='store_true', help='Enable unsupervised regularization (ureg)')
+parser.add_argument('--ureg',  action='store_true', help='Enable unsupervised regularization (ureg)')
 parser.add_argument('--mini-batch-size', type=int, help='Size of the mini-batch', default=128)
 parser.add_argument('--num-training', '-n', type=int, help='Maximum number of training examples to use',
                     default=sys.maxsize)
 parser.add_argument('--num-validation', '-x', type=int, help='Maximum number of training examples to use',
                     default=sys.maxsize)
+parser.add_argument('--num-shaving', '-u', type=int, help='Maximum number of unlabeled examples to use when shaving'
+                                                          'the network',                    default=sys.maxsize)
 parser.add_argument('--ureg-num-features', type=int, help='Number of features in the ureg model', default=64)
 parser.add_argument('--ureg-alpha', type=float, help='Mixing coefficient (between 0 and 1) for ureg loss component',
                     default=0.5)
@@ -102,6 +106,10 @@ unsupset = torchvision.datasets.CIFAR10(root='./data', train=False, download=Tru
 unsuploader = torch.utils.data.DataLoader(unsupset, batch_size=mini_batch_size, shuffle=True, num_workers=2)
 
 classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
+EvalPerf=namedtuple('EvalPerf', 'training_shaved_loss training_shaved_accuracy')
+TrainingPerf=namedtuple('TrainingPerf', 'training_loss supervised_loss training_accuracy')
+TestPerf=namedtuple('TestPerf', 'test_loss test_accuracy ureg_accuracy ureg_alpha')
+RegularizePerf=namedtuple('RegularizePerf', 'unsupervised_loss')
 
 # Model
 if args.resume:
@@ -223,20 +231,11 @@ else:
 scheduler_reg = ReduceLROnPlateau(optimizer_reg, 'min', factor=0.5, patience=args.lr_patience, verbose=True)
 max_training_examples = args.num_training
 max_validation_examples = args.num_validation
+max_regularization_examples = args.num_shaving
 
 unsupiter = iter(unsuploader)
 
-metrics = ["epoch", "checkpoint", "training_loss", "training_accuracy", "test_accuracy", "supervised_loss", "test_loss",
-           "unsupervised_loss", "delta_loss", "ureg_accuracy", "ureg_alpha"]
 
-if not args.resume:
-    with open("all-perfs-{}.tsv".format(args.checkpoint_key), "w") as perf_file:
-        perf_file.write("\t".join(map(str, metrics)))
-        perf_file.write("\n")
-
-    with open("best-perfs-{}.tsv".format(args.checkpoint_key), "w") as perf_file:
-        perf_file.write("\t".join(map(str, metrics)))
-        perf_file.write("\n")
 
 
 def format_nice(n):
@@ -254,20 +253,40 @@ def format_nice(n):
 
 best_test_loss = 100
 
+metrics = ["epoch", "checkpoint", "training_loss", "training_accuracy", "val_accuracy",
+           "test_accuracy", "supervised_loss", "test_loss",
+           "unsupervised_loss", "delta_loss", "ureg_accuracy", "ureg_alpha"]
 
-def log_performance_metrics(epoch, training_loss, supervised_loss, training_accuracy, unsupervised_loss,
-                            test_loss, test_accuracy, ureg_accuracy, alpha):
+if not args.resume:
+    with open("all-perfs-{}.tsv".format(args.checkpoint_key), "w") as perf_file:
+        perf_file.write("\t".join(map(str, metrics)))
+        perf_file.write("\n")
+
+    with open("best-perfs-{}.tsv".format(args.checkpoint_key), "w") as perf_file:
+        perf_file.write("\t".join(map(str, metrics)))
+        perf_file.write("\n")
+
+def log_performance_metrics(epoch, train_perfs, reg_perfs, val_perfs, test_perfs ):
     global best_acc
-    delta_loss = test_loss - supervised_loss
-
-    metrics = [epoch, args.checkpoint_key, training_loss, training_accuracy, test_accuracy,
-               supervised_loss, test_loss, unsupervised_loss, delta_loss, ureg_accuracy, alpha]
+    delta_loss = test_perfs.test_loss - train_perfs.supervised_loss
+    if reg_perfs is None:
+        metrics = [epoch, args.checkpoint_key, train_perfs.training_loss, train_perfs.training_accuracy,
+                   0,
+                   test_perfs.test_accuracy,
+                   train_perfs.supervised_loss, test_perfs.test_loss, 0, delta_loss,
+                   test_perfs.ureg_accuracy, test_perfs.alpha]
+    else:
+        metrics = [epoch, args.checkpoint_key, train_perfs.training_loss, train_perfs.training_accuracy,
+               val_perfs.training_shaved_accuracy,
+               test_perfs.test_accuracy,
+               train_perfs.supervised_loss, test_perfs.test_loss, reg_perfs.unsupervised_loss, delta_loss,
+               test_perfs.ureg_accuracy, test_perfs.ureg_alpha]
 
     with open("all-perfs-{}.tsv".format(args.checkpoint_key), "a") as perf_file:
         perf_file.write("\t".join(map(format_nice, metrics)))
         perf_file.write("\n")
 
-    if test_accuracy >= best_acc:
+    if test_perfs.test_accuracy >= best_acc:
         with open("best-perfs-{}.tsv".format(args.checkpoint_key), "a") as perf_file:
             perf_file.write("\t".join(map(format_nice, metrics)))
             perf_file.write("\n")
@@ -337,7 +356,8 @@ def train(epoch, unsupiter):
             break
     scheduler_reg.step(average_supervised_loss, epoch)
     print()
-    return (average_total_loss, average_supervised_loss, training_accuracy)
+
+    return TrainingPerf(average_total_loss, average_supervised_loss, training_accuracy)
 
 
 def regularize(epoch, unsupiter):
@@ -405,9 +425,11 @@ def regularize(epoch, unsupiter):
 
             progress_bar(batch_idx, len(trainloader), ' u: %.3f'
                          % (average_unsupervised_loss,))
+            if ((batch_idx + 1) * mini_batch_size) > max_regularization_examples:
+                break
             print()
 
-    return (average_unsupervised_loss,)
+    return RegularizePerf(average_unsupervised_loss,)
 
 
 def test(epoch):
@@ -460,14 +482,60 @@ def test(epoch):
         torch.save(state, './checkpoint/ckpt_{}.t7'.format(args.checkpoint_key))
         best_acc = acc
 
-    return (test_loss, test_accuracy, ureg.ureg_accuracy(), ureg._alpha)
+    return TestPerf(test_loss, test_accuracy, ureg.ureg_accuracy(), ureg._alpha)
+
+
+def eval(epoch):
+    """
+    Evaluate performance on the test phase after a shaving phase.
+    :param epoch:
+    :return: namedtuple('Eval','training_shaved_loss', 'training_shaved_accuracy')
+    """
+    global best_acc
+
+    net.eval()
+    test_loss_accumulator = 0
+    correct = 0
+    total = 0
+    test_accuracy = None
+    test_loss = None
+    ureg.new_epoch(epoch)
+    for batch_idx, (inputs, targets) in enumerate(trainloader):
+
+        if use_cuda:
+            inputs, targets = inputs.cuda(), targets.cuda()
+        inputs, targets = Variable(inputs, volatile=True), Variable(targets)
+        outputs = net(inputs)
+        loss = criterion(outputs, targets)
+
+        test_loss_accumulator += loss.data[0]
+        _, predicted = torch.max(outputs.data, 1)
+        total += targets.size(0)
+        correct += predicted.eq(targets.data).cpu().sum()
+
+        test_accuracy = 100. * correct / total
+        test_loss = test_loss_accumulator / (batch_idx + 1)
+        progress_bar(batch_idx, len(testloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
+                     % (test_loss, test_accuracy, correct, total))
+
+        if ((batch_idx + 1) * mini_batch_size) > max_training_examples:
+            break
+    print()
+
+
+
+    return EvalPerf(test_loss, test_accuracy)
+
 
 
 for epoch in range(start_epoch, start_epoch + 200):
-    perfs = train(epoch, unsupiter)
+    perfs = [train(epoch, unsupiter)]
     if (args.ureg):
-        perfs += regularize(epoch, unsupiter)
+        perfs += [regularize(epoch, unsupiter)]
+        perfs+=[eval(epoch)]
     else:
-        perfs += (float('nan'))
-    perfs += test(epoch)
+        perfs += [None, None]
+
+    perfs += [test(epoch)]
+
     log_performance_metrics(epoch, *perfs)

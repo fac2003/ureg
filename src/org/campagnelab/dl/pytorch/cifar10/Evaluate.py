@@ -186,7 +186,8 @@ if use_cuda:
 cudnn.benchmark = True
 
 criterion = nn.CrossEntropyLoss()
-optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=0.9, weight_decay=5e-4)
+optimizer_training = optim.SGD(net.parameters(), lr=args.lr, momentum=0.9, weight_decay=5e-4)
+optimizer_reg = optim.SGD(net.parameters(), lr=args.shave_lr, momentum=0.9, weight_decay=5e-4)
 ureg = URegularizer(net, mini_batch_size, num_features=args.ureg_num_features,
                     alpha=args.ureg_alpha,
                     learning_rate=args.ureg_learning_rate)
@@ -202,7 +203,8 @@ else:
     ureg.disable()
     print("ureg is disabled")
 
-scheduler = ReduceLROnPlateau(optimizer, 'min', factor=0.5, patience=args.lr_patience, verbose=True)
+scheduler_training = ReduceLROnPlateau(optimizer_training, 'min', factor=0.5, patience=args.lr_patience, verbose=True)
+scheduler_reg = ReduceLROnPlateau(optimizer_reg, 'min', factor=0.5, patience=args.lr_patience, verbose=True)
 max_training_examples = args.num_training
 max_validation_examples = args.num_validation
 
@@ -251,7 +253,6 @@ def log_performance_metrics(epoch, training_loss, supervised_loss, unsupervised_
              perf_file.write("\n")
 # Training
 
-
 def train(epoch, unsupiter):
     print('\nEpoch: %d' % epoch)
     net.train()
@@ -269,15 +270,14 @@ def train(epoch, unsupiter):
 
         if use_cuda:
             inputs, targets = inputs.cuda(), targets.cuda()
-        optimizer.zero_grad()
+        optimizer_training.zero_grad()
         inputs, targets = Variable(inputs), Variable(targets)
-        optimizer.zero_grad()
         outputs = net(inputs)
 
         supervised_loss = criterion(outputs, targets)
         supervised_loss *= (1.0 - ureg._alpha)
         supervised_loss.backward()
-        optimizer.step()
+        optimizer_training.step()
         # the unsupervised regularization part goes here:
         try:
             # first, read a minibatch from the unsupervised dataset:
@@ -287,6 +287,7 @@ def train(epoch, unsupiter):
             unsupiter = iter(unsuploader)
             ufeatures, ulabels = next(unsupiter)
 
+        optimizer_reg.zero_grad()
         if use_cuda: ufeatures = ufeatures.cuda()
         # then use it to calculate the unsupervised regularization contribution to the loss:
         uinputs = Variable(ufeatures)
@@ -294,94 +295,11 @@ def train(epoch, unsupiter):
         if regularization_loss is not None:
             regularization_loss *= ureg._alpha
             regularization_loss.backward()
-            optimizer.step()
+            optimizer_reg.step()
 
             optimized_loss = ureg.combine_losses(supervised_loss, regularization_loss)
         else:
             optimized_loss = supervised_loss
-        # optimized_loss.backward()
-        # optimizer.step()
-
-        ureg.train_ureg(inputs, uinputs)
-
-        average_total_loss += optimized_loss.data[0]
-        average_supervised_loss += supervised_loss.data[0]
-        average_unsupervised_loss += (0 if regularization_loss is None
-                                      else  regularization_loss.data[0])
-        _, predicted = torch.max(outputs.data, 1)
-        total += targets.size(0)
-        correct += predicted.eq(targets.data).cpu().sum()
-
-        denominator = batch_idx + 1
-        average_total_loss = average_total_loss / denominator
-        average_supervised_loss = average_supervised_loss / denominator
-        average_unsupervised_loss = average_unsupervised_loss / denominator
-        training_accuracy = 100. * correct / total
-        progress_bar(batch_idx, len(trainloader), 'loss: %.3f s: %.3f u: %.3f | Acc: %.3f%% (%d/%d)'
-                     % (average_total_loss,
-                        average_supervised_loss,
-                        average_unsupervised_loss,
-                        training_accuracy,
-                        correct,
-                        total))
-        if (batch_idx + 1) * mini_batch_size > max_training_examples:
-            break
-
-    print()
-    return (average_total_loss, average_supervised_loss,
-            average_unsupervised_loss, training_accuracy)
-
-
-def train(epoch, unsupiter):
-    print('\nEpoch: %d' % epoch)
-    net.train()
-    average_total_loss = 0
-    average_supervised_loss = 0
-    average_unsupervised_loss = 0
-    correct = 0
-    total = 0
-    average_total_loss = 0
-    unsupervised_loss = 0
-    training_accuracy = 0
-    supervised_loss = 0
-    optimized_loss = 0
-    for batch_idx, (inputs, targets) in enumerate(trainloader):
-
-        if use_cuda:
-            inputs, targets = inputs.cuda(), targets.cuda()
-        optimizer.zero_grad()
-        inputs, targets = Variable(inputs), Variable(targets)
-        optimizer.zero_grad()
-        outputs = net(inputs)
-
-        supervised_loss = criterion(outputs, targets)
-        supervised_loss *= (1.0 - ureg._alpha)
-        supervised_loss.backward()
-        optimizer.step()
-        # the unsupervised regularization part goes here:
-        try:
-            # first, read a minibatch from the unsupervised dataset:
-            ufeatures, ulabels = next(unsupiter)
-
-        except StopIteration:
-            unsupiter = iter(unsuploader)
-            ufeatures, ulabels = next(unsupiter)
-
-        optimizer.zero_grad()
-        if use_cuda: ufeatures = ufeatures.cuda()
-        # then use it to calculate the unsupervised regularization contribution to the loss:
-        uinputs = Variable(ufeatures)
-        regularization_loss = ureg.regularization_loss(inputs, uinputs)
-        if regularization_loss is not None:
-            regularization_loss *= ureg._alpha
-            regularization_loss.backward()
-            optimizer.step()
-
-            optimized_loss = ureg.combine_losses(supervised_loss, regularization_loss)
-        else:
-            optimized_loss = supervised_loss
-        # optimized_loss.backward()
-        # optimizer.step()
 
         ureg.train_ureg(inputs, uinputs)
 
@@ -444,8 +362,9 @@ def test(epoch):
             break
     print()
 
-    # Apply learning rate schedule:
-    scheduler.step(test_loss, epoch=epoch)
+    # Apply learning rate schedules:
+    scheduler_training.step(test_loss, epoch=epoch)
+    scheduler_reg.step(test_loss, epoch=epoch)
     ureg.schedule(test_loss, epoch)
     # Save checkpoint.
     acc = 100. * correct / total

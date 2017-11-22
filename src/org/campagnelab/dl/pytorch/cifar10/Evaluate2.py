@@ -247,7 +247,7 @@ def format_nice(n):
             if n < 0.001:
                 return "{0:.3E}".format(n)
             else:
-                return "{0:.4f}  ".format(n)
+                return "{0:.4f}".format(n)
     except:
         return str(n)
 

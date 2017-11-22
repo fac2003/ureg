@@ -220,11 +220,17 @@ class TrainModel:
         trainiter = iter(self.trainloader)
         train_examples_used = 0
 
+        if self.args.num_training > self.args.num_shaving:
+            num_shaving_epochs=round(self.args.num_training/ self.args.num_shaving)
+            use_max_shaving_records=self.args.num_training
+        else:
+            num_shaving_epochs=1
+            use_max_shaving_records =self.args.num_shaving
 
-        for shaving_index in range(self.args.shaving_epochs):
+        for shaving_index in range(num_shaving_epochs):
             print("Shaving step {}".format(shaving_index))
             # produce a random subset of the unsupervised samples, exactly matching the number of training examples:
-            unsupsampler = self.problem.reg_loader_subset(0,self.args.num_training)
+            unsupsampler = self.problem.reg_loader_subset(0,use_max_shaving_records)
             for performance_estimator in performance_estimators:
                 performance_estimator.init_performance_metrics()
 

@@ -76,8 +76,6 @@ start_epoch = 0  # start from epoch 0 or last checkpoint epoch
 
 problem = Cifar10Problem(args.mini_batch_size)
 model_trainer = TrainModel(args=args, problem=problem, use_cuda=use_cuda)
-print('==> Building model {}'.format(args.model))
-
 
 def vgg():
     return VGG('VGG16')

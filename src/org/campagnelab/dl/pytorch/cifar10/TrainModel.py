@@ -70,7 +70,10 @@ class TrainModel:
         created.
         """
         args = self.args
-
+        # restrict limits to actual size of datasets:
+        args.num_training=min(len(self.problem.train_loader()),args.num_training)
+        args.num_shaving=min(len(self.problem.reg_loader()),args.num_shaving)
+        args.num_validation=min(len(self.problem.test_loader()),args.num_validation)
         self.unsuploader = self.problem.reg_loader()
         if args.resume:
             # Load checkpoint.

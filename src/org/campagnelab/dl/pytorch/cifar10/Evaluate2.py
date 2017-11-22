@@ -48,6 +48,7 @@ parser.add_argument('--lr', default=0.005, type=float, help='learning rate')
 parser.add_argument('--resume', '-r', action='store_true', help='resume from checkpoint')
 parser.add_argument('--ureg',  action='store_true', help='Enable unsupervised regularization (ureg)')
 parser.add_argument('--mini-batch-size', type=int, help='Size of the mini-batch', default=128)
+parser.add_argument('--num-epochs', type=int, help='Number of epochs to run before stopping. Additional epochs when --resume.', default=200)
 parser.add_argument('--num-training', '-n', type=int, help='Maximum number of training examples to use',
                     default=sys.maxsize)
 parser.add_argument('--num-validation', '-x', type=int, help='Maximum number of training examples to use',
@@ -528,7 +529,7 @@ def eval(epoch):
 
 
 
-for epoch in range(start_epoch, start_epoch + 200):
+for epoch in range(start_epoch, start_epoch + args.num_epochs):
     perfs = [train(epoch, unsupiter)]
     if (args.ureg):
         perfs += [regularize(epoch, unsupiter)]

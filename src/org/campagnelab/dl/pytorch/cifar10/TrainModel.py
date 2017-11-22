@@ -4,7 +4,9 @@ from torch.autograd import Variable
 from torch.backends import cudnn
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
+from org.campagnelab.dl.pytorch.cifar10.AccuracyHelper import AccuracyHelper
 from org.campagnelab.dl.pytorch.cifar10.Evaluate2 import TrainingPerf
+from org.campagnelab.dl.pytorch.cifar10.LossHelper import LossHelper
 from org.campagnelab.dl.pytorch.cifar10.utils import progress_bar
 from org.campagnelab.dl.pytorch.ureg.LRSchedules import LearningRateAnnealing
 from org.campagnelab.dl.pytorch.ureg.URegularizer import URegularizer
@@ -39,7 +41,7 @@ class TrainModel:
         self.unsuploader = self.problem.reg_loader()
         self.trainloader = self.problem.train_loader()
         self.tesstloader = self.problem.test_loader()
-        self.ureg=None
+        self.ureg = None
 
     def init_model(self, create_model_function):
         """Resume training if necessary (args.--resume flag is True), or call the
@@ -87,8 +89,8 @@ class TrainModel:
         self.optimizer_training = torch.optim.SGD(self.net.parameters(), lr=args.lr, momentum=0.9, weight_decay=5e-4)
         self.optimizer_reg = torch.optim.SGD(self.net.parameters(), lr=args.shave_lr, momentum=0.9, weight_decay=5e-4)
         self.ureg = URegularizer(self.net, self.mini_batch_size, num_features=args.ureg_num_features,
-                            alpha=args.ureg_alpha,
-                            learning_rate=args.ureg_learning_rate)
+                                 alpha=args.ureg_alpha,
+                                 learning_rate=args.ureg_learning_rate)
         if args.ureg:
             self.ureg.enable()
             self.ureg.set_num_examples(args.num_training, len(self.unsuploader))
@@ -102,32 +104,23 @@ class TrainModel:
             self.ureg.set_num_examples(args.num_training, len(self.unsuploader))
             print("ureg is disabled")
 
-        delegate_scheduler = ReduceLROnPlateau(self.optimizer_training, 'min', factor=0.5,
-                                               patience=args.lr_patience, verbose=True)
+        self.scheduler_train = self.construct_scheduler(self.optimizer_training, 'min')
+        # use max for regularization lr because the more regularization
+        # progresses, the harder it becomes to differentiate training from test activations, we want larger ureg training losses,
+        # so we drop the ureg learning rate whenever the metric does not improve:
+        self.scheduler_reg = self.construct_scheduler(self.optimizer_reg, 'max')
 
-        if args.ureg_reset_every_n_epoch is None:
-            self.scheduler_train = delegate_scheduler
-        else:
-            self.scheduler_train = LearningRateAnnealing(self.optimizer_training,
-                                                         anneal_every_n_epoch=args.ureg_reset_every_n_epoch,
-                                                         delegate=delegate_scheduler)
-
-        self.scheduler_reg = ReduceLROnPlateau(self.optimizer_reg, 'min', factor=0.5, patience=args.lr_patience,
-                                               verbose=True)
-
-    def train(self,epoch, unsupiter):
+    def train(self, epoch, unsupiter,
+              performance_estimators=(LossHelper("training_loss"), AccuracyHelper())):
         print('\nTraining, epoch: %d' % epoch)
         self.net.train()
-        average_total_loss = 0
-        average_supervised_loss = 0
-        average_unsupervised_loss = 0
-        correct = 0
-        total = 0
-        average_total_loss = 0
-        training_accuracy = 0
 
+        for performance_estimator in performance_estimators:
+            performance_estimator.init_performance_metrics()
+        unsupervised_loss_acc=0
+        num_batches=0
         for batch_idx, (inputs, targets) in enumerate(self.trainloader):
-
+            num_batches+=1
             if self.use_cuda:
                 inputs, targets = inputs.cuda(), targets.cuda()
             self.optimizer_training.zero_grad()
@@ -149,32 +142,32 @@ class TrainModel:
             # then use it to calculate the unsupervised regularization contribution to the loss:
             uinputs = Variable(ufeatures)
 
-            self.ureg.train_ureg(inputs, uinputs)
+            unsupervised_loss_acc+=self.ureg.train_ureg(inputs, uinputs)
 
             optimized_loss = supervised_loss
-            average_total_loss += optimized_loss.data[0]
-            average_supervised_loss += supervised_loss.data[0]
 
-            _, predicted = torch.max(outputs.data, 1)
-            total += targets.size(0)
-            correct += predicted.eq(targets.data).cpu().sum()
+            for performance_estimator in performance_estimators:
+                performance_estimator.observe_performance_metric(batch_idx, optimized_loss, outputs, targets)
 
-            denominator = batch_idx + 1
-            average_total_loss = average_total_loss / denominator
-            average_supervised_loss = average_supervised_loss / denominator
-            average_unsupervised_loss = average_unsupervised_loss / denominator
-            training_accuracy = 100. * correct / total
             progress_bar(batch_idx, len(self.problem.train_loader()),
-                         ('loss: %.3f s: %.3f u: %.3f | Acc: %.3f%% (%d/%d)'
-                          % (average_total_loss,
-                             average_supervised_loss,
-                             average_unsupervised_loss,
-                             training_accuracy,
-                             correct,
-                             total)))
+                         " ".join([performance_estimator.progress_message() for performance_estimator in
+                                   performance_estimators]))
             if (batch_idx + 1) * self.mini_batch_size > self.max_training_examples:
                 break
-        self.scheduler_reg.step(average_supervised_loss, epoch)
+        unsupervised_loss=unsupervised_loss_acc/(num_batches)
+        self.scheduler_reg.step(unsupervised_loss, epoch)
         print()
 
-        return TrainingPerf(average_total_loss, average_supervised_loss, training_accuracy)
+        return performance_estimators
+
+    def construct_scheduler(self, optimizer, direction='min'):
+        delegate_scheduler = ReduceLROnPlateau(optimizer, direction, factor=0.5,
+                                               patience=self.args.lr_patience, verbose=True)
+
+        if self.args.ureg_reset_every_n_epoch is None:
+            scheduler = delegate_scheduler
+        else:
+            scheduler = LearningRateAnnealing(optimizer,
+                                              anneal_every_n_epoch=self.args.ureg_reset_every_n_epoch,
+                                              delegate=delegate_scheduler)
+        return scheduler

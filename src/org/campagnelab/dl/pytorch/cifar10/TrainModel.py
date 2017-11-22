@@ -158,10 +158,10 @@ class TrainModel:
             performance_estimator.init_performance_metrics()
         unsupervised_loss_acc = 0
         num_batches = 0
-
+        train_loader_subset = self.problem.train_loader_subset(0,self.args.num_training)
         unsuploader_shuffled=self.problem.reg_loader_subset(0, self.args.num_shaving)
         unsupiter = iter(unsuploader_shuffled)
-        for batch_idx, (inputs, targets) in enumerate(self.trainloader):
+        for batch_idx, (inputs, targets) in enumerate(train_loader_subset):
             num_batches += 1
             if self.use_cuda:
                 inputs, targets = inputs.cuda(), targets.cuda()
@@ -191,7 +191,8 @@ class TrainModel:
             for performance_estimator in performance_estimators:
                 performance_estimator.observe_performance_metric(batch_idx, optimized_loss.data[0], outputs, targets)
 
-            progress_bar(batch_idx, len(self.problem.train_loader()),
+
+            progress_bar(batch_idx, len(train_loader_subset),
                          " ".join([performance_estimator.progress_message() for performance_estimator in
                                    performance_estimators]))
             if (batch_idx + 1) * self.mini_batch_size > self.max_training_examples:

@@ -10,6 +10,11 @@ class Problem:
         """Returns the torch dataloader over the training set. """
         pass
 
+    def train_loader_subset(self, start, end):
+        """Returns the torch dataloader over the training set, shuffled,
+        but limited to the example range start-end."""
+        pass
+
     def test_loader(self):
         """Returns the torch dataloader over the test set. """
         pass

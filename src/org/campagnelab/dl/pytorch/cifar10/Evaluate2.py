@@ -506,7 +506,6 @@ def eval(epoch):
     total = 0
     test_accuracy = None
     test_loss = None
-    ureg.new_epoch(epoch)
     for batch_idx, (inputs, targets) in enumerate(trainloader):
 
         if use_cuda:

@@ -26,12 +26,12 @@ class PerformanceEstimator:
 
     def progress_message(self):
         """ Return a message suitable for logging progress of the metrics."""
-        ""
+        return ""
 
     def get_metric(self,metric_name):
         """ return the metric estimate corresponding to this name, or None if not estimated
         by this estimator."""
         for index in range(len(self.metric_names())):
-            if self.metric_names()==metric_name:
+            if metric_name in self.metric_names():
                 return self.estimates_of_metric()[index]
         return None

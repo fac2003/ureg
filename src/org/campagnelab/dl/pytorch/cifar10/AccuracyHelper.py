@@ -28,4 +28,4 @@ class AccuracyHelper(PerformanceEstimator):
 
     def progress_message(self):
         """ Return a message suitable for logging progress of the metrics."""
-        "Acc: {:.4f} {}/{}".format(*self.estimates_of_metric())
+        return "acc: {:.4f} {}/{}".format(*self.estimates_of_metric())

@@ -1,17 +1,19 @@
 import os
+
 import torch
 from torch.autograd import Variable
 from torch.backends import cudnn
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-from torch.utils.data.sampler import RandomSampler, SequentialSampler, Sampler
+from torch.utils.data.sampler import RandomSampler, BatchSampler
 
 from org.campagnelab.dl.pytorch.cifar10.AccuracyHelper import AccuracyHelper
-from org.campagnelab.dl.pytorch.cifar10.Evaluate2 import TrainingPerf
 from org.campagnelab.dl.pytorch.cifar10.LossHelper import LossHelper
+from org.campagnelab.dl.pytorch.cifar10.Samplers import TrimSampler
 from org.campagnelab.dl.pytorch.cifar10.utils import progress_bar
 from org.campagnelab.dl.pytorch.ureg.LRSchedules import LearningRateAnnealing
 from org.campagnelab.dl.pytorch.ureg.URegularizer import URegularizer
 
+best_acc=0
 
 def _format_nice(n):
     try:
@@ -25,27 +27,6 @@ def _format_nice(n):
     except:
         return str(n)
 
-
-class TrimSampler(Sampler):
-    """Samples elements sequentially, always in the same order, within the provided index bounds.
-
-    Arguments:
-        data_source (Dataset): dataset to sample from
-    """
-
-    def __init__(self, data_source, start=0, end=None):
-        if end is None:
-            end = len(data_source)
-        self.start = start
-        self.end = end
-
-        self.data_source = data_source
-
-    def __iter__(self):
-        return iter(range(self.start, self.end))
-
-    def __len__(self):
-        return self.end - self.start
 
 
 class TrainModel:
@@ -138,7 +119,7 @@ class TrainModel:
 
         else:
             self.ureg.disable()
-            self.ureg.set_num_examples(args.num_training, len(self.unsuploader))
+            self.ureg.set_num_examples(args.num_training, len(iter(self.unsuploader)))
             print("ureg is disabled")
 
         self.scheduler_train = self.construct_scheduler(self.optimizer_training, 'min')
@@ -147,7 +128,28 @@ class TrainModel:
         # so we drop the ureg learning rate whenever the metric does not improve:
         self.scheduler_reg = self.construct_scheduler(self.optimizer_reg, 'max')
 
-    def train(self, epoch, unsupiter,
+    def training_loop(self):
+        header_written=False
+        for epoch in range(self.start_epoch, self.start_epoch + self.args.num_epochs):
+
+            perfs = []
+            train_perfs = self.train(epoch)
+            perfs += [train_perfs]
+
+            if (self.args.ureg):
+                reg_perfs =self.regularize(epoch)
+                perfs+=[reg_perfs]
+            flatten = lambda l: [item for sublist in l for item in sublist]
+            test_perfs = self.test(epoch)
+            perfs += [test_perfs]
+            perfs= flatten(perfs)
+            if (not header_written):
+                header_written=True
+                self.log_performance_header(perfs)
+
+            self.log_performance_metrics(epoch, perfs)
+
+    def train(self, epoch,
               performance_estimators=(LossHelper("train_loss"), AccuracyHelper("train_"))):
         print('\nTraining, epoch: %d' % epoch)
         self.net.train()
@@ -156,6 +158,9 @@ class TrainModel:
             performance_estimator.init_performance_metrics()
         unsupervised_loss_acc = 0
         num_batches = 0
+
+        unsuploader_shuffled=self.problem.reg_loader_subset(0, self.args.num_shaving)
+        unsupiter = iter(unsuploader_shuffled)
         for batch_idx, (inputs, targets) in enumerate(self.trainloader):
             num_batches += 1
             if self.use_cuda:
@@ -173,18 +178,18 @@ class TrainModel:
                 ufeatures, ulabels = next(unsupiter)
 
             except StopIteration:
-                unsupiter = iter(self.unsuploader)
+                unsupiter = iter(unsuploader_shuffled)
                 ufeatures, ulabels = next(unsupiter)
             if self.use_cuda: ufeatures = ufeatures.cuda()
             # then use it to calculate the unsupervised regularization contribution to the loss:
             uinputs = Variable(ufeatures)
 
-            unsupervised_loss_acc += self.ureg.train_ureg(inputs, uinputs)
+            unsupervised_loss_acc += self.ureg.train_ureg(inputs, uinputs).data[0]
 
             optimized_loss = supervised_loss
 
             for performance_estimator in performance_estimators:
-                performance_estimator.observe_performance_metric(batch_idx, optimized_loss, outputs, targets)
+                performance_estimator.observe_performance_metric(batch_idx, optimized_loss.data[0], outputs, targets)
 
             progress_bar(batch_idx, len(self.problem.train_loader()),
                          " ".join([performance_estimator.progress_message() for performance_estimator in
@@ -209,13 +214,15 @@ class TrainModel:
 
         trainiter = iter(self.trainloader)
         train_examples_used = 0
-        for performance_estimator in performance_estimators:
-            performance_estimator.init_performance_metrics()
+
 
         for shaving_index in range(self.args.shaving_epochs):
             print("Shaving step {}".format(shaving_index))
             # produce a random subset of the unsupervised samples, exactly matching the number of training examples:
-            unsupsampler = TrimSampler(RandomSampler(self.unsuploader), 0, self.args.num_training)
+            unsupsampler = self.problem.reg_loader_subset(0,self.args.num_training)
+            for performance_estimator in performance_estimators:
+                performance_estimator.init_performance_metrics()
+
             for batch_idx, (inputs, targets) in enumerate(unsupsampler):
 
                 if self.use_cuda:
@@ -255,7 +262,7 @@ class TrainModel:
                     performance_estimator.observe_performance_metric(batch_idx, optimized_loss,
                                                                      inputs, uinputs)
 
-                progress_bar(batch_idx, len(self.unsuploader),
+                progress_bar(batch_idx, len(unsupsampler),
                              " ".join([performance_estimator.progress_message() for performance_estimator in
                                        performance_estimators]))
                 if ((batch_idx + 1) * self.mini_batch_size) > self.max_regularization_examples:
@@ -267,7 +274,8 @@ class TrainModel:
     def test(self, epoch, performance_estimators=(LossHelper("test_loss"), AccuracyHelper("test_"))):
         global best_acc
         self.net.eval()
-
+        for performance_estimator in performance_estimators:
+            performance_estimator.init_performance_metrics()
         self.ureg.new_epoch(epoch)
         for batch_idx, (inputs, targets) in enumerate(self.testloader):
 
@@ -278,7 +286,7 @@ class TrainModel:
             loss = self.criterion(outputs, targets)
 
             for performance_estimator in performance_estimators:
-                performance_estimator.observe_performance_metric(batch_idx, loss, outputs, targets)
+                performance_estimator.observe_performance_metric(batch_idx, loss.data[0], outputs, targets)
 
             self.ureg.estimate_accuracy(inputs)
             progress_bar(batch_idx, len(self.problem.train_loader()),
@@ -311,11 +319,13 @@ class TrainModel:
 
     def log_performance_header(self, performance_estimators):
         global best_test_loss
+        if (self.args.resume):
+            return
 
         metrics = ["epoch", "checkpoint"]
 
         for performance_estimator in performance_estimators:
-            metrics = metrics + performance_estimator.metric_names()
+            metrics = metrics + [performance_estimator.metric_names()]
 
         if not self.args.resume:
             with open("all-perfs-{}.tsv".format(self.args.checkpoint_key), "w") as perf_file:
@@ -340,7 +350,7 @@ class TrainModel:
 
         metric = self.get_metric(performance_estimators, "test_accuracy")
         if metric is not None and metric > best_acc:
-            self.save_checkpoint(metric)
+            self.save_checkpoint(epoch,metric)
             with open("best-perfs-{}.tsv".format(self.args.checkpoint_key), "a") as perf_file:
                 perf_file.write("\t".join(map(_format_nice, metrics)))
                 perf_file.write("\n")
@@ -366,5 +376,5 @@ class TrainModel:
             }
             if not os.path.isdir('checkpoint'):
                 os.mkdir('checkpoint')
-            torch.save(state, './checkpoint/ckpt_{}.t7'.format(args.checkpoint_key))
+            torch.save(state, './checkpoint/ckpt_{}.t7'.format(self.args.checkpoint_key))
             best_acc = acc

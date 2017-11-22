@@ -29,4 +29,4 @@ class LossHelper(PerformanceEstimator):
 
     def progress_message(self):
         """ Return a message suitable for logging progress of the metrics."""
-        "{}: {:.4f}".format(self.loss_name, *self.estimates_of_metric())
+        return "{}: {:.4f}".format(self.loss_name, self.estimates_of_metric()[0])

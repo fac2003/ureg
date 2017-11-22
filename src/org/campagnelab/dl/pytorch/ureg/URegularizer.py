@@ -204,6 +204,12 @@ class URegularizer:
         self._which_one_model.train()
         ys = self._which_one_model(supervised_output)
         yu = self._which_one_model(unsupervised_output)
+        if (len(ys)!=len(self.ys_true)):
+            print("lengths ys differ: {} !={}".format(len(ys),len(self.ys_true)))
+            return None
+        if (len(yu) != len(self.yu_true)):
+            print("lengths yu differ: {} !={}".format(len(yu), len(self.yu_true)))
+            return None
         # print("ys: {} yu: {}".format(ys.data,yu.data))
         # derive the loss of binary classifications:
 

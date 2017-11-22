@@ -75,12 +75,11 @@ class TrainModel:
         args.num_shaving=min(len(self.problem.reg_loader()),args.num_shaving)
         args.num_validation=min(len(self.problem.test_loader()),args.num_validation)
         self.unsuploader = self.problem.reg_loader()
+        mini_batch_size = self.mini_batch_size
         if args.resume:
             # Load checkpoint.
 
             print('==> Resuming from checkpoint..')
-
-            mini_batch_size = self.mini_batch_size
 
             assert os.path.isdir('checkpoint'), 'Error: no checkpoint directory found!'
             checkpoint = torch.load('./checkpoint/ckpt_{}.t7'.format(args.checkpoint_key))

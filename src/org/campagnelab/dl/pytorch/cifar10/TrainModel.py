@@ -3,6 +3,7 @@ import torch
 from torch.autograd import Variable
 from torch.backends import cudnn
 from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.utils.data.sampler import RandomSampler, SequentialSampler, Sampler
 
 from org.campagnelab.dl.pytorch.cifar10.AccuracyHelper import AccuracyHelper
 from org.campagnelab.dl.pytorch.cifar10.Evaluate2 import TrainingPerf
@@ -23,6 +24,28 @@ def _format_nice(n):
                 return "{0:.4f}".format(n)
     except:
         return str(n)
+
+
+class TrimSampler(Sampler):
+    """Samples elements sequentially, always in the same order, within the provided index bounds.
+
+    Arguments:
+        data_source (Dataset): dataset to sample from
+    """
+
+    def __init__(self, data_source, start=0, end=None):
+        if end is None:
+            end = len(data_source)
+        self.start = start
+        self.end = end
+
+        self.data_source = data_source
+
+    def __iter__(self):
+        return iter(range(self.start, self.end))
+
+    def __len__(self):
+        return self.end - self.start
 
 
 class TrainModel:
@@ -55,7 +78,7 @@ class TrainModel:
         self.trainloader = self.problem.train_loader()
         self.testloader = self.problem.test_loader()
         self.ureg = None
-        self.is_parallel=False
+        self.is_parallel = False
 
     def init_model(self, create_model_function):
         """Resume training if necessary (args.--resume flag is True), or call the
@@ -174,7 +197,74 @@ class TrainModel:
 
         return performance_estimators
 
-    def test(self, epoch,performance_estimators=(LossHelper("test_loss"), AccuracyHelper("test_"))):
+    def regularize(self, epoch, performance_estimators=(LossHelper("reg_loss"),)):
+        """
+        Performs training vs test regularization/shaving phase.
+        :param epoch:
+        :param performance_estimators: estimators for performance metrics to collect.
+        :return:
+        """
+        print('\nRegularizing, epoch: %d' % epoch)
+        self.net.train()
+
+        trainiter = iter(self.trainloader)
+        train_examples_used = 0
+        for performance_estimator in performance_estimators:
+            performance_estimator.init_performance_metrics()
+
+        for shaving_index in range(self.args.shaving_epochs):
+            print("Shaving step {}".format(shaving_index))
+            # produce a random subset of the unsupervised samples, exactly matching the number of training examples:
+            unsupsampler = TrimSampler(RandomSampler(self.unsuploader), 0, self.args.num_training)
+            for batch_idx, (inputs, targets) in enumerate(unsupsampler):
+
+                if self.use_cuda:
+                    inputs, targets = inputs.cuda(), targets.cuda()
+
+                self.optimizer_reg.zero_grad()
+                uinputs, _ = Variable(inputs), Variable(targets)
+
+                # don't use more training examples than allowed (-n) even if we don't use
+                # their labels:
+                if train_examples_used > self.args.num_training:
+                    trainiter = iter(self.trainloader)
+                    train_examples_used = 0
+                try:
+                    # first, read a minibatch from the unsupervised dataset:
+                    features, ulabels = next(trainiter)
+
+                except StopIteration:
+                    trainiter = iter(self.trainloader)
+                    features, _ = next(trainiter)
+                train_examples_used += 1
+
+                if self.use_cuda: features = features.cuda()
+
+                # then use it to calculate the unsupervised regularization contribution to the loss:
+                inputs = Variable(features)
+                regularization_loss = self.ureg.regularization_loss(inputs, uinputs)
+                if regularization_loss is not None:
+
+                    regularization_loss.backward()
+                    self.optimizer_reg.step()
+                    optimized_loss = regularization_loss.data[0]
+
+                else:
+                    optimized_loss = 0
+                for performance_estimator in performance_estimators:
+                    performance_estimator.observe_performance_metric(batch_idx, optimized_loss,
+                                                                     inputs, uinputs)
+
+                progress_bar(batch_idx, len(self.unsuploader),
+                             " ".join([performance_estimator.progress_message() for performance_estimator in
+                                       performance_estimators]))
+                if ((batch_idx + 1) * self.mini_batch_size) > self.max_regularization_examples:
+                    break
+                print()
+
+        return performance_estimators
+
+    def test(self, epoch, performance_estimators=(LossHelper("test_loss"), AccuracyHelper("test_"))):
         global best_acc
         self.net.eval()
 
@@ -200,7 +290,7 @@ class TrainModel:
         print()
 
         # Apply learning rate schedule:
-        test_accuracy=self.get_metric(performance_estimators,"test_accuracy")
+        test_accuracy = self.get_metric(performance_estimators, "test_accuracy")
         assert test_accuracy is not None, "test_accuracy must be found among estimated performance metrics"
         self.scheduler_train.step(test_accuracy, epoch)
         self.ureg.schedule(test_accuracy, epoch)
@@ -248,12 +338,12 @@ class TrainModel:
 
         global best_acc
 
-        metric=self.get_metric(performance_estimators,"test_accuracy")
+        metric = self.get_metric(performance_estimators, "test_accuracy")
         if metric is not None and metric > best_acc:
-                self.save_checkpoint(metric)
-                with open("best-perfs-{}.tsv".format(self.args.checkpoint_key), "a") as perf_file:
-                    perf_file.write("\t".join(map(_format_nice, metrics)))
-                    perf_file.write("\n")
+            self.save_checkpoint(metric)
+            with open("best-perfs-{}.tsv".format(self.args.checkpoint_key), "a") as perf_file:
+                perf_file.write("\t".join(map(_format_nice, metrics)))
+                perf_file.write("\n")
 
     def get_metric(self, performance_estimators, metric_name):
         for pe in performance_estimators:
@@ -262,7 +352,7 @@ class TrainModel:
                 return metric
         return None
 
-    def save_checkpoint(self,epoch, acc):
+    def save_checkpoint(self, epoch, acc):
         # Save checkpoint.
         global best_acc
         if acc > best_acc:

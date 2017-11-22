@@ -185,8 +185,10 @@ class TrainModel:
             if self.use_cuda: ufeatures = ufeatures.cuda()
             # then use it to calculate the unsupervised regularization contribution to the loss:
             uinputs = Variable(ufeatures)
+            ureg_loss=self.ureg.train_ureg(inputs, uinputs)
+            if (ureg_loss is not None):
+                unsupervised_loss_acc += ureg_loss.data[0]
 
-            unsupervised_loss_acc += self.ureg.train_ureg(inputs, uinputs).data[0]
 
             optimized_loss = supervised_loss
 

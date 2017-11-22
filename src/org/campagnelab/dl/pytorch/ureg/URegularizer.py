@@ -219,6 +219,7 @@ class URegularizer:
 
         total_which_model_loss.backward(retain_graph=True)
         self._optimizer.step()
+        return total_which_model_loss
 
     def extract_activations(self, features):
         # determine the number of activations in model:

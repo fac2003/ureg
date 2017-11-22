@@ -112,6 +112,19 @@ TrainingPerf=namedtuple('TrainingPerf', 'training_loss supervised_loss training_
 TestPerf=namedtuple('TestPerf', 'test_loss test_accuracy ureg_accuracy ureg_alpha')
 RegularizePerf=namedtuple('RegularizePerf', 'unsupervised_loss')
 
+
+def construct_scheduler(optimizer ,direction='min'):
+    delegate_scheduler = ReduceLROnPlateau(optimizer, direction, factor=0.5,
+                                               patience=args.lr_patience, verbose=True)
+
+    if args.ureg_reset_every_n_epoch is None:
+        scheduler = delegate_scheduler
+    else:
+        scheduler = LearningRateAnnealing(optimizer,
+                                          anneal_every_n_epoch=args.ureg_reset_every_n_epoch,
+                                          delegate=delegate_scheduler)
+    return scheduler
+
 # Model
 if args.resume:
     # Load checkpoint.
@@ -219,17 +232,10 @@ else:
     ureg.set_num_examples(args.num_training, len(unsuploader))
     print("ureg is disabled")
 
-delegate_scheduler = ReduceLROnPlateau(optimizer_training, 'min', factor=0.5,
-                                       patience=args.lr_patience, verbose=True)
-
-if args.ureg_reset_every_n_epoch is None:
-    scheduler_train = delegate_scheduler
-else:
-    scheduler_train = LearningRateAnnealing(optimizer_training,
-                                            anneal_every_n_epoch=args.ureg_reset_every_n_epoch,
-                                            delegate=delegate_scheduler)
-
-scheduler_reg = ReduceLROnPlateau(optimizer_reg, 'min', factor=0.5, patience=args.lr_patience, verbose=True)
+scheduler_train = construct_scheduler(optimizer_training,'min')
+scheduler_reg = construct_scheduler(optimizer_reg,'max') # use max for regularization lr because the more regularization
+# progresses, the harder it becomes to differentiate training from test activations, we want larger ureg training losses,
+# so we drop the ureg learning rate whenever the metric does not improve.
 max_training_examples = args.num_training
 max_validation_examples = args.num_validation
 max_regularization_examples = args.num_shaving
@@ -355,7 +361,7 @@ def train(epoch, unsupiter):
                          total)))
         if (batch_idx + 1) * mini_batch_size > max_training_examples:
             break
-    scheduler_reg.step(average_supervised_loss, epoch)
+    scheduler_reg.step(average_unsupervised_loss, epoch)
     print()
 
     return TrainingPerf(average_total_loss, average_supervised_loss, training_accuracy)

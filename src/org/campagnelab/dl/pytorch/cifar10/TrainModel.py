@@ -131,7 +131,7 @@ class TrainModel:
     def training_loop(self):
         header_written=False
         for epoch in range(self.start_epoch, self.start_epoch + self.args.num_epochs):
-
+            self.ureg.new_epoch(epoch)
             perfs = []
             train_perfs = self.train(epoch)
             perfs += [train_perfs]

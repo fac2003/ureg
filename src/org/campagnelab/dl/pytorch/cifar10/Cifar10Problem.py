@@ -44,7 +44,8 @@ class Cifar10Problem(Problem):
         mini_batch_size = self.mini_batch_size()
 
         trainloader = torch.utils.data.DataLoader(self.trainset, batch_size=mini_batch_size, shuffle=False,
-                                                  sampler=SubsetRandomSampler(range(start, end)),
+                                                  sampler=SubsetRandomSampler(range(round(start / mini_batch_size),
+                                                                                    round(end / mini_batch_size))),
                                                   num_workers=2)
         return trainloader
 
@@ -65,7 +66,8 @@ class Cifar10Problem(Problem):
 
         mini_batch_size = self.mini_batch_size()
         return torch.utils.data.DataLoader(self.unsupset, batch_size=mini_batch_size, shuffle=False,
-                                           sampler=SubsetRandomSampler(range(start, end)),
+                                           sampler=SubsetRandomSampler(range(round(start/mini_batch_size),
+                                                                             round( end/mini_batch_size))),
                                            num_workers=2)
 
     def loss_function(self):

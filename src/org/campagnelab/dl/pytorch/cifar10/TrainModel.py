@@ -300,7 +300,7 @@ class TrainModel:
                 performance_estimator.observe_performance_metric(batch_idx, loss.data[0], outputs, targets)
 
             self.ureg.estimate_accuracy(inputs)
-            progress_bar(batch_idx, len(self.problem.train_loader()),
+            progress_bar(batch_idx, len(self.testloader),
                          " ".join([performance_estimator.progress_message() for performance_estimator in
                                    performance_estimators]))
 

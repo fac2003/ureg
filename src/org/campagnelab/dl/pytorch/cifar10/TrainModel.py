@@ -228,7 +228,7 @@ class TrainModel:
             num_shaving_epochs=1
             use_max_shaving_records =self.args.num_shaving
 
-        for shaving_index in range(num_shaving_epochs):
+        for shaving_index in range(num_shaving_epochs+1):
             print("Shaving step {}".format(shaving_index))
             # produce a random subset of the unsupervised samples, exactly matching the number of training examples:
             unsupsampler = self.problem.reg_loader_subset(0,use_max_shaving_records)
@@ -284,6 +284,7 @@ class TrainModel:
         return performance_estimators
 
     def test(self, epoch, performance_estimators=(LossHelper("test_loss"), AccuracyHelper("test_"))):
+        print('\nTesting, epoch: %d' % epoch)
         global best_acc
         self.net.eval()
         for performance_estimator in performance_estimators:

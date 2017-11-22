@@ -424,7 +424,7 @@ def regularize(epoch, unsupiter):
             average_total_loss = average_total_loss / denominator
             average_unsupervised_loss = average_unsupervised_loss / denominator
 
-            progress_bar(batch_idx, len(trainloader), ' u: %.3f'
+            progress_bar(batch_idx, len(unsuploader), ' u: %.3f'
                          % (average_unsupervised_loss,))
             if ((batch_idx + 1) * mini_batch_size) > max_regularization_examples:
                 break
@@ -516,7 +516,7 @@ def eval(epoch):
 
         test_accuracy = 100. * correct / total
         test_loss = test_loss_accumulator / (batch_idx + 1)
-        progress_bar(batch_idx, len(testloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
+        progress_bar(batch_idx, len(trainloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
                      % (test_loss, test_accuracy, correct, total))
 
         if ((batch_idx + 1) * mini_batch_size) > max_training_examples:

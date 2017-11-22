@@ -4,7 +4,8 @@ from org.campagnelab.dl.pytorch.cifar10.PerformanceEstimator import PerformanceE
 
 
 class AccuracyHelper(PerformanceEstimator):
-    def __init__(self):
+    def __init__(self, prefix=""):
+        self.prefix=prefix
         self.init_performance_metrics()
 
     def init_performance_metrics(self):
@@ -18,7 +19,7 @@ class AccuracyHelper(PerformanceEstimator):
         return [accuracy, self.correct, self.total]
 
     def metric_names(self):
-        return ["accuracy", "correct", "total"]
+        return [self.prefix+"accuracy", self.prefix+"correct", self.prefix+"total"]
 
     def observe_performance_metric(self, iteration, loss, outputs, targets):
         _, predicted = torch.max(outputs.data, 1)

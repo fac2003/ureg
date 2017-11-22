@@ -12,6 +12,19 @@ from org.campagnelab.dl.pytorch.ureg.LRSchedules import LearningRateAnnealing
 from org.campagnelab.dl.pytorch.ureg.URegularizer import URegularizer
 
 
+def _format_nice(n):
+    try:
+        if n == int(n):
+            return str(n)
+        if n == float(n):
+            if n < 0.001:
+                return "{0:.3E}".format(n)
+            else:
+                return "{0:.4f}".format(n)
+    except:
+        return str(n)
+
+
 class TrainModel:
     """Train a model."""
 
@@ -40,8 +53,9 @@ class TrainModel:
         self.scheduler_reg = None
         self.unsuploader = self.problem.reg_loader()
         self.trainloader = self.problem.train_loader()
-        self.tesstloader = self.problem.test_loader()
+        self.testloader = self.problem.test_loader()
         self.ureg = None
+        self.is_parallel=False
 
     def init_model(self, create_model_function):
         """Resume training if necessary (args.--resume flag is True), or call the
@@ -111,16 +125,16 @@ class TrainModel:
         self.scheduler_reg = self.construct_scheduler(self.optimizer_reg, 'max')
 
     def train(self, epoch, unsupiter,
-              performance_estimators=(LossHelper("training_loss"), AccuracyHelper())):
+              performance_estimators=(LossHelper("train_loss"), AccuracyHelper("train_"))):
         print('\nTraining, epoch: %d' % epoch)
         self.net.train()
 
         for performance_estimator in performance_estimators:
             performance_estimator.init_performance_metrics()
-        unsupervised_loss_acc=0
-        num_batches=0
+        unsupervised_loss_acc = 0
+        num_batches = 0
         for batch_idx, (inputs, targets) in enumerate(self.trainloader):
-            num_batches+=1
+            num_batches += 1
             if self.use_cuda:
                 inputs, targets = inputs.cuda(), targets.cuda()
             self.optimizer_training.zero_grad()
@@ -142,7 +156,7 @@ class TrainModel:
             # then use it to calculate the unsupervised regularization contribution to the loss:
             uinputs = Variable(ufeatures)
 
-            unsupervised_loss_acc+=self.ureg.train_ureg(inputs, uinputs)
+            unsupervised_loss_acc += self.ureg.train_ureg(inputs, uinputs)
 
             optimized_loss = supervised_loss
 
@@ -154,9 +168,42 @@ class TrainModel:
                                    performance_estimators]))
             if (batch_idx + 1) * self.mini_batch_size > self.max_training_examples:
                 break
-        unsupervised_loss=unsupervised_loss_acc/(num_batches)
+        unsupervised_loss = unsupervised_loss_acc / (num_batches)
         self.scheduler_reg.step(unsupervised_loss, epoch)
         print()
+
+        return performance_estimators
+
+    def test(self, epoch,performance_estimators=(LossHelper("test_loss"), AccuracyHelper("test_"))):
+        global best_acc
+        self.net.eval()
+
+        self.ureg.new_epoch(epoch)
+        for batch_idx, (inputs, targets) in enumerate(self.testloader):
+
+            if self.use_cuda:
+                inputs, targets = inputs.cuda(), targets.cuda()
+            inputs, targets = Variable(inputs, volatile=True), Variable(targets)
+            outputs = self.net(inputs)
+            loss = self.criterion(outputs, targets)
+
+            for performance_estimator in performance_estimators:
+                performance_estimator.observe_performance_metric(batch_idx, loss, outputs, targets)
+
+            self.ureg.estimate_accuracy(inputs)
+            progress_bar(batch_idx, len(self.problem.train_loader()),
+                         " ".join([performance_estimator.progress_message() for performance_estimator in
+                                   performance_estimators]))
+
+            if ((batch_idx + 1) * self.mini_batch_size) > self.max_validation_examples:
+                break
+        print()
+
+        # Apply learning rate schedule:
+        test_accuracy=self.get_metric(performance_estimators,"test_accuracy")
+        assert test_accuracy is not None, "test_accuracy must be found among estimated performance metrics"
+        self.scheduler_train.step(test_accuracy, epoch)
+        self.ureg.schedule(test_accuracy, epoch)
 
         return performance_estimators
 
@@ -171,3 +218,63 @@ class TrainModel:
                                               anneal_every_n_epoch=self.args.ureg_reset_every_n_epoch,
                                               delegate=delegate_scheduler)
         return scheduler
+
+    def log_performance_header(self, performance_estimators):
+        global best_test_loss
+
+        metrics = ["epoch", "checkpoint"]
+
+        for performance_estimator in performance_estimators:
+            metrics = metrics + performance_estimator.metric_names()
+
+        if not self.args.resume:
+            with open("all-perfs-{}.tsv".format(self.args.checkpoint_key), "w") as perf_file:
+                perf_file.write("\t".join(map(str, metrics)))
+                perf_file.write("\n")
+
+            with open("best-perfs-{}.tsv".format(self.args.checkpoint_key), "w") as perf_file:
+                perf_file.write("\t".join(map(str, metrics)))
+                perf_file.write("\n")
+
+    def log_performance_metrics(self, epoch, performance_estimators):
+
+        metrics = [epoch, self.args.checkpoint_key]
+        for performance_estimator in performance_estimators:
+            metrics = metrics + performance_estimator.estimates_of_metric()
+
+        with open("all-perfs-{}.tsv".format(self.args.checkpoint_key), "a") as perf_file:
+            perf_file.write("\t".join(map(_format_nice, metrics)))
+            perf_file.write("\n")
+
+        global best_acc
+
+        metric=self.get_metric(performance_estimators,"test_accuracy")
+        if metric is not None and metric > best_acc:
+                self.save_checkpoint(metric)
+                with open("best-perfs-{}.tsv".format(self.args.checkpoint_key), "a") as perf_file:
+                    perf_file.write("\t".join(map(_format_nice, metrics)))
+                    perf_file.write("\n")
+
+    def get_metric(self, performance_estimators, metric_name):
+        for pe in performance_estimators:
+            metric = pe.get_metric(metric_name)
+            if metric is not None:
+                return metric
+        return None
+
+    def save_checkpoint(self,epoch, acc):
+        # Save checkpoint.
+        global best_acc
+        if acc > best_acc:
+            print('Saving..')
+            state = {
+                'net': self.net.module if self.is_parallel else self.net,
+                'acc': acc,
+                'epoch': epoch,
+                'ureg': self.ureg_enabled,
+                'ureg_model': self.ureg._which_one_model
+            }
+            if not os.path.isdir('checkpoint'):
+                os.mkdir('checkpoint')
+            torch.save(state, './checkpoint/ckpt_{}.t7'.format(args.checkpoint_key))
+            best_acc = acc

@@ -23,7 +23,6 @@ class LossHelper(PerformanceEstimator):
         return [self.loss_name]
 
     def observe_performance_metric(self, iteration, loss, outputs, targets):
-        _, predicted = torch.max(outputs.data, 1)
         self.max_iteration = iteration
         self.loss_acc+=loss
 

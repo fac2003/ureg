@@ -143,4 +143,5 @@ def create_model(name):
 
 model_trainer.init_model(create_model_function=create_model)
 
-model_trainer.training_loop()
+#model_trainer.training_combined()
+model_trainer.training_interleaved()

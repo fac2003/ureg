@@ -124,7 +124,8 @@ class TrainModel:
                                  learning_rate=args.ureg_learning_rate)
         if args.ureg:
             self.ureg.enable()
-            self.ureg.set_num_examples(args.num_training, len(self.unsuploader))
+            self.ureg.set_num_examples(min(len(self.trainloader), args.num_training),
+                                  min(len(self.unsuploader), args.num_shaving))
             self.ureg.forget_model(args.ureg_reset_every_n_epoch)
             print(
                 "ureg is enabled with alpha={}, reset every {} epochs. ".format(args.ureg_alpha,
@@ -132,7 +133,8 @@ class TrainModel:
 
         else:
             self.ureg.disable()
-            self.ureg.set_num_examples(args.num_training, len(iter(self.unsuploader)))
+            ureg.set_num_examples(min(len(self.trainloader), args.num_training),
+                                  min(len(self.unsuploader), args.num_shaving))
             print("ureg is disabled")
 
         self.scheduler_train = self.construct_scheduler(self.optimizer_training, 'min')
@@ -141,29 +143,11 @@ class TrainModel:
         # so we drop the ureg learning rate whenever the metric does not improve:
         self.scheduler_reg = self.construct_scheduler(self.optimizer_reg, 'max')
 
-    def training_loop(self):
-        header_written=False
-        for epoch in range(self.start_epoch, self.start_epoch + self.args.num_epochs):
-            self.ureg.new_epoch(epoch)
-            perfs = []
-            train_perfs = self.train(epoch)
-            perfs += [train_perfs]
-
-            if (self.args.ureg):
-                reg_perfs =self.regularize(epoch)
-                perfs+=[reg_perfs]
-            flatten = lambda l: [item for sublist in l for item in sublist]
-            test_perfs = self.test(epoch)
-            perfs += [test_perfs]
-            perfs= flatten(perfs)
-            if (not header_written):
-                header_written=True
-                self.log_performance_header(perfs)
-
-            self.log_performance_metrics(epoch, perfs)
 
     def train(self, epoch,
-              performance_estimators=(LossHelper("train_loss"), AccuracyHelper("train_"))):
+              performance_estimators=(LossHelper("train_loss"), AccuracyHelper("train_")),
+              train_supervised_model=True,
+              train_ureg=True):
         print('\nTraining, epoch: %d' % epoch)
         self.net.train()
 
@@ -176,31 +160,35 @@ class TrainModel:
         unsupiter = iter(unsuploader_shuffled)
         for batch_idx, (inputs, targets) in enumerate(train_loader_subset):
             num_batches += 1
-            if self.use_cuda:
-                inputs, targets = inputs.cuda(), targets.cuda()
-            self.optimizer_training.zero_grad()
-            inputs, targets = Variable(inputs), Variable(targets)
-            outputs = self.net(inputs)
 
-            supervised_loss = self.criterion(outputs, targets)
-            supervised_loss.backward()
-            self.optimizer_training.step()
-            # the unsupervised regularization part goes here:
-            if (batch_idx + 1) * self.mini_batch_size > self.max_regularization_examples:
-                break
-            try:
-                # first, read a minibatch from the unsupervised dataset:
-                ufeatures, ulabels = next(unsupiter)
+            if train_supervised_model:
+                if self.use_cuda:
+                    inputs, targets = inputs.cuda(), targets.cuda()
+                self.optimizer_training.zero_grad()
+                inputs, targets = Variable(inputs), Variable(targets)
+                outputs = self.net(inputs)
 
-            except StopIteration:
-                unsupiter = iter(unsuploader_shuffled)
-                ufeatures, ulabels = next(unsupiter)
-            if self.use_cuda: ufeatures = ufeatures.cuda()
-            # then use it to calculate the unsupervised regularization contribution to the loss:
-            uinputs = Variable(ufeatures)
-            ureg_loss=self.ureg.train_ureg(inputs, uinputs)
-            if (ureg_loss is not None):
-                unsupervised_loss_acc += ureg_loss.data[0]
+                supervised_loss = self.criterion(outputs, targets)
+                supervised_loss.backward()
+                self.optimizer_training.step()
+
+            if train_ureg:
+                # the unsupervised regularization part goes here:
+                if (batch_idx + 1) * self.mini_batch_size > self.max_regularization_examples:
+                    break
+                try:
+                    # first, read a minibatch from the unsupervised dataset:
+                    ufeatures, ulabels = next(unsupiter)
+
+                except StopIteration:
+                    unsupiter = iter(unsuploader_shuffled)
+                    ufeatures, ulabels = next(unsupiter)
+                if self.use_cuda: ufeatures = ufeatures.cuda()
+                # then use it to calculate the unsupervised regularization contribution to the loss:
+                uinputs = Variable(ufeatures)
+                ureg_loss=self.ureg.train_ureg(inputs, uinputs)
+                if (ureg_loss is not None):
+                    unsupervised_loss_acc += ureg_loss.data[0]
 
 
             optimized_loss = supervised_loss
@@ -405,3 +393,50 @@ class TrainModel:
                 os.mkdir('checkpoint')
             torch.save(state, './checkpoint/ckpt_{}.t7'.format(self.args.checkpoint_key))
             best_acc = acc
+
+    def training_combined(self):
+        header_written=False
+        for epoch in range(self.start_epoch, self.start_epoch + self.args.num_epochs):
+            self.ureg.new_epoch(epoch)
+            perfs = []
+            train_perfs = self.train(epoch)
+            perfs += [train_perfs]
+
+            if (self.args.ureg):
+                reg_perfs =self.regularize(epoch)
+                perfs+=[reg_perfs]
+            flatten = lambda l: [item for sublist in l for item in sublist]
+            test_perfs = self.test(epoch)
+            perfs += [test_perfs]
+            perfs= flatten(perfs)
+            if (not header_written):
+                header_written=True
+                self.log_performance_header(perfs)
+
+            self.log_performance_metrics(epoch, perfs)
+
+    def training_interleaved(self):
+        header_written=False
+        for epoch in range(self.start_epoch, self.start_epoch + self.args.num_epochs):
+            perfs = []
+
+            train_perfs = self.train(epoch,train_ureg=False,train_supervised_model=True)
+
+            self.ureg.new_epoch(epoch)
+            self.ureg.train_ureg_to_convergence(self.trainloader,self.unsuploader)
+
+            reg_perfs = self.regularize(epoch)
+            perfs += [train_perfs]
+
+            if (self.args.ureg):
+                reg_perfs =self.regularize(epoch)
+                perfs+=[reg_perfs]
+            flatten = lambda l: [item for sublist in l for item in sublist]
+            test_perfs = self.test(epoch)
+            perfs += [test_perfs]
+            perfs= flatten(perfs)
+            if (not header_written):
+                header_written=True
+                self.log_performance_header(perfs)
+
+            self.log_performance_metrics(epoch, perfs)

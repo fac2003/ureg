@@ -1,10 +1,13 @@
 import random
 
 import numpy
+import sys
 import torch
 from torch.autograd import Variable
 from torch.nn import Sequential
 
+from org.campagnelab.dl.pytorch.cifar10.AccuracyHelper import AccuracyHelper
+from org.campagnelab.dl.pytorch.cifar10.LossHelper import LossHelper
 from org.campagnelab.dl.pytorch.cifar10.utils import init_params
 from org.campagnelab.dl.pytorch.ureg.MyFeatureExtractor import MyFeatureExtractor
 
@@ -221,7 +224,7 @@ class URegularizer:
 
         loss_ys = self.loss_ys(ys, self.ys_true)
         loss_yu = self.loss_yu(yu, self.yu_true)
-        total_which_model_loss = (weight_s* loss_ys + weight_u* loss_yu)
+        total_which_model_loss = (weight_s * loss_ys + weight_u * loss_yu)
         # print("loss_ys: {} loss_yu: {} ".format(loss_ys.data[0],loss_yu.data[0]))
         # total_which_model_loss =torch.max(loss_ys,loss_yu)
         self._accumulator_total_which_model_loss += total_which_model_loss.data[0] / self._mini_batch_size
@@ -229,6 +232,65 @@ class URegularizer:
         total_which_model_loss.backward(retain_graph=True)
         self._optimizer.step()
         return total_which_model_loss
+
+    def train_ureg_to_convergence(self, supervised_loader, unsupervised_loader,
+                                  performance_estimators=(LossHelper("ureg_loss"),),
+                                  epsilon=0.01,
+                                  max_epochs=10):
+        """Train the ureg model for a number of epochs until improvements in the loss
+        are minor.
+        :param supervised_loader loader for supervised examples.
+        :param unsupervised_loader loader for unsupervised examples.
+        :param max_epochs maximum number of epochs before stopping
+        :return list of performance estimators
+        """
+
+        len_supervised = len(supervised_loader)
+        len_unsupervised = len(unsupervised_loader)
+
+        previous_average_loss=sys.maxsize
+        for ureg_epoch in range(0, max_epochs):
+            # reset metric at each ureg training epoch (we use the loss average as stopping condition):
+            for performance_estimator in performance_estimators:
+                performance_estimator.init_performance_metrics()
+
+            from itertools import cycle
+            if len_supervised < len_unsupervised:
+                supervised_iter = iter(cycle(supervised_loader))
+            else:
+                supervised_iter = iter(supervised_loader)
+
+            if len_unsupervised < len_supervised:
+                unsupervised_iter = iter(cycle(unsupervised_loader))
+            else:
+                unsupervised_iter = iter(unsupervised_loader)
+            num_batches=0
+
+            for (batch_idx, ((s_input, s_labels), (u_input, _))) in enumerate(zip(supervised_iter, unsupervised_iter)):
+
+                xs = Variable(s_input)
+                xu = Variable(u_input)
+                loss=self.train_ureg(xs, xu)
+                #print("ureg batch {} average loss={} ".format(batch_idx, loss.data[0]))
+                num_batches+=1
+                for performance_estimator in performance_estimators:
+                    performance_estimator.observe_performance_metric(batch_idx, loss.data[0],
+                                                                     None,
+                                                                     None)
+
+                if (batch_idx*self._mini_batch_size>self.num_unsupervised_examples):
+                    break
+            average_loss=performance_estimators[0].estimates_of_metric()[0]
+            print("ureg epoch {} average loss={} ".format(ureg_epoch, average_loss))
+            if average_loss > previous_average_loss:
+                self._scheduler.step(epoch=ureg_epoch,val_loss=average_loss)
+
+            if average_loss < previous_average_loss and abs(average_loss-previous_average_loss)<epsilon:
+                break
+
+            previous_average_loss=average_loss
+
+        return performance_estimators
 
     def extract_activations(self, features):
         # determine the number of activations in model:

@@ -237,6 +237,9 @@ class TrainModel:
             num_shaving_epochs=1
             use_max_shaving_records = self.args.num_training
 
+        for performance_estimator in performance_estimators:
+                performance_estimator.init_performance_metrics()
+
         for shaving_index in range(num_shaving_epochs):
             print("Shaving step {}".format(shaving_index))
             # produce a random subset of the unsupervised samples, exactly matching the number of training examples:

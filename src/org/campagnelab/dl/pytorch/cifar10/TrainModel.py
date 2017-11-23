@@ -243,10 +243,10 @@ class TrainModel:
             for batch_idx, (inputs, targets) in enumerate(unsupsampler):
 
                 if self.use_cuda:
-                    inputs, targets = inputs.cuda(), targets.cuda()
+                    inputs = inputs.cuda()
 
                 self.optimizer_reg.zero_grad()
-                uinputs, _ = Variable(inputs), Variable(targets)
+                uinputs= Variable(inputs)
 
                 # don't use more training examples than allowed (-n) even if we don't use
                 # their labels:
@@ -255,7 +255,7 @@ class TrainModel:
                     train_examples_used = 0
                 try:
                     # first, read a minibatch from the unsupervised dataset:
-                    features, ulabels = next(trainiter)
+                    features, _ = next(trainiter)
 
                 except StopIteration:
                     trainiter = iter(self.trainloader)

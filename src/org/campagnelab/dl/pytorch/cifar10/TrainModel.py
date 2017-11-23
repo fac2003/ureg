@@ -224,7 +224,7 @@ class TrainModel:
         train_examples_used = 0
 
         if self.args.num_training > self.args.num_shaving:
-            num_shaving_epochs=1+round(self.args.num_training/ self.args.num_shaving)
+            num_shaving_epochs=round((self.args.num_training+1)/ self.args.num_shaving)
             use_max_shaving_records = self.args.num_shaving
         else:
             num_shaving_epochs=1
@@ -428,7 +428,6 @@ class TrainModel:
             self.ureg.new_epoch(epoch)
             self.ureg.train_ureg_to_convergence(self.trainloader,self.unsuploader,epsilon=epsilon)
 
-            reg_perfs = self.regularize(epoch)
             perfs += [train_perfs]
 
             if (self.args.ureg):

@@ -91,13 +91,13 @@ class TrainModel:
 
             assert os.path.isdir('checkpoint'), 'Error: no checkpoint directory found!'
             checkpoint = torch.load('./checkpoint/ckpt_{}.t7'.format(args.checkpoint_key))
-            net = checkpoint['net']
+            self.net = checkpoint['net']
             self.best_acc = checkpoint['acc']
             self.start_epoch = checkpoint['epoch']
             ureg_enabled = checkpoint['ureg']
 
             if ureg_enabled:
-                ureg = URegularizer(net, mini_batch_size, args.ureg_num_features,
+                ureg = URegularizer(self.net, mini_batch_size, args.ureg_num_features,
                                     args.ureg_alpha, args.ureg_learning_rate)
 
                 ureg.set_num_examples(min(len(self.trainloader), args.num_training),

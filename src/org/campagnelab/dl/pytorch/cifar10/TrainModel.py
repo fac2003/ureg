@@ -82,6 +82,9 @@ class TrainModel:
         if args.num_validation > test_set_length:
             args.num_validation = test_set_length
 
+        self.max_regularization_examples = args.num_shaving
+        self.max_validation_examples = args.num_validation
+        self.max_training_examples = args.num_training
         self.unsuploader = self.problem.reg_loader()
 
         if args.resume:
@@ -235,7 +238,7 @@ class TrainModel:
             use_max_shaving_records = self.args.num_shaving
         else:
             num_shaving_epochs=1
-            use_max_shaving_records = self.args.num_training
+            use_max_shaving_records = self.args.num_shaving
 
         for performance_estimator in performance_estimators:
                 performance_estimator.init_performance_metrics()
@@ -275,13 +278,12 @@ class TrainModel:
                 inputs = Variable(features)
                 regularization_loss = self.ureg.regularization_loss(inputs, uinputs)
                 if regularization_loss is not None:
-
+                    optimized_loss = regularization_loss.data[0]
                     regularization_loss.backward()
                     self.optimizer_reg.step()
-                    optimized_loss = regularization_loss.data[0]
-
                 else:
                     optimized_loss = 0
+
                 for performance_estimator in performance_estimators:
                     performance_estimator.observe_performance_metric(batch_idx, optimized_loss,
                                                                      inputs, uinputs)
@@ -291,7 +293,7 @@ class TrainModel:
                                        performance_estimators]))
                 if ((batch_idx + 1) * self.mini_batch_size) > self.max_regularization_examples:
                     break
-                print()
+            print()
 
         return performance_estimators
 

@@ -1,5 +1,6 @@
 import random
 
+import numpy
 import torch
 from torch.autograd import Variable
 from torch.nn import Sequential
@@ -153,8 +154,9 @@ class URegularizer:
             self._optimizer = torch.optim.SGD(self._which_one_model.parameters(), lr=self._learning_rate, momentum=0.9,
                                               weight_decay=0.01);
             # self._scheduler = ReduceLROnPlateau(self._optimizer, 'min', factor=0.5, patience=0, verbose=True)
+
             self.loss_ys = torch.nn.BCELoss()  # 0 is supervised
-            self.loss_yu = torch.nn.BCELoss()  # (yu, torch.ones(mini_batch_size))  # 1 is unsupervised
+            self.loss_yu = torch.nn.BCELoss()  # 1 is unsupervised
             if self._use_cuda:
                 self.loss_ys = self.loss_ys.cuda()
                 self.loss_yu = self.loss_yu.cuda()
@@ -178,7 +180,7 @@ class URegularizer:
         self._my_feature_extractor1.clear_outputs()
         self._my_feature_extractor2.clear_outputs()
 
-    def train_ureg(self, xs, xu):
+    def train_ureg(self, xs, xu, weight_s=None, weight_u=None):
         if not self._enabled:
             return
 
@@ -204,8 +206,8 @@ class URegularizer:
         self._which_one_model.train()
         ys = self._which_one_model(supervised_output)
         yu = self._which_one_model(unsupervised_output)
-        if (len(ys)!=len(self.ys_true)):
-            print("lengths ys differ: {} !={}".format(len(ys),len(self.ys_true)))
+        if (len(ys) != len(self.ys_true)):
+            print("lengths ys differ: {} !={}".format(len(ys), len(self.ys_true)))
             return None
         if (len(yu) != len(self.yu_true)):
             print("lengths yu differ: {} !={}".format(len(yu), len(self.yu_true)))
@@ -215,10 +217,11 @@ class URegularizer:
 
         # step the whichOne model's parameters in the direction that
         # reduces the loss:
+        weight_s, weight_u = self.loss_weights(weight_s, weight_u)
 
         loss_ys = self.loss_ys(ys, self.ys_true)
         loss_yu = self.loss_yu(yu, self.yu_true)
-        total_which_model_loss = (loss_ys + loss_yu) / 2
+        total_which_model_loss = (weight_s* loss_ys + weight_u* loss_yu)
         # print("loss_ys: {} loss_yu: {} ".format(loss_ys.data[0],loss_yu.data[0]))
         # total_which_model_loss =torch.max(loss_ys,loss_yu)
         self._accumulator_total_which_model_loss += total_which_model_loss.data[0] / self._mini_batch_size
@@ -244,7 +247,7 @@ class URegularizer:
 
         return unsupervised_output
 
-    def regularization_loss(self, xs, xu):
+    def regularization_loss(self, xs, xu, weight_s=None, weight_u=None):
         """
         Calculates the regularization loss and add it to
         the provided loss (linear combination using  alpha as mixing factor).
@@ -271,15 +274,30 @@ class URegularizer:
         # the more we need to regularize:
         ys = self._which_one_model(supervised_output)
         yu = self._which_one_model(unsupervised_output)
-        a = self.num_training / (self.num_training + self.num_unsupervised_examples)
-        b = self.num_unsupervised_examples / (self.num_training + self.num_unsupervised_examples)
-        rLoss = (1 / b) * self.loss_ys(ys, self.ys_uncertain) + \
-                +(1 / a) * self.loss_yu(yu, self.ys_uncertain)
+
+        weight_s, weight_u = self.loss_weights(weight_s, weight_u)
+
+        # self.loss_ys.weight=torch.from_numpy(numpy.array([weight_s,weight_u]))
+        # self.loss_yu.weight=torch.from_numpy(numpy.array([weight_u,weight_s]))
+
+        rLoss = weight_s * self.loss_ys(ys, self.ys_uncertain) + \
+                weight_u * self.loss_yu(yu, self.ys_uncertain)
         # self._alpha = 0.5 - (0.5 - self._last_epoch_accuracy)
         # rLoss = (self.loss_ys(ys, self.ys_uncertain))
         # self.loss_yu(yu, self.ys_uncertain)) / 2
         # return the regularization loss:
         return rLoss
+
+    def loss_weights(self, weight_s, weight_u):
+        if weight_s is None:
+            weight_s = 1 / (self.num_training / (self.num_training + self.num_unsupervised_examples))
+        if weight_u is None:
+            weight_u = 1 / (self.num_unsupervised_examples / (self.num_training + self.num_unsupervised_examples))
+        # print("using weights: T={} U={} weight_s={} weight_u={}".format(
+        #     self.num_training,
+        #     self.num_unsupervised_examples,
+        #     weight_s, weight_u))
+        return weight_s, weight_u
 
     def combine_losses(self, supervised_loss, regularization_loss):
         return supervised_loss * (1 - self._alpha) + self._alpha * regularization_loss
@@ -330,10 +348,10 @@ class URegularizer:
         :return: xs, xu adjusted for size
         """
         assert len(xu) != len(xs), "batch size must not be equal"
-        max_len=max(len(xs) , len(xu))
+        max_len = max(len(xs), len(xu))
         if (len(xs) > len(xu)):
-            bag =[ xu[index] for index in range(len(xu))]
-            xu = torch.stack(random.choices(bag,k=max_len))
+            bag = [xu[index] for index in range(len(xu))]
+            xu = torch.stack(random.choices(bag, k=max_len))
         else:
             bag = [xs[index] for index in range(len(xs))]
             xs = torch.stack(random.choices(bag, k=max_len))

@@ -139,7 +139,7 @@ if args.resume:
     if ureg_enabled:
         ureg = URegularizer(net, mini_batch_size, args.ureg_num_features,
                             args.ureg_alpha, args.ureg_learning_rate)
-        ureg.set_num_examples(args.num_training, len(unsuploader))
+        ureg.set_num_examples(args.num_training, args.num_shaving)
         ureg.enable()
         if not args.drop_ureg_model:
             ureg.resume(checkpoint['ureg_model'])
@@ -222,14 +222,14 @@ ureg = URegularizer(net, mini_batch_size, num_features=args.ureg_num_features,
                     learning_rate=args.ureg_learning_rate)
 if args.ureg:
     ureg.enable()
-    ureg.set_num_examples(args.num_training, len(unsuploader))
+    ureg.set_num_examples(args.num_training, args.num_shaving)
     ureg.forget_model(args.ureg_reset_every_n_epoch)
     print(
         "ureg is enabled with alpha={}, reset every {} epochs. ".format(args.ureg_alpha, args.ureg_reset_every_n_epoch))
 
 else:
     ureg.disable()
-    ureg.set_num_examples(args.num_training, len(unsuploader))
+    ureg.set_num_examples(args.num_training, args.num_shaving)
     print("ureg is disabled")
 
 scheduler_train = construct_scheduler(optimizer_training,'min')
@@ -281,7 +281,7 @@ def log_performance_metrics(epoch, train_perfs, reg_perfs, val_perfs, test_perfs
                    0,
                    test_perfs.test_accuracy,
                    train_perfs.supervised_loss, test_perfs.test_loss, 0, delta_loss,
-                   test_perfs.ureg_accuracy, test_perfs.alpha]
+                   test_perfs.ureg_accuracy, test_perfs.ureg_alpha]
     else:
         metrics = [epoch, args.checkpoint_key, train_perfs.training_loss, train_perfs.training_accuracy,
                val_perfs.training_shaved_accuracy,

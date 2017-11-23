@@ -417,7 +417,7 @@ class TrainModel:
 
             self.log_performance_metrics(epoch, perfs)
 
-    def training_interleaved(self,epsilon=1E-4):
+    def training_interleaved(self,epsilon=1E-10):
         header_written=False
         self.ureg.install_scheduler()
         for epoch in range(self.start_epoch, self.start_epoch + self.args.num_epochs):

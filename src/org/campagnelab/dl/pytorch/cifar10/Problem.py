@@ -3,6 +3,16 @@ class Problem:
     def __init__(self, mini_batch_size=128):
         self._mini_batch_size=mini_batch_size
 
+    def describe(self):
+        print("{} Problem has {} training , {} test and {} unsupervised examples".format(
+            self.name(),
+            len(self.train_loader())*self.mini_batch_size(),
+            len(self.test_loader())*self.mini_batch_size(),
+            len(self.reg_loader())*self.mini_batch_size(),
+        ))
+    def name(self):
+        pass
+
     def mini_batch_size(self):
         return self._mini_batch_size
 

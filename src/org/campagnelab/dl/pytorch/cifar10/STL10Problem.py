@@ -7,29 +7,30 @@ from org.campagnelab.dl.pytorch.cifar10.Problem import Problem
 from org.campagnelab.dl.pytorch.cifar10.Samplers import ProtectedSubsetRandomSampler
 
 
-class Cifar10Problem(Problem):
+class STL10Problem(Problem):
     """A problem that exposes the  Cifar10 dataset."""
     def name(self):
-        return "CIFAR10"
+        return "STL10"
 
     def __init__(self, mini_batch_size):
         super().__init__(mini_batch_size)
         self.transform_train = transforms.Compose([
-            transforms.RandomCrop(32, padding=4),
+            transforms.RandomCrop(96, padding=4),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
-            transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+
         ])
 
         self.transform_test = transforms.Compose([
             transforms.ToTensor(),
-            transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
         ])
-        self.trainset = torchvision.datasets.CIFAR10(root='./data', train=True, download=True,
+        self.trainset = torchvision.datasets.STL10(root='./data', split="train", download=True,
                                                      transform=self.transform_train)
-        self.testset = torchvision.datasets.CIFAR10(root='./data', train=False, download=False,
+        self.testset = torchvision.datasets.STL10(root='./data', split="test", download=False,
                                                     transform=self.transform_test)
-        self.unsupset = torchvision.datasets.CIFAR10(root='./data', train=False, download=False,
+        self.unsupset = torchvision.datasets.STL10(root='./data', split="unlabeled", download=False,
                                                      transform=self.transform_train)
 
     def train_loader(self):

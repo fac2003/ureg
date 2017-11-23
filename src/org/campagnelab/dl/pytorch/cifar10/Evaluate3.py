@@ -9,6 +9,7 @@ import sys
 from torch.utils.data.sampler import RandomSampler
 
 from org.campagnelab.dl.pytorch.cifar10.Cifar10Problem import Cifar10Problem
+from org.campagnelab.dl.pytorch.cifar10.STL10Problem import STL10Problem
 from org.campagnelab.dl.pytorch.cifar10.Samplers import TrimSampler
 from org.campagnelab.dl.pytorch.cifar10.TrainModel import TrainModel
 from org.campagnelab.dl.pytorch.cifar10.models import *
@@ -64,6 +65,8 @@ parser.add_argument('--shaving-epochs', default=1, type=int,
                     help='number of shaving epochs.')
 parser.add_argument('--drop-ureg-model', action='store_true',
                     help='Drop the ureg model at startup, only useful with --resume.')
+parser.add_argument('--problem', default="CIFAR10", type=str,
+                    help='The problem, either CIFAR10 or STL10')
 
 args = parser.parse_args()
 
@@ -74,7 +77,17 @@ is_parallel = False
 best_acc = 0  # best test accuracy
 start_epoch = 0  # start from epoch 0 or last checkpoint epoch
 
-problem = Cifar10Problem(args.mini_batch_size)
+if args.problem=="CIFAR10":
+    problem = Cifar10Problem(args.mini_batch_size)
+elif args.problem=="STL10":
+    problem = STL10Problem(args.mini_batch_size)
+else:
+    print("Unsupported problem: "+args.problem)
+    exit(1)
+
+# print some info about this dataset:
+problem.describe()
+
 model_trainer = TrainModel(args=args, problem=problem, use_cuda=use_cuda)
 
 def vgg():

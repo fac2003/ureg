@@ -272,6 +272,7 @@ class TrainModel:
                     regularization_loss.backward()
                     self.optimizer_reg.step()
                 else:
+                    print("Found None in regularize")
                     optimized_loss = 0
 
                 for performance_estimator in performance_estimators:

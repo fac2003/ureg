@@ -426,7 +426,7 @@ class TrainModel:
             train_perfs = self.train(epoch,train_ureg=False,train_supervised_model=True)
 
             self.ureg.new_epoch(epoch)
-            self.ureg.train_ureg_to_convergence(self.trainloader,self.unsuploader,epsilon=epsilon)
+            self.ureg.train_ureg_to_convergence(self.trainloader,self.unsuploader,epsilon=epsilon,max_epochs=50)
 
             perfs += [train_perfs]
 

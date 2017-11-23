@@ -4,6 +4,7 @@ from torch.utils.data.sampler import SubsetRandomSampler
 from torchvision import transforms
 
 from org.campagnelab.dl.pytorch.cifar10.Problem import Problem
+from org.campagnelab.dl.pytorch.cifar10.Samplers import ProtectedSubsetRandomSampler
 
 
 class Cifar10Problem(Problem):
@@ -44,7 +45,7 @@ class Cifar10Problem(Problem):
         mini_batch_size = self.mini_batch_size()
 
         trainloader = torch.utils.data.DataLoader(self.trainset, batch_size=mini_batch_size, shuffle=False,
-                                                  sampler=SubsetRandomSampler(range(start ,
+                                                  sampler=ProtectedSubsetRandomSampler(range(start ,
                                                                                     end )),
                                                   num_workers=2)
         return trainloader
@@ -66,7 +67,7 @@ class Cifar10Problem(Problem):
 
         mini_batch_size = self.mini_batch_size()
         return torch.utils.data.DataLoader(self.unsupset, batch_size=mini_batch_size, shuffle=False,
-                                           sampler=SubsetRandomSampler(range(start,
+                                           sampler=ProtectedSubsetRandomSampler(range(start,
                                                                              end)),
                                            num_workers=2)
 

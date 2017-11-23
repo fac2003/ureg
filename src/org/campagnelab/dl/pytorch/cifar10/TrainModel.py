@@ -72,13 +72,13 @@ class TrainModel:
         args = self.args
         mini_batch_size = self.mini_batch_size
         # restrict limits to actual size of datasets:
-        training_set_length = len(self.problem.train_loader())*mini_batch_size
+        training_set_length = (len(self.problem.train_loader())-1)*mini_batch_size
         if args.num_training> training_set_length:
             args.num_training= training_set_length
-        unsup_set_length = len(self.problem.reg_loader())*mini_batch_size
+        unsup_set_length = (len(self.problem.reg_loader())-1)*mini_batch_size
         if args.num_shaving > unsup_set_length:
             args.num_shaving = unsup_set_length
-        test_set_length = len(self.problem.test_loader())*mini_batch_size
+        test_set_length = (len(self.problem.test_loader())-1)*mini_batch_size
         if args.num_validation > test_set_length:
             args.num_validation = test_set_length
 
@@ -183,6 +183,8 @@ class TrainModel:
             supervised_loss.backward()
             self.optimizer_training.step()
             # the unsupervised regularization part goes here:
+            if (batch_idx + 1) * self.mini_batch_size > self.max_regularization_examples:
+                break
             try:
                 # first, read a minibatch from the unsupervised dataset:
                 ufeatures, ulabels = next(unsupiter)
@@ -230,10 +232,10 @@ class TrainModel:
 
         if self.args.num_training > self.args.num_shaving:
             num_shaving_epochs=1+round(self.args.num_training/ self.args.num_shaving)
-            use_max_shaving_records=self.args.num_training
+            use_max_shaving_records = self.args.num_shaving
         else:
             num_shaving_epochs=1
-            use_max_shaving_records =self.args.num_shaving
+            use_max_shaving_records = self.args.num_training
 
         for shaving_index in range(num_shaving_epochs):
             print("Shaving step {}".format(shaving_index))

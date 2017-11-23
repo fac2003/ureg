@@ -283,13 +283,14 @@ class URegularizer:
                     xs=xs.cuda()
                     xu=xu.cuda()
                 loss=self.train_ureg(xs, xu)
-                #print("ureg batch {} average loss={} ".format(batch_idx, loss.data[0]))
-                num_batches+=1
-                for performance_estimator in performance_estimators:
-                    performance_estimator.observe_performance_metric(batch_idx, loss.data[0],
-                                                                     None,
-                                                                     None)
-                progress_bar(batch_idx, length,
+                if loss is not None:
+                    #print("ureg batch {} average loss={} ".format(batch_idx, loss.data[0]))
+                    num_batches+=1
+                    for performance_estimator in performance_estimators:
+                        performance_estimator.observe_performance_metric(batch_idx, loss.data[0],
+                                                                         None,
+                                                                         None)
+                    progress_bar(batch_idx, length,
                               " ".join([performance_estimator.progress_message() for performance_estimator in
                                        performance_estimators]))
                 if (batch_idx*self._mini_batch_size>self.num_unsupervised_examples):

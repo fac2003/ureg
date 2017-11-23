@@ -241,7 +241,7 @@ class URegularizer:
     def train_ureg_to_convergence(self, supervised_loader, unsupervised_loader,
                                   performance_estimators=(LossHelper("ureg_loss"),),
                                   epsilon=0.01,
-                                  max_epochs=10):
+                                  max_epochs=30):
         """Train the ureg model for a number of epochs until improvements in the loss
         are minor.
         :param supervised_loader loader for supervised examples.
@@ -249,7 +249,6 @@ class URegularizer:
         :param max_epochs maximum number of epochs before stopping
         :return list of performance estimators
         """
-
         len_supervised = len(supervised_loader)
         len_unsupervised = len(unsupervised_loader)
 
@@ -269,6 +268,7 @@ class URegularizer:
                 unsupervised_iter = iter(cycle(unsupervised_loader))
             else:
                 unsupervised_iter = iter(unsupervised_loader)
+
             num_batches=0
 
             for (batch_idx, ((s_input, s_labels), (u_input, _))) in enumerate(zip(supervised_iter, unsupervised_iter)):

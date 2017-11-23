@@ -7,7 +7,7 @@ from torch.nn import Sequential
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from org.campagnelab.dl.pytorch.cifar10.LossHelper import LossHelper
-from org.campagnelab.dl.pytorch.cifar10.utils import init_params
+from org.campagnelab.dl.pytorch.cifar10.utils import init_params, progress_bar
 from org.campagnelab.dl.pytorch.ureg.MyFeatureExtractor import MyFeatureExtractor
 
 
@@ -137,11 +137,11 @@ class URegularizer:
             # else:
             self._which_one_model = Sequential(
                 torch.nn.Linear(num_activations, num_features),
-                torch.nn.Dropout(0.5),
+                #torch.nn.Dropout(0.5),
                 torch.nn.ReLU(),
-                torch.nn.Dropout(0.5),
+                #torch.nn.Dropout(0.5),
                 torch.nn.Linear(num_features, num_features),
-                torch.nn.Dropout(0.5),
+                #torch.nn.Dropout(0.5),
                 torch.nn.ReLU(),
                 torch.nn.Linear(num_features, 2),
                 torch.nn.Softmax()
@@ -259,10 +259,13 @@ class URegularizer:
                 performance_estimator.init_performance_metrics()
 
             from itertools import cycle
+            length=0
             if len_supervised < len_unsupervised:
                 supervised_iter = iter(cycle(supervised_loader))
+                length=len_unsupervised
             else:
                 supervised_iter = iter(supervised_loader)
+                length=len_supervised
 
             if len_unsupervised < len_supervised:
                 unsupervised_iter = iter(cycle(unsupervised_loader))
@@ -285,11 +288,13 @@ class URegularizer:
                     performance_estimator.observe_performance_metric(batch_idx, loss.data[0],
                                                                      None,
                                                                      None)
-
+                progress_bar(batch_idx, length,
+                             "train_ureg_to_convergence "+ " ".join([performance_estimator.progress_message() for performance_estimator in
+                                       performance_estimators]))
                 if (batch_idx*self._mini_batch_size>self.num_unsupervised_examples):
                     break
             average_loss=performance_estimators[0].estimates_of_metric()[0]
-            print("ureg epoch {} average loss={} ".format(ureg_epoch, average_loss))
+            #print("ureg epoch {} average loss={} ".format(ureg_epoch, average_loss))
             if average_loss > previous_average_loss:
                 if self._scheduler is not None:
                     self.schedule(epoch=ureg_epoch,val_loss=average_loss)

@@ -251,7 +251,8 @@ class URegularizer:
         """
         len_supervised = len(supervised_loader)
         len_unsupervised = len(unsupervised_loader)
-
+        print("Training ureg to convergence with {} training and {} unsupervised samples".format(
+            len_supervised*self._mini_batch_size,len_unsupervised*self._mini_batch_size))
         previous_average_loss=sys.maxsize
         for ureg_epoch in range(0, max_epochs):
             # reset metric at each ureg training epoch (we use the loss average as stopping condition):
@@ -289,12 +290,12 @@ class URegularizer:
                                                                      None,
                                                                      None)
                 progress_bar(batch_idx, length,
-                             "train_ureg_to_convergence "+ " ".join([performance_estimator.progress_message() for performance_estimator in
+                              " ".join([performance_estimator.progress_message() for performance_estimator in
                                        performance_estimators]))
                 if (batch_idx*self._mini_batch_size>self.num_unsupervised_examples):
                     break
             average_loss=performance_estimators[0].estimates_of_metric()[0]
-            #print("ureg epoch {} average loss={} ".format(ureg_epoch, average_loss))
+            print("ureg epoch {} average loss={} ".format(ureg_epoch, average_loss))
             if average_loss > previous_average_loss:
                 if self._scheduler is not None:
                     self.schedule(epoch=ureg_epoch,val_loss=average_loss)

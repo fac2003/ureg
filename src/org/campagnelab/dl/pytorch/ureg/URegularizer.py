@@ -270,6 +270,9 @@ class URegularizer:
 
                 xs = Variable(s_input)
                 xu = Variable(u_input)
+                if self._use_cuda:
+                    xs=xs.cuda()
+                    xu=xu.cuda()
                 loss=self.train_ureg(xs, xu)
                 #print("ureg batch {} average loss={} ".format(batch_idx, loss.data[0]))
                 num_batches+=1

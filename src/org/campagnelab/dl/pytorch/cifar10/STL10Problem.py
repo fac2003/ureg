@@ -2,6 +2,7 @@ import torch
 import torchvision
 from torch.utils.data.sampler import SubsetRandomSampler
 from torchvision import transforms
+from torchvision.transforms import Scale
 
 from org.campagnelab.dl.pytorch.cifar10.Problem import Problem
 from org.campagnelab.dl.pytorch.cifar10.Samplers import ProtectedSubsetRandomSampler
@@ -14,15 +15,24 @@ class STL10Problem(Problem):
 
     def __init__(self, mini_batch_size):
         super().__init__(mini_batch_size)
+        from PIL import Image
         self.transform_train = transforms.Compose([
             transforms.RandomCrop(96, padding=4),
             transforms.RandomHorizontalFlip(),
+            #TODO: currently scaling down the image for compatibility with CIFAR10 model
+            #TODO: input requirements.
+            #TODO: remove scaling and figure out how to learn from the full image.
+            Scale(32, interpolation=Image.BILINEAR),
             transforms.ToTensor(),
             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
 
         ])
 
         self.transform_test = transforms.Compose([
+            # TODO: currently scaling down the image for compatibility with CIFAR10 model
+            # TODO: input requirements.
+            # TODO: remove scaling and figure out how to learn from the full image.
+            Scale(32, interpolation=Image.BILINEAR),
             transforms.ToTensor(),
             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
         ])

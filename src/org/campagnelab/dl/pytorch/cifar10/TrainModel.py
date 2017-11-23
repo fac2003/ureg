@@ -134,7 +134,7 @@ class TrainModel:
 
         else:
             self.ureg.disable()
-            ureg.set_num_examples(min(len(self.trainloader), args.num_training),
+            self.ureg.set_num_examples(min(len(self.trainloader), args.num_training),
                                   min(len(self.unsuploader), args.num_shaving))
             print("ureg is disabled")
 
@@ -425,17 +425,17 @@ class TrainModel:
             perfs = []
 
             train_perfs = self.train(epoch,train_ureg=False,train_supervised_model=True)
+            if self.args.ureg:
+                self.ureg.new_epoch(epoch)
+                train_loader_subset = self.problem.train_loader_subset(0, self.args.num_training)
+                unsuploader_shuffled = self.problem.reg_loader_subset(0, self.args.num_shaving)
 
-            self.ureg.new_epoch(epoch)
-            train_loader_subset = self.problem.train_loader_subset(0, self.args.num_training)
-            unsuploader_shuffled = self.problem.reg_loader_subset(0, self.args.num_shaving)
-
-            print("Training ureg to convergence.")
-            self.ureg.train_ureg_to_convergence(train_loader_subset,unsuploader_shuffled,epsilon=epsilon,max_epochs=50)
+                print("Training ureg to convergence.")
+                self.ureg.train_ureg_to_convergence(train_loader_subset,unsuploader_shuffled,epsilon=epsilon,max_epochs=50)
 
             perfs += [train_perfs]
 
-            if (self.args.ureg):
+            if self.args.ureg:
                 reg_perfs =self.regularize(epoch)
                 perfs+=[reg_perfs]
             flatten = lambda l: [item for sublist in l for item in sublist]

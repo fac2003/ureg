@@ -283,8 +283,10 @@ class URegularizer:
             average_loss=performance_estimators[0].estimates_of_metric()[0]
             print("ureg epoch {} average loss={} ".format(ureg_epoch, average_loss))
             if average_loss > previous_average_loss:
-                self._scheduler.step(epoch=ureg_epoch,val_loss=average_loss)
-
+                if self._scheduler is not None:
+                    self._scheduler.step(epoch=ureg_epoch,val_loss=average_loss)
+                else:
+                    break
             if average_loss < previous_average_loss and abs(average_loss-previous_average_loss)<epsilon:
                 break
 

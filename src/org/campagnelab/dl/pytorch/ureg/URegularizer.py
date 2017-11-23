@@ -1,12 +1,11 @@
 import random
-
-import numpy
 import sys
+
 import torch
 from torch.autograd import Variable
 from torch.nn import Sequential
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 
-from org.campagnelab.dl.pytorch.cifar10.AccuracyHelper import AccuracyHelper
 from org.campagnelab.dl.pytorch.cifar10.LossHelper import LossHelper
 from org.campagnelab.dl.pytorch.cifar10.utils import init_params
 from org.campagnelab.dl.pytorch.ureg.MyFeatureExtractor import MyFeatureExtractor
@@ -81,6 +80,7 @@ class URegularizer:
         self._accumulator_total_which_model_loss = 0
         self.num_training = 0
         self.num_unsupervised_examples = 0
+        self._use_scheduler=False
         # def count_activations(i, o):
         #     self.add_activations(len(o))
         #
@@ -156,7 +156,8 @@ class URegularizer:
             #                                   lr=self.learning_rate)
             self._optimizer = torch.optim.SGD(self._which_one_model.parameters(), lr=self._learning_rate, momentum=0.9,
                                               weight_decay=0.01);
-            # self._scheduler = ReduceLROnPlateau(self._optimizer, 'min', factor=0.5, patience=0, verbose=True)
+            if self._use_scheduler:
+                self._scheduler = ReduceLROnPlateau(self._optimizer, 'min', factor=0.5, patience=0, verbose=True)
 
             self.loss_ys = torch.nn.BCELoss()  # 0 is supervised
             self.loss_yu = torch.nn.BCELoss()  # 1 is unsupervised
@@ -182,6 +183,10 @@ class URegularizer:
     def clean_outputs(self):
         self._my_feature_extractor1.clear_outputs()
         self._my_feature_extractor2.clear_outputs()
+
+    def install_scheduler(self):
+
+        self._use_scheduler=True
 
     def train_ureg(self, xs, xu, weight_s=None, weight_u=None):
         if not self._enabled:
@@ -287,7 +292,7 @@ class URegularizer:
             print("ureg epoch {} average loss={} ".format(ureg_epoch, average_loss))
             if average_loss > previous_average_loss:
                 if self._scheduler is not None:
-                    self._scheduler.step(epoch=ureg_epoch,val_loss=average_loss)
+                    self.schedule(epoch=ureg_epoch,val_loss=average_loss)
                 else:
                     break
             if average_loss < previous_average_loss and abs(average_loss-previous_average_loss)<epsilon:

@@ -55,6 +55,7 @@ class TrainModel:
         self.optimizer_reg = None
         self.scheduler_train = None
         self.scheduler_reg = None
+        self.scheduler_ureg = None
         self.unsuploader = self.problem.reg_loader()
         self.trainloader = self.problem.train_loader()
         self.testloader = self.problem.test_loader()
@@ -138,6 +139,7 @@ class TrainModel:
             print("ureg is disabled")
 
         self.scheduler_train = self.construct_scheduler(self.optimizer_training, 'min')
+
         # use max for regularization lr because the more regularization
         # progresses, the harder it becomes to differentiate training from test activations, we want larger ureg training losses,
         # so we drop the ureg learning rate whenever the metric does not improve:
@@ -415,15 +417,16 @@ class TrainModel:
 
             self.log_performance_metrics(epoch, perfs)
 
-    def training_interleaved(self):
+    def training_interleaved(self,epsilon=1E-4):
         header_written=False
+        self.ureg.install_scheduler()
         for epoch in range(self.start_epoch, self.start_epoch + self.args.num_epochs):
             perfs = []
 
             train_perfs = self.train(epoch,train_ureg=False,train_supervised_model=True)
 
             self.ureg.new_epoch(epoch)
-            self.ureg.train_ureg_to_convergence(self.trainloader,self.unsuploader)
+            self.ureg.train_ureg_to_convergence(self.trainloader,self.unsuploader,epsilon=epsilon)
 
             reg_perfs = self.regularize(epoch)
             perfs += [train_perfs]

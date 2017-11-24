@@ -70,6 +70,7 @@ parser.add_argument('--drop-ureg-model', action='store_true',
                     help='Drop the ureg model at startup, only useful with --resume.')
 parser.add_argument('--problem', default="CIFAR10", type=str,
                     help='The problem, either CIFAR10 or STL10')
+parser.add_argument('--ureg-epsilon', default=1e-6, type=float, help='Epsilon to determine ureg model convergence.')
 
 args = parser.parse_args()
 
@@ -160,4 +161,4 @@ def create_model(name):
 model_trainer.init_model(create_model_function=create_model)
 
 #model_trainer.training_combined()
-model_trainer.training_interleaved()
+model_trainer.training_interleaved(epsilon=args.ureg_epsilon)

@@ -62,11 +62,6 @@ class TrainModel:
         self.testloader = self.problem.test_loader()
         self.ureg = None
         self.is_parallel = False
-        if self.args.num_training > self.args.num_shaving:
-            self.num_shaving_epochs = round((self.args.num_training + 1) / self.args.num_shaving)
-            print("--num-shaving-epochs overriden to "+str(self.num_shaving_epochs))
-        else:
-            self.num_shaving_epochs = self.args.shaving_epochs
 
     def init_model(self, create_model_function):
         """Resume training if necessary (args.--resume flag is True), or call the
@@ -150,7 +145,12 @@ class TrainModel:
         # progresses, the harder it becomes to differentiate training from test activations, we want larger ureg training losses,
         # so we drop the ureg learning rate whenever the metric does not improve:
         self.scheduler_reg = self.construct_scheduler(self.optimizer_reg, 'max')
-
+        self.num_shaving_epochs = self.args.shaving_epochs
+        if self.args.num_training > self.args.num_shaving:
+            self.num_shaving_epochs = round((self.args.num_training + 1) / self.args.num_shaving)
+            print("--shaving-epochs overriden to "+str(self.num_shaving_epochs))
+        else:
+            print("shaving-epochs set  to " + str(self.num_shaving_epochs))
 
     def train(self, epoch,
               performance_estimators=(LossHelper("train_loss"), AccuracyHelper("train_")),
@@ -420,7 +420,7 @@ class TrainModel:
 
             self.log_performance_metrics(epoch, perfs)
 
-    def training_interleaved(self,epsilon=1E-10):
+    def training_interleaved(self,epsilon=1E-6):
         header_written=False
         self.ureg.install_scheduler()
         for epoch in range(self.start_epoch, self.start_epoch + self.args.num_epochs):

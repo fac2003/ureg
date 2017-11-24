@@ -293,7 +293,7 @@ class URegularizer:
                     progress_bar(batch_idx, length,
                               " ".join([performance_estimator.progress_message() for performance_estimator in
                                        performance_estimators]))
-                if (batch_idx*self._mini_batch_size>self.num_unsupervised_examples):
+                if (batch_idx>length):
                     break
             average_loss=performance_estimators[0].estimates_of_metric()[0]
             #print("ureg epoch {} average loss={} ".format(ureg_epoch, average_loss))

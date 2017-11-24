@@ -415,14 +415,18 @@ class URegularizer:
     def _adjust_learning_rate(self, learning_rate):
         """Set learning rate of which_one_model to the parameter. """
         if self._optimizer is not None:
-            for i, param_group in enumerate(self._optimizer.param_groups):
+            self.adjust_learning_rate(self._optimizer, learning_rate, self._eps)
+
+    def adjust_learning_rate( self, optimizer, learning_rate, epsilon=1e-6):
+        """Set learning rate of which_one_model to the parameter. """
+        if optimizer is not None:
+            for i, param_group in enumerate(optimizer.param_groups):
                 old_lr = float(param_group['lr'])
                 new_lr = learning_rate
-                if abs(old_lr - new_lr) > self._eps:
+                if abs(old_lr - new_lr) > epsilon:
                     param_group['lr'] = new_lr
                     print('Adjusting learning rate to {:.4e}'
                           .format(new_lr))
-
     def set_num_examples(self, num_training, num_unsupervised_examples):
         self.num_training = num_training
         self.num_unsupervised_examples = num_unsupervised_examples

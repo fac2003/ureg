@@ -257,7 +257,7 @@ class URegularizer:
               " using at most {} shuffled combinations of examples per training epoch".format(
             len_supervised*self._mini_batch_size,
             len_unsupervised*self._mini_batch_size,max_examples))
-
+        self._adjust_learning_rate(self._learning_rate)
         previous_average_loss=sys.maxsize
         for ureg_epoch in range(0, max_epochs):
             # reset metric at each ureg training epoch (we use the loss average as stopping condition):
@@ -413,6 +413,7 @@ class URegularizer:
                 self._adjust_learning_rate(self._learning_rate)
 
     def _adjust_learning_rate(self, learning_rate):
+        """Set learning rate of which_one_model to the parameter. """
         if self._optimizer is not None:
             for i, param_group in enumerate(self._optimizer.param_groups):
                 old_lr = float(param_group['lr'])

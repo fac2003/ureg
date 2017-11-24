@@ -42,6 +42,7 @@ class TrainModel:
         self.max_regularization_examples = args.num_shaving
         self.max_validation_examples = args.num_validation
         self.max_training_examples = args.num_training
+        self.max_examples_per_epoch = args.max_examples_per_epoch
         self.criterion = problem.loss_function()
         self.ureg_enabled = args.ureg
         self.args = args
@@ -431,7 +432,9 @@ class TrainModel:
                 unsuploader_shuffled = self.problem.reg_loader_subset(0, self.args.num_shaving)
 
                 print("Training ureg to convergence.")
-                self.ureg.train_ureg_to_convergence(train_loader_subset,unsuploader_shuffled,epsilon=epsilon,max_epochs=50)
+                self.ureg.train_ureg_to_convergence(train_loader_subset,unsuploader_shuffled,
+                                                    epsilon=epsilon,max_epochs=50,
+                                                    max_examples=self.args.max_examples_per_epoch)
 
             perfs += [train_perfs]
 

@@ -49,6 +49,9 @@ parser.add_argument('--num-validation', '-x', type=int, help='Maximum number of 
                     default=sys.maxsize)
 parser.add_argument('--num-shaving', '-u', type=int, help='Maximum number of unlabeled examples to use when shaving'
                                                           'the network', default=sys.maxsize)
+parser.add_argument('--max-examples-per-epoch', type=int, help='Maximum number of examples scanned in an epoch'
+                                                                     '(e.g., for ureg model training).', default=None)
+
 parser.add_argument('--ureg-num-features', type=int, help='Number of features in the ureg model', default=64)
 parser.add_argument('--ureg-alpha', type=float, help='Mixing coefficient (between 0 and 1) for ureg loss component',
                     default=0.5)

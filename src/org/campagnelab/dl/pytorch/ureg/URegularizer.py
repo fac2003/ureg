@@ -241,18 +241,23 @@ class URegularizer:
     def train_ureg_to_convergence(self, supervised_loader, unsupervised_loader,
                                   performance_estimators=(LossHelper("ureg_loss"),),
                                   epsilon=0.01,
-                                  max_epochs=30):
+                                  max_epochs=30, max_examples=None):
         """Train the ureg model for a number of epochs until improvements in the loss
         are minor.
         :param supervised_loader loader for supervised examples.
         :param unsupervised_loader loader for unsupervised examples.
         :param max_epochs maximum number of epochs before stopping
+        :param epsilon used to determine convergence.
+        :param max_examples maximum number of examples to scan per epoch.
         :return list of performance estimators
         """
         len_supervised = len(supervised_loader)
         len_unsupervised = len(unsupervised_loader)
-        print("Training ureg to convergence with {} training and {} unsupervised samples".format(
-            len_supervised*self._mini_batch_size,len_unsupervised*self._mini_batch_size))
+        print("Training ureg to convergence with {} training and {} unsupervised samples,"
+              " using at most {} shuffled combinations of examples per training epoch".format(
+            len_supervised*self._mini_batch_size,
+            len_unsupervised*self._mini_batch_size,max_examples))
+
         previous_average_loss=sys.maxsize
         for ureg_epoch in range(0, max_epochs):
             # reset metric at each ureg training epoch (we use the loss average as stopping condition):
@@ -272,7 +277,8 @@ class URegularizer:
                 unsupervised_iter = iter(cycle(unsupervised_loader))
             else:
                 unsupervised_iter = iter(unsupervised_loader)
-
+            if max_examples is None:
+                max_examples=length*self._mini_batch_size
             num_batches=0
 
             for (batch_idx, ((s_input, s_labels), (u_input, _))) in enumerate(zip(supervised_iter, unsupervised_iter)):
@@ -293,7 +299,8 @@ class URegularizer:
                     progress_bar(batch_idx, length,
                               " ".join([performance_estimator.progress_message() for performance_estimator in
                                        performance_estimators]))
-                if (batch_idx>length):
+
+                if (batch_idx*self._mini_batch_size>max_examples):
                     break
             average_loss=performance_estimators[0].estimates_of_metric()[0]
             #print("ureg epoch {} average loss={} ".format(ureg_epoch, average_loss))

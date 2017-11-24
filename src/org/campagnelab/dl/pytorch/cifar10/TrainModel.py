@@ -62,6 +62,11 @@ class TrainModel:
         self.testloader = self.problem.test_loader()
         self.ureg = None
         self.is_parallel = False
+        if self.args.num_training > self.args.num_shaving:
+            self.num_shaving_epochs = round((self.args.num_training + 1) / self.args.num_shaving)
+            print("--num-shaving-epochs overriden to "+str(self.num_shaving_epochs))
+        else:
+            self.num_shaving_epochs = self.args.shaving_epochs
 
     def init_model(self, create_model_function):
         """Resume training if necessary (args.--resume flag is True), or call the
@@ -223,18 +228,14 @@ class TrainModel:
 
         trainiter = iter(self.trainloader)
         train_examples_used = 0
+        use_max_shaving_records = self.args.num_shaving
 
-        if self.args.num_training > self.args.num_shaving:
-            num_shaving_epochs=round((self.args.num_training+1)/ self.args.num_shaving)
-            use_max_shaving_records = self.args.num_shaving
-        else:
-            num_shaving_epochs=1
-            use_max_shaving_records = self.args.num_shaving
+
 
         for performance_estimator in performance_estimators:
                 performance_estimator.init_performance_metrics()
 
-        for shaving_index in range(num_shaving_epochs):
+        for shaving_index in range(self.num_shaving_epochs):
             print("Shaving step {}".format(shaving_index))
             # produce a random subset of the unsupervised samples, exactly matching the number of training examples:
             unsupsampler = self.problem.reg_loader_subset(0,use_max_shaving_records)

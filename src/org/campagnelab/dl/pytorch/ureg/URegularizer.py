@@ -296,8 +296,9 @@ class URegularizer:
                         performance_estimator.observe_performance_metric(batch_idx, loss.data[0],
                                                                          None,
                                                                          None)
+                    epoch_ = "epoch " + str(ureg_epoch) + " "
                     progress_bar(batch_idx, length,
-                              " ".join([performance_estimator.progress_message() for performance_estimator in
+                                 epoch_ + " ".join([performance_estimator.progress_message() for performance_estimator in
                                        performance_estimators]))
 
                 if (batch_idx*self._mini_batch_size>max_examples):

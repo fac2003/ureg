@@ -71,6 +71,9 @@ parser.add_argument('--drop-ureg-model', action='store_true',
 parser.add_argument('--problem', default="CIFAR10", type=str,
                     help='The problem, either CIFAR10 or STL10')
 parser.add_argument('--ureg-epsilon', default=1e-6, type=float, help='Epsilon to determine ureg model convergence.')
+parser.add_argument('--mode', help='Training mode: combined or interleaved, used to alter the mode of '
+                                   'ureg semi-supervised training.',
+                    default="interleaved")
 
 args = parser.parse_args()
 
@@ -160,5 +163,10 @@ def create_model(name):
 
 model_trainer.init_model(create_model_function=create_model)
 
-#model_trainer.training_combined()
-model_trainer.training_interleaved(epsilon=args.ureg_epsilon)
+if args.mode == "combined":
+    model_trainer.training_combined()
+elif args.mode == "interleaved":
+    model_trainer.training_interleaved(epsilon=args.ureg_epsilon)
+else:
+    print("unknown mode specified: "+args.mode)
+    exit(1)

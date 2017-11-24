@@ -87,7 +87,7 @@ class STL10Problem(Problem):
 
         trainloader = torch.utils.data.DataLoader(self.trainset, batch_size=mini_batch_size, shuffle=False,
                                                   collate_fn=stl10_collate,
-                                                  num_workers=2)
+                                                  num_workers=2,drop_last=True)
         return trainloader
 
     def train_loader_subset(self, start, end):
@@ -99,7 +99,7 @@ class STL10Problem(Problem):
                                                   sampler=ProtectedSubsetRandomSampler(
                                                       range(start ,end )),
                                                   collate_fn=stl10_collate,
-                                                  num_workers=2)
+                                                  num_workers=2,drop_last=True)
         return trainloader
 
     def test_loader(self):
@@ -107,14 +107,14 @@ class STL10Problem(Problem):
         mini_batch_size = self.mini_batch_size()
         return torch.utils.data.DataLoader(self.testset,
                                            collate_fn=stl10_collate,
-                                           batch_size=mini_batch_size, shuffle=False, num_workers=2)
+                                           batch_size=mini_batch_size, shuffle=False, num_workers=2,drop_last=True)
 
     def reg_loader(self):
         mini_batch_size = self.mini_batch_size()
 
         return torch.utils.data.DataLoader(self.unsupset, batch_size=mini_batch_size, shuffle=True,
                                            collate_fn=stl10_collate,
-                                           num_workers=2)
+                                           num_workers=2,drop_last=True)
 
     def reg_loader_subset(self, start, end):
         """Returns the torch dataloader over the regularization set (unsupervised examples only). """
@@ -125,7 +125,7 @@ class STL10Problem(Problem):
                                            sampler=ProtectedSubsetRandomSampler(range(start,
                                                                              end)),
                                            collate_fn=stl10_collate,
-                                           num_workers=2)
+                                           num_workers=2,drop_last=True)
 
     def loss_function(self):
         return torch.nn.CrossEntropyLoss()

@@ -418,7 +418,7 @@ class URegularizer:
             for i, param_group in enumerate(self._optimizer.param_groups):
                 old_lr = float(param_group['lr'])
                 new_lr = learning_rate
-                if old_lr - new_lr > self._eps:
+                if abs(old_lr - new_lr) > self._eps:
                     param_group['lr'] = new_lr
                     print('Adjusting learning rate to {:.4e}'
                           .format(new_lr))

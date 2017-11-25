@@ -315,7 +315,6 @@ class TrainModel:
         self.net.eval()
         for performance_estimator in performance_estimators:
             performance_estimator.init_performance_metrics()
-        self.ureg.new_epoch(epoch)
         for batch_idx, (inputs, targets) in enumerate(self.testloader):
 
             if self.use_cuda:

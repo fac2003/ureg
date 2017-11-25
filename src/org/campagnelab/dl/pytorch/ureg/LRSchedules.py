@@ -1,6 +1,7 @@
 # learning rate schedules that help train ureg regularized models.
 # The trick is to reset the learning rate to a high value periodically (learning rate annealing) to allow the optimizer
 # to explore the shaved loss space.
+import sys
 from torch.optim.lr_scheduler import _LRScheduler, ExponentialLR, LambdaLR, ReduceLROnPlateau
 
 
@@ -15,6 +16,7 @@ class LearningRateAnnealing(ReduceLROnPlateau):
         # the     resetLR will reset the learning rate to its initial value on each step we call it:
         self.resetLR = LambdaLR(optimizer, lr_lambda=lambda epoch: 1)
         self.delegate = delegate
+        self.optimizer=optimizer
         super().__init__(optimizer)
 
 
@@ -27,3 +29,15 @@ class LearningRateAnnealing(ReduceLROnPlateau):
         else:
             # simply decay according to the other delegate:
             self.delegate.step(metrics, epoch)
+
+    def lr(self):
+        """Get the current learning rate for this schedule/optimizer.
+         :return a tuple with the min and max learning rates for this optimizer. """
+        max_lr=-1
+        min_lr=sys.maxsize
+        for i, param_group in enumerate(self.optimizer.param_groups):
+            old_lr = float(param_group['lr'])
+            max_lr=max(old_lr,max_lr)
+            min_lr=min(old_lr,min_lr)
+
+        return (min_lr, max_lr)

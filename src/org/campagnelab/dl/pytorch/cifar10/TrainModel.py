@@ -7,6 +7,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data.sampler import RandomSampler, BatchSampler
 
 from org.campagnelab.dl.pytorch.cifar10.AccuracyHelper import AccuracyHelper
+from org.campagnelab.dl.pytorch.cifar10.LRHelper import LearningRateHelper
 from org.campagnelab.dl.pytorch.cifar10.LossHelper import LossHelper
 from org.campagnelab.dl.pytorch.cifar10.Samplers import TrimSampler
 from org.campagnelab.dl.pytorch.cifar10.utils import progress_bar
@@ -411,6 +412,9 @@ class TrainModel:
 
     def training_combined(self):
         header_written=False
+        lr_train_helper=LearningRateHelper(scheduler=self.scheduler_train,learning_rate_name="train_lr")
+        lr_reg_helper=LearningRateHelper(scheduler=self.scheduler_reg,learning_rate_name="reg_lr")
+
         for epoch in range(self.start_epoch, self.start_epoch + self.args.num_epochs):
             self.ureg.new_epoch(epoch)
             perfs = []
@@ -420,9 +424,9 @@ class TrainModel:
             if (self.args.ureg):
                 perfs+=[self.regularize(epoch)]
 
-            flatten = lambda l: [item for sublist in l for item in sublist]
 
             perfs += [self.test(epoch)]
+            perfs += [(lr_train_helper, lr_reg_helper)]
 
             perfs= flatten(perfs)
             if (not header_written):

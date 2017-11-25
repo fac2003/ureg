@@ -42,6 +42,7 @@ class URegularizer:
         self._n_correct = 0
         self._last_epoch_accuracy = 0.5
         self._accumulator_total_which_model_loss = 0
+        self._num_accumulator_updates =0
         self.num_training = 0
         self.num_unsupervised_examples = 0
         self._use_scheduler=False
@@ -256,10 +257,17 @@ class URegularizer:
         # print("loss_ys: {} loss_yu: {} ".format(loss_ys.data[0],loss_yu.data[0]))
         # total_which_model_loss =torch.max(loss_ys,loss_yu)
         self._accumulator_total_which_model_loss += total_which_model_loss.data[0] / self._mini_batch_size
-
+        self._num_accumulator_updates+=1
         total_which_model_loss.backward(retain_graph=True)
         self._optimizer.step()
         return total_which_model_loss
+
+
+    def get_ureg_loss(self):
+        """Return the average ureg _which_one_model training loss since the new_epoch method was called.
+        This average loss is """
+        assert self._num_accumulator_updates>0,"accumulator was not updated, check that you called train_ureg after new_epoch"
+        return self._accumulator_total_which_model_loss/self._num_accumulator_updates
 
     def train_ureg_to_convergence(self, supervised_loader, unsupervised_loader,
                                   performance_estimators=(LossHelper("ureg_loss"),),
@@ -426,6 +434,7 @@ class URegularizer:
         #              self._accumulator_total_which_model_loss))
 
         self._accumulator_total_which_model_loss = 0
+        self._num_accumulator_updates =0
         if self._forget_every_n_epoch is not None:
             self._epoch_counter += 1
             # halve the learning rate for each extra epoch we don't reset:

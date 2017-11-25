@@ -340,7 +340,6 @@ class TrainModel:
         test_accuracy = self.get_metric(performance_estimators, "test_accuracy")
         assert test_accuracy is not None, "test_accuracy must be found among estimated performance metrics"
         self.scheduler_train.step(test_accuracy, epoch)
-        self.ureg.schedule(test_accuracy, epoch)
 
         return performance_estimators
 
@@ -422,6 +421,13 @@ class TrainModel:
             perfs += [self.train(epoch)]
 
             if (self.args.ureg):
+                ureg_loss = self.ureg.get_ureg_loss()
+                # adjust ureg model learning rate as needed:
+                self.ureg.schedule(ureg_loss, epoch)
+                # log the ureg loss:
+                perf_ureg_loss = LossHelper("ureg_loss")
+                perf_ureg_loss.observe_performance_metric(1, ureg_loss, None, None)
+                perfs += [(perf_ureg_loss,)]
                 perfs += [self.regularize(epoch)]
 
             perfs += [self.test(epoch)]

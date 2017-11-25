@@ -19,6 +19,8 @@ class LearningRateHelper(PerformanceEstimator):
         self.min_lr = 0
 
     def estimates_of_metric(self):
+        if self.scheduler is None:
+            return "nan"
         min_lr, max_lr=self.lr(self.scheduler.optimizer)
         if min_lr==max_lr:
             return ["{:.2e}".format(min_lr)]

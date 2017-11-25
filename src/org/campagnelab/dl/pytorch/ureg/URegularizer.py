@@ -136,18 +136,18 @@ class URegularizer:
     def create_which_one_model(self, num_activations):
         num_features = self._num_features
         if self._which_one_model is None:
-            # if (self._checkpointModel):
-            #     self._which_one_model = self._checkpointModel
-            #     self._checkpointModel = None
-            # else:
-            self._which_one_model = Sequential(
-                torch.nn.Linear(num_activations, num_features),
-                torch.nn.ReLU(),
-                torch.nn.Linear(num_features, num_features),
-                torch.nn.ReLU(),
-                torch.nn.Linear(num_features, 2),
-                torch.nn.Softmax()
-            )
+            if (self._checkpointModel):
+                self._which_one_model = self._checkpointModel
+                self._checkpointModel = None
+            else:
+                self._which_one_model = Sequential(
+                    torch.nn.Linear(num_activations, num_features),
+                    torch.nn.ReLU(),
+                    torch.nn.Linear(num_features, num_features),
+                    torch.nn.ReLU(),
+                    torch.nn.Linear(num_features, 2),
+                    torch.nn.Softmax()
+                )
             # (we will use BCEWithLogitsLoss on top of linar to get the cross entropy after
             # applying a sigmoid).
             init_params(self._which_one_model)
@@ -157,11 +157,12 @@ class URegularizer:
             # self.optimizer = torch.optim.Adam(self.which_one_model.parameters(),
             #                                   lr=self.learning_rate)
             self._optimizer = torch.optim.SGD(self._which_one_model.parameters(), lr=self._learning_rate, momentum=0.9,
-                                              weight_decay=0.01);
+                                              weight_decay=0.01)
             if self._use_scheduler:
                 self._scheduler = construct_scheduler(self._optimizer, direction="min", lr_patience=1,
                                                       extra_patience=10,
-                                                      ureg_reset_every_n_epoch=self._reset_every_epochs)
+                                                      ureg_reset_every_n_epoch=self._reset_every_epochs,
+                                                      factor=0.8, min_lr=[1E-7])
 
             self.loss_ys = torch.nn.BCELoss()  # 0 is supervised
             self.loss_yu = torch.nn.BCELoss()  # 1 is unsupervised

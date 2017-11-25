@@ -234,8 +234,12 @@ class TrainModel:
         trainiter = iter(self.trainloader)
         train_examples_used = 0
         use_max_shaving_records = self.args.num_shaving
-
-
+        # make sure we process the entire training set, but limit how many regularization_examples we scan (randomly
+        # from the entire set):
+        if self.max_examples_per_epoch > self.args.num_training:
+            max_loop_index=min(self.max_examples_per_epoch,self.max_regularization_examples)
+        else:
+            max_loop_index=self.args.num_training
 
         for performance_estimator in performance_estimators:
                 performance_estimator.init_performance_metrics()
@@ -286,11 +290,12 @@ class TrainModel:
                     performance_estimator.observe_performance_metric(batch_idx, optimized_loss,
                                                                      inputs, uinputs)
 
-                progress_bar(batch_idx, len(unsupsampler),
+                progress_bar(batch_idx, max_loop_index,
                              " ".join([performance_estimator.progress_message() for performance_estimator in
                                        performance_estimators]))
-                if ((batch_idx + 1) * self.mini_batch_size) > self.max_regularization_examples:
+                if ((batch_idx + 1) * self.mini_batch_size) > max_loop_index:
                     break
+
             print()
 
         return performance_estimators

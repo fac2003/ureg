@@ -28,6 +28,8 @@ def _format_nice(n):
         return str(n)
 
 
+flatten = lambda l: [item for sublist in l for item in sublist]
+
 
 class TrainModel:
     """Train a model."""
@@ -144,11 +146,11 @@ class TrainModel:
         # use max for regularization lr because the more regularization
         # progresses, the harder it becomes to differentiate training from test activations, we want larger ureg training losses,
         # so we drop the ureg learning rate whenever the metric does not improve:
-        self.scheduler_reg = self.construct_scheduler(self.optimizer_reg, 'max')
+        self.scheduler_reg = self.construct_scheduler(self.optimizer_reg, 'max',extra_patience=5)
         self.num_shaving_epochs = self.args.shaving_epochs
         if self.args.num_training > self.args.num_shaving:
             self.num_shaving_epochs = round((self.args.num_training + 1) / self.args.num_shaving)
-            print("--shaving-epochs overriden to "+str(self.num_shaving_epochs))
+            print("--shaving-epochs overridden to "+str(self.num_shaving_epochs))
         else:
             print("shaving-epochs set  to " + str(self.num_shaving_epochs))
 
@@ -175,6 +177,9 @@ class TrainModel:
                 self.optimizer_training.zero_grad()
                 inputs, targets = Variable(inputs), Variable(targets)
                 outputs = self.net(inputs)
+
+                #if self.ureg._which_one_model is not None:
+                #    self.ureg.estimate_example_weights(inputs)
 
                 supervised_loss = self.criterion(outputs, targets)
                 supervised_loss.backward()
@@ -325,9 +330,9 @@ class TrainModel:
 
         return performance_estimators
 
-    def construct_scheduler(self, optimizer, direction='min'):
+    def construct_scheduler(self, optimizer, direction='min',extra_patience=0):
         delegate_scheduler = ReduceLROnPlateau(optimizer, direction, factor=0.5,
-                                               patience=self.args.lr_patience, verbose=True)
+                                               patience=self.args.lr_patience+extra_patience, verbose=True)
 
         if self.args.ureg_reset_every_n_epoch is None:
             scheduler = delegate_scheduler
@@ -404,15 +409,16 @@ class TrainModel:
         for epoch in range(self.start_epoch, self.start_epoch + self.args.num_epochs):
             self.ureg.new_epoch(epoch)
             perfs = []
-            train_perfs = self.train(epoch)
-            perfs += [train_perfs]
+
+            perfs += [self.train(epoch)]
 
             if (self.args.ureg):
-                reg_perfs =self.regularize(epoch)
-                perfs+=[reg_perfs]
+                perfs+=[self.regularize(epoch)]
+
             flatten = lambda l: [item for sublist in l for item in sublist]
-            test_perfs = self.test(epoch)
-            perfs += [test_perfs]
+
+            perfs += [self.test(epoch)]
+
             perfs= flatten(perfs)
             if (not header_written):
                 header_written=True
@@ -426,7 +432,7 @@ class TrainModel:
         for epoch in range(self.start_epoch, self.start_epoch + self.args.num_epochs):
             perfs = []
 
-            train_perfs = self.train(epoch,train_ureg=False,train_supervised_model=True)
+            train_perfs = self.train(epoch,train_ureg=False,train_supervised_model=True,)
             perfs += [train_perfs]
             if self.args.ureg:
                 self.ureg.new_epoch(epoch)
@@ -444,12 +450,12 @@ class TrainModel:
             if self.args.ureg:
                 reg_perfs =self.regularize(epoch)
                 perfs+=[reg_perfs]
-            flatten = lambda l: [item for sublist in l for item in sublist]
-            test_perfs = self.test(epoch)
-            perfs += [test_perfs]
+
+            perfs += [self.test(epoch)]
             perfs= flatten(perfs)
             if (not header_written):
                 header_written=True
                 self.log_performance_header(perfs)
 
             self.log_performance_metrics(epoch, perfs)
+

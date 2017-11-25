@@ -137,11 +137,8 @@ class URegularizer:
             # else:
             self._which_one_model = Sequential(
                 torch.nn.Linear(num_activations, num_features),
-                #torch.nn.Dropout(0.5),
                 torch.nn.ReLU(),
-                #torch.nn.Dropout(0.5),
                 torch.nn.Linear(num_features, num_features),
-                #torch.nn.Dropout(0.5),
                 torch.nn.ReLU(),
                 torch.nn.Linear(num_features, 2),
                 torch.nn.Softmax()
@@ -188,6 +185,26 @@ class URegularizer:
 
         self._use_scheduler=True
 
+    def estimate_example_weights(self, xs, weight_u=None):
+        """This method estimates a weight for each example in the xs minibatch. The weight
+        is derived from the ureg model's ability to tell if a given sample looks more like
+        a training sample or an unsupervised sample. Samples that look more like an unsupervised
+        sample are given larger weights. """
+
+        if not self._enabled:
+            return
+        supervised_output = self.extract_activations(xs)
+        num_activations_supervised = supervised_output.size()[1]
+
+        self.create_which_one_model(num_activations_supervised)
+        #self._which_one_model.eval()
+        ys = self._which_one_model(supervised_output)
+        print("probabilities that samples belong to the training and test sets:" + str(ys))
+
+        prob_from_unsupset=ys.narrow(1,1,1)
+        #print("probabilities that samples belong to test set:"+str(prob_from_unsupset))
+
+
     def train_ureg(self, xs, xu, weight_s=None, weight_u=None):
         if not self._enabled:
             return
@@ -226,9 +243,10 @@ class URegularizer:
         # step the whichOne model's parameters in the direction that
         # reduces the loss:
         weight_s, weight_u = self.loss_weights(weight_s, weight_u)
-
+        weight_s, weight_u=1,1
         loss_ys = self.loss_ys(ys, self.ys_true)
         loss_yu = self.loss_yu(yu, self.yu_true)
+        print("ys: "+str(ys) )
         total_which_model_loss = (weight_s * loss_ys + weight_u * loss_yu)
         # print("loss_ys: {} loss_yu: {} ".format(loss_ys.data[0],loss_yu.data[0]))
         # total_which_model_loss =torch.max(loss_ys,loss_yu)
@@ -417,7 +435,7 @@ class URegularizer:
         if self._optimizer is not None:
             self.adjust_learning_rate(self._optimizer, learning_rate, self._eps)
 
-    def adjust_learning_rate( self, optimizer, learning_rate, epsilon=1e-6):
+    def adjust_learning_rate( self, optimizer, learning_rate, epsilon=1E-8):
         """Set learning rate of which_one_model to the parameter. """
         if optimizer is not None:
             for i, param_group in enumerate(optimizer.param_groups):

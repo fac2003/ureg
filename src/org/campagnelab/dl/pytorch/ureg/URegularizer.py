@@ -243,10 +243,9 @@ class URegularizer:
         # step the whichOne model's parameters in the direction that
         # reduces the loss:
         weight_s, weight_u = self.loss_weights(weight_s, weight_u)
-        weight_s, weight_u=1,1
+
         loss_ys = self.loss_ys(ys, self.ys_true)
         loss_yu = self.loss_yu(yu, self.yu_true)
-        print("ys: "+str(ys) )
         total_which_model_loss = (weight_s * loss_ys + weight_u * loss_yu)
         # print("loss_ys: {} loss_yu: {} ".format(loss_ys.data[0],loss_yu.data[0]))
         # total_which_model_loss =torch.max(loss_ys,loss_yu)

@@ -58,20 +58,12 @@ class STL10Problem(Problem):
         self.transform_train = transforms.Compose([
             transforms.RandomCrop(96, padding=4),
             transforms.RandomHorizontalFlip(),
-            # TODO: currently scaling down the image for compatibility with CIFAR10 model
-            # TODO: input requirements.
-            # TODO: remove scaling and figure out how to learn from the full image.
-            Scale(96, interpolation=Image.BILINEAR),
             transforms.ToTensor(),
             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
 
         ])
 
         self.transform_test = transforms.Compose([
-            # TODO: currently scaling down the image for compatibility with CIFAR10 model
-            # TODO: input requirements.
-            # TODO: remove scaling and figure out how to learn from the full image.
-            Scale(96, interpolation=Image.BILINEAR),
             transforms.ToTensor(),
             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
         ])

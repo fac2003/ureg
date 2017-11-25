@@ -99,7 +99,7 @@ def vgg():
 
 
 def resnet18():
-    return ResNet18()
+    return ResNet18(problem.example_size())
 
 
 def preactresnet18():

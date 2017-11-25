@@ -13,6 +13,11 @@ class Problem:
     def name(self):
         pass
 
+    def example_size(self):
+        """Returns the shape of the input, e.g., (3,32,32) for a 3 channel image with dimensions
+        32x32 pixels."""
+        return (0,0,0)
+
     def mini_batch_size(self):
         return self._mini_batch_size
 

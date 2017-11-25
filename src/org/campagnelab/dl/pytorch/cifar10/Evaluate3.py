@@ -98,7 +98,7 @@ problem.describe()
 model_trainer = TrainModel(args=args, problem=problem, use_cuda=use_cuda)
 
 def vgg():
-    return VGG('VGG16')
+    return VGG('VGG16',problem.example_size())
 
 
 def resnet18():
@@ -106,8 +106,7 @@ def resnet18():
 
 
 def preactresnet18():
-    return PreActResNet18()
-
+    return PreActResNet18(problem.example_size())
 
 def googlenet():
     return GoogLeNet()
@@ -126,7 +125,7 @@ def mobilenet():
 
 
 def dpn92():
-    return DPN92()
+    return DPN92(problem.example_size())
 
 
 def shufflenetg2():

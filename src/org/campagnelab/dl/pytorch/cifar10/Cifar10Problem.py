@@ -12,6 +12,9 @@ class Cifar10Problem(Problem):
     def name(self):
         return "CIFAR10"
 
+    def example_size(self):
+        return (3,32,32)
+
     def __init__(self, mini_batch_size):
         super().__init__(mini_batch_size)
         self.transform_train = transforms.Compose([

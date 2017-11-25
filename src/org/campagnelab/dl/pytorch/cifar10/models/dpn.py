@@ -5,6 +5,8 @@ import torch.nn.functional as F
 
 from torch.autograd import Variable
 
+from org.campagnelab.dl.pytorch.cifar10.models import EstimateFeatureSize
+
 
 class Bottleneck(nn.Module):
     def __init__(self, last_planes, in_planes, out_planes, dense_depth, stride, first_layer):
@@ -37,8 +39,8 @@ class Bottleneck(nn.Module):
         return out
 
 
-class DPN(nn.Module):
-    def __init__(self, cfg):
+class DPN(EstimateFeatureSize):
+    def __init__(self, cfg, input_shape=(3,32,32)):
         super(DPN, self).__init__()
         in_planes, out_planes = cfg['in_planes'], cfg['out_planes']
         num_blocks, dense_depth = cfg['num_blocks'], cfg['dense_depth']
@@ -50,7 +52,9 @@ class DPN(nn.Module):
         self.layer2 = self._make_layer(in_planes[1], out_planes[1], num_blocks[1], dense_depth[1], stride=2)
         self.layer3 = self._make_layer(in_planes[2], out_planes[2], num_blocks[2], dense_depth[2], stride=2)
         self.layer4 = self._make_layer(in_planes[3], out_planes[3], num_blocks[3], dense_depth[3], stride=2)
-        self.linear = nn.Linear(out_planes[3]+(num_blocks[3]+1)*dense_depth[3], 10)
+
+        out_size=self.estimate_output_size(input_shape, self.forwardFeatures)
+        self.linear = nn.Linear(out_size, 10)
 
     def _make_layer(self, in_planes, out_planes, num_blocks, dense_depth, stride):
         strides = [stride] + [1]*(num_blocks-1)
@@ -71,6 +75,16 @@ class DPN(nn.Module):
         out = self.linear(out)
         return out
 
+    def forwardFeatures(self, x):
+        out = F.relu(self.bn1(self.conv1(x)))
+        out = self.layer1(out)
+        out = self.layer2(out)
+        out = self.layer3(out)
+        out = self.layer4(out)
+        out = F.avg_pool2d(out, 4)
+        out = out.view(out.size(0), -1)
+        return out
+
 
 def DPN26():
     cfg = {
@@ -81,14 +95,14 @@ def DPN26():
     }
     return DPN(cfg)
 
-def DPN92():
+def DPN92(input_shape):
     cfg = {
         'in_planes': (96,192,384,768),
         'out_planes': (256,512,1024,2048),
         'num_blocks': (3,4,20,3),
         'dense_depth': (16,32,24,128)
     }
-    return DPN(cfg)
+    return DPN(cfg,input_shape)
 
 
 def test():

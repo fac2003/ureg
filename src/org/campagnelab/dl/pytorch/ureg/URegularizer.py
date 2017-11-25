@@ -4,10 +4,11 @@ import sys
 import torch
 from torch.autograd import Variable
 from torch.nn import Sequential
-from torch.optim.lr_scheduler import ReduceLROnPlateau
+
 
 from org.campagnelab.dl.pytorch.cifar10.LossHelper import LossHelper
 from org.campagnelab.dl.pytorch.cifar10.utils import init_params, progress_bar
+from org.campagnelab.dl.pytorch.ureg.LRSchedules import construct_scheduler
 from org.campagnelab.dl.pytorch.ureg.MyFeatureExtractor import MyFeatureExtractor
 
 
@@ -18,6 +19,50 @@ class URegularizer:
     ones. This term can be added to the supervised loss to avoid over-fitting to
     the training set.
     """
+
+    def __init__(self, model, mini_batch_size, num_features=64, alpha=0.5, learning_rate=0.1, reset_every_epochs=None):
+        self._mini_batch_size = mini_batch_size
+        self._model = model
+        self._num_activations = 0
+        self._learning_rate = learning_rate
+        self._which_one_model = None
+        self._my_feature_extractor1 = None
+        self._my_feature_extractor2 = None
+        self._enabled = True
+        self._use_cuda = torch.cuda.is_available()
+        self._scheduler = None
+        self._checkpointModel = None
+        self._num_features = num_features
+        self._epoch_counter = 0
+        self._forget_every_n_epoch = None
+        self._optimizer = None
+        self._eps = 1E-8
+        self._epoch_counter = 0
+        self._n_total = 0
+        self._n_correct = 0
+        self._last_epoch_accuracy = 0.5
+        self._accumulator_total_which_model_loss = 0
+        self.num_training = 0
+        self.num_unsupervised_examples = 0
+        self._use_scheduler=False
+        self._reset_every_epochs=reset_every_epochs
+        # def count_activations(i, o):
+        #     self.add_activations(len(o))
+        #
+        # removeHandles = []
+        # for namedModule in model.modules():
+        #     print(namedModule)
+        #     removeHandles.append( namedModule.register_forward_hook(count_activations))
+        #
+        # model(torch.zeros(num_inputs))
+        # for handle in removeHandles:
+        #     handle.remove()
+
+        num_input_features = self._num_activations
+        self._alpha = alpha
+        # define the model tasked with predicting if activations are generated from
+        # a sample in the training or unsupervised set:
+
 
     def add_activations(self, num):
         self._num_activations += num
@@ -56,47 +101,6 @@ class URegularizer:
         self._n_correct = 0
         return accuracy
 
-    def __init__(self, model, mini_batch_size, num_features=64, alpha=0.5, learning_rate=0.1):
-        self._mini_batch_size = mini_batch_size
-        self._model = model
-        self._num_activations = 0
-        self._learning_rate = learning_rate
-        self._which_one_model = None
-        self._my_feature_extractor1 = None
-        self._my_feature_extractor2 = None
-        self._enabled = True
-        self._use_cuda = torch.cuda.is_available()
-        self._scheduler = None
-        self._checkpointModel = None
-        self._num_features = num_features
-        self._epoch_counter = 0
-        self._forget_every_n_epoch = None
-        self._optimizer = None
-        self._eps = 1E-8
-        self._epoch_counter = 0
-        self._n_total = 0
-        self._n_correct = 0
-        self._last_epoch_accuracy = 0.5
-        self._accumulator_total_which_model_loss = 0
-        self.num_training = 0
-        self.num_unsupervised_examples = 0
-        self._use_scheduler=False
-        # def count_activations(i, o):
-        #     self.add_activations(len(o))
-        #
-        # removeHandles = []
-        # for namedModule in model.modules():
-        #     print(namedModule)
-        #     removeHandles.append( namedModule.register_forward_hook(count_activations))
-        #
-        # model(torch.zeros(num_inputs))
-        # for handle in removeHandles:
-        #     handle.remove()
-
-        num_input_features = self._num_activations
-        self._alpha = alpha
-        # define the model tasked with predicting if activations are generated from
-        # a sample in the training or unsupervised set:
 
     def forget_model(self, N_epoch):
         """
@@ -154,7 +158,9 @@ class URegularizer:
             self._optimizer = torch.optim.SGD(self._which_one_model.parameters(), lr=self._learning_rate, momentum=0.9,
                                               weight_decay=0.01);
             if self._use_scheduler:
-                self._scheduler = ReduceLROnPlateau(self._optimizer, 'min', factor=0.5, patience=0, verbose=True)
+                self._scheduler = construct_scheduler(self._optimizer, direction="min", lr_patience=1,
+                                                      extra_patience=10,
+                                                      ureg_reset_every_n_epoch=self._reset_every_epochs)
 
             self.loss_ys = torch.nn.BCELoss()  # 0 is supervised
             self.loss_yu = torch.nn.BCELoss()  # 1 is unsupervised

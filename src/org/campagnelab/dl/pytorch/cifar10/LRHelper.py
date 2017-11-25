@@ -20,10 +20,13 @@ class LearningRateHelper(PerformanceEstimator):
 
     def estimates_of_metric(self):
         min_lr, max_lr=self.lr(self.scheduler.optimizer)
-        return [min_lr, max_lr]
+        if min_lr==max_lr:
+            return ["{:.2e}".format(min_lr)]
+        else:
+            return ["[{:.2e}.{:.2e}]".format( min_lr, max_lr)]
 
     def metric_names(self):
-        return ["min_"+self.learning_rate_name,"max_"+self.learning_rate_name]
+        return ["range_"+self.learning_rate_name,]
 
     def observe_performance_metric(self, iteration, loss, outputs, targets):
         # nothing to observe

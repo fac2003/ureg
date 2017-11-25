@@ -5,7 +5,22 @@ import sys
 from torch.optim.lr_scheduler import _LRScheduler, ExponentialLR, LambdaLR, ReduceLROnPlateau
 
 
+def construct_scheduler( optimizer,  direction='min',
+                        lr_patience=1,
+                        extra_patience=0,ureg_reset_every_n_epoch=None):
+    delegate_scheduler = ReduceLROnPlateau(optimizer, direction, factor=0.5,
+                                           patience=lr_patience + extra_patience, verbose=True)
+
+    if ureg_reset_every_n_epoch is None:
+        scheduler = delegate_scheduler
+    else:
+        scheduler = LearningRateAnnealing(optimizer,
+                                          anneal_every_n_epoch=ureg_reset_every_n_epoch,
+                                          delegate=delegate_scheduler)
+    return scheduler
+
 class LearningRateAnnealing(ReduceLROnPlateau):
+
 
     def __init__(self, optimizer, anneal_every_n_epoch=None, delegate=None):
         assert anneal_every_n_epoch is not None, "anneal_every_n_epoch must be defined"

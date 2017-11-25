@@ -6,11 +6,8 @@ import random
 import string
 import sys
 
-from torch.utils.data.sampler import RandomSampler
-
 from org.campagnelab.dl.pytorch.cifar10.Cifar10Problem import Cifar10Problem
 from org.campagnelab.dl.pytorch.cifar10.STL10Problem import STL10Problem
-from org.campagnelab.dl.pytorch.cifar10.Samplers import TrimSampler
 from org.campagnelab.dl.pytorch.cifar10.TrainModel import TrainModel
 from org.campagnelab.dl.pytorch.cifar10.models import *
 

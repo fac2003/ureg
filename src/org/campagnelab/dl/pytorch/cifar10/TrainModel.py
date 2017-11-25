@@ -11,10 +11,11 @@ from org.campagnelab.dl.pytorch.cifar10.LRHelper import LearningRateHelper
 from org.campagnelab.dl.pytorch.cifar10.LossHelper import LossHelper
 from org.campagnelab.dl.pytorch.cifar10.Samplers import TrimSampler
 from org.campagnelab.dl.pytorch.cifar10.utils import progress_bar
-from org.campagnelab.dl.pytorch.ureg.LRSchedules import LearningRateAnnealing
+from org.campagnelab.dl.pytorch.ureg.LRSchedules import LearningRateAnnealing, construct_scheduler
 from org.campagnelab.dl.pytorch.ureg.URegularizer import URegularizer
 
-best_acc=0
+best_acc = 0
+
 
 def _format_nice(n):
     try:
@@ -77,13 +78,13 @@ class TrainModel:
         args = self.args
         mini_batch_size = self.mini_batch_size
         # restrict limits to actual size of datasets:
-        training_set_length = (len(self.problem.train_loader())-1)*mini_batch_size
-        if args.num_training> training_set_length:
-            args.num_training= training_set_length
-        unsup_set_length = (len(self.problem.reg_loader())-1)*mini_batch_size
+        training_set_length = (len(self.problem.train_loader()) - 1) * mini_batch_size
+        if args.num_training > training_set_length:
+            args.num_training = training_set_length
+        unsup_set_length = (len(self.problem.reg_loader()) - 1) * mini_batch_size
         if args.num_shaving > unsup_set_length:
             args.num_shaving = unsup_set_length
-        test_set_length = (len(self.problem.test_loader())-1)*mini_batch_size
+        test_set_length = (len(self.problem.test_loader()) - 1) * mini_batch_size
         if args.num_validation > test_set_length:
             args.num_validation = test_set_length
 
@@ -106,7 +107,8 @@ class TrainModel:
 
             if ureg_enabled:
                 ureg = URegularizer(self.net, mini_batch_size, args.ureg_num_features,
-                                    args.ureg_alpha, args.ureg_learning_rate)
+                                    args.ureg_alpha, args.ureg_learning_rate,
+                                    reset_every_epochs=args.ureg_reset_every_n_epoch)
 
                 ureg.set_num_examples(min(len(self.trainloader), args.num_training),
                                       min(len(self.unsuploader), args.num_shaving))
@@ -126,11 +128,12 @@ class TrainModel:
         self.optimizer_reg = torch.optim.SGD(self.net.parameters(), lr=args.shave_lr, momentum=0.9, weight_decay=5e-4)
         self.ureg = URegularizer(self.net, self.mini_batch_size, num_features=args.ureg_num_features,
                                  alpha=args.ureg_alpha,
-                                 learning_rate=args.ureg_learning_rate)
+                                 learning_rate=args.ureg_learning_rate,
+                                 reset_every_epochs=args.ureg_reset_every_n_epoch)
         if args.ureg:
             self.ureg.enable()
             self.ureg.set_num_examples(min(len(self.trainloader), args.num_training),
-                                  min(len(self.unsuploader), args.num_shaving))
+                                       min(len(self.unsuploader), args.num_shaving))
             self.ureg.forget_model(args.ureg_reset_every_n_epoch)
             print(
                 "ureg is enabled with alpha={}, reset every {} epochs. ".format(args.ureg_alpha,
@@ -139,19 +142,26 @@ class TrainModel:
         else:
             self.ureg.disable()
             self.ureg.set_num_examples(min(len(self.trainloader), args.num_training),
-                                  min(len(self.unsuploader), args.num_shaving))
+                                       min(len(self.unsuploader), args.num_shaving))
             print("ureg is disabled")
 
-        self.scheduler_train = self.construct_scheduler(self.optimizer_training, 'min')
+        self.scheduler_train = \
+            construct_scheduler(self.optimizer_training, 'min',
+                                lr_patience=self.args.lr_patience,
+                                ureg_reset_every_n_epoch=self.args.ureg_reset_every_n_epoch)
 
         # use max for regularization lr because the more regularization
         # progresses, the harder it becomes to differentiate training from test activations, we want larger ureg training losses,
         # so we drop the ureg learning rate whenever the metric does not improve:
-        self.scheduler_reg = self.construct_scheduler(self.optimizer_reg, 'max',extra_patience=5)
+        self.scheduler_reg = \
+            construct_scheduler(self.optimizer_reg,
+                                'max', extra_patience=5,
+                                lr_patience=self.args.lr_patience,
+                                ureg_reset_every_n_epoch=self.args.ureg_reset_every_n_epoch)
         self.num_shaving_epochs = self.args.shaving_epochs
         if self.args.num_training > self.args.num_shaving:
             self.num_shaving_epochs = round((self.args.num_training + 1) / self.args.num_shaving)
-            print("--shaving-epochs overridden to "+str(self.num_shaving_epochs))
+            print("--shaving-epochs overridden to " + str(self.num_shaving_epochs))
         else:
             print("shaving-epochs set  to " + str(self.num_shaving_epochs))
 
@@ -166,8 +176,8 @@ class TrainModel:
             performance_estimator.init_performance_metrics()
         unsupervised_loss_acc = 0
         num_batches = 0
-        train_loader_subset = self.problem.train_loader_subset(0,self.args.num_training)
-        unsuploader_shuffled=self.problem.reg_loader_subset(0, self.args.num_shaving)
+        train_loader_subset = self.problem.train_loader_subset(0, self.args.num_training)
+        unsuploader_shuffled = self.problem.reg_loader_subset(0, self.args.num_shaving)
         unsupiter = iter(unsuploader_shuffled)
         for batch_idx, (inputs, targets) in enumerate(train_loader_subset):
             num_batches += 1
@@ -179,7 +189,7 @@ class TrainModel:
                 inputs, targets = Variable(inputs), Variable(targets)
                 outputs = self.net(inputs)
 
-                #if self.ureg._which_one_model is not None:
+                # if self.ureg._which_one_model is not None:
                 #    self.ureg.estimate_example_weights(inputs)
 
                 supervised_loss = self.criterion(outputs, targets)
@@ -200,16 +210,14 @@ class TrainModel:
                 if self.use_cuda: ufeatures = ufeatures.cuda()
                 # then use it to calculate the unsupervised regularization contribution to the loss:
                 uinputs = Variable(ufeatures)
-                ureg_loss=self.ureg.train_ureg(inputs, uinputs)
+                ureg_loss = self.ureg.train_ureg(inputs, uinputs)
                 if (ureg_loss is not None):
                     unsupervised_loss_acc += ureg_loss.data[0]
-
 
             optimized_loss = supervised_loss
 
             for performance_estimator in performance_estimators:
                 performance_estimator.observe_performance_metric(batch_idx, optimized_loss.data[0], outputs, targets)
-
 
             progress_bar(batch_idx, len(train_loader_subset),
                          " ".join([performance_estimator.progress_message() for performance_estimator in
@@ -238,17 +246,17 @@ class TrainModel:
         # make sure we process the entire training set, but limit how many regularization_examples we scan (randomly
         # from the entire set):
         if self.max_examples_per_epoch > self.args.num_training:
-            max_loop_index=min(self.max_examples_per_epoch,self.max_regularization_examples)
+            max_loop_index = min(self.max_examples_per_epoch, self.max_regularization_examples)
         else:
-            max_loop_index=self.args.num_training
+            max_loop_index = self.args.num_training
 
         for performance_estimator in performance_estimators:
-                performance_estimator.init_performance_metrics()
+            performance_estimator.init_performance_metrics()
 
         for shaving_index in range(self.num_shaving_epochs):
             print("Shaving step {}".format(shaving_index))
             # produce a random subset of the unsupervised samples, exactly matching the number of training examples:
-            unsupsampler = self.problem.reg_loader_subset(0,use_max_shaving_records)
+            unsupsampler = self.problem.reg_loader_subset(0, use_max_shaving_records)
             for performance_estimator in performance_estimators:
                 performance_estimator.init_performance_metrics()
 
@@ -258,7 +266,7 @@ class TrainModel:
                     inputs = inputs.cuda()
 
                 self.optimizer_reg.zero_grad()
-                uinputs= Variable(inputs)
+                uinputs = Variable(inputs)
 
                 # don't use more training examples than allowed (-n) even if we don't use
                 # their labels:
@@ -336,18 +344,6 @@ class TrainModel:
 
         return performance_estimators
 
-    def construct_scheduler(self, optimizer, direction='min',extra_patience=0):
-        delegate_scheduler = ReduceLROnPlateau(optimizer, direction, factor=0.5,
-                                               patience=self.args.lr_patience+extra_patience, verbose=True)
-
-        if self.args.ureg_reset_every_n_epoch is None:
-            scheduler = delegate_scheduler
-        else:
-            scheduler = LearningRateAnnealing(optimizer,
-                                              anneal_every_n_epoch=self.args.ureg_reset_every_n_epoch,
-                                              delegate=delegate_scheduler)
-        return scheduler
-
     def log_performance_header(self, performance_estimators):
         global best_test_loss
         if (self.args.resume):
@@ -381,7 +377,7 @@ class TrainModel:
 
         metric = self.get_metric(performance_estimators, "test_accuracy")
         if metric is not None and metric > best_acc:
-            self.save_checkpoint(epoch,metric)
+            self.save_checkpoint(epoch, metric)
             with open("best-perfs-{}.tsv".format(self.args.checkpoint_key), "a") as perf_file:
                 perf_file.write("\t".join(map(_format_nice, metrics)))
                 perf_file.write("\n")
@@ -411,9 +407,13 @@ class TrainModel:
             best_acc = acc
 
     def training_combined(self):
-        header_written=False
-        lr_train_helper=LearningRateHelper(scheduler=self.scheduler_train,learning_rate_name="train_lr")
-        lr_reg_helper=LearningRateHelper(scheduler=self.scheduler_reg,learning_rate_name="reg_lr")
+        header_written = False
+        if self.ureg_enabled:
+            # tell ureg to use a scheduler:
+            self.ureg.install_scheduler()
+        lr_train_helper = LearningRateHelper(scheduler=self.scheduler_train, learning_rate_name="train_lr")
+        lr_reg_helper = LearningRateHelper(scheduler=self.scheduler_reg, learning_rate_name="reg_lr")
+        lr_ureg_helper = None  # will be installed on the fly when the ureg model is built, below.
 
         for epoch in range(self.start_epoch, self.start_epoch + self.args.num_epochs):
             self.ureg.new_epoch(epoch)
@@ -422,26 +422,30 @@ class TrainModel:
             perfs += [self.train(epoch)]
 
             if (self.args.ureg):
-                perfs+=[self.regularize(epoch)]
-
+                perfs += [self.regularize(epoch)]
 
             perfs += [self.test(epoch)]
-            perfs += [(lr_train_helper, lr_reg_helper)]
+            if self.ureg_enabled:
+                if lr_ureg_helper is None:
+                    lr_ureg_helper = LearningRateHelper(scheduler=self.ureg._scheduler, learning_rate_name="ureg_lr")
 
-            perfs= flatten(perfs)
+                perfs += [(lr_train_helper, lr_reg_helper, lr_ureg_helper)]
+            else:
+                perfs += [(lr_train_helper, lr_reg_helper)]
+            perfs = flatten(perfs)
             if (not header_written):
-                header_written=True
+                header_written = True
                 self.log_performance_header(perfs)
 
             self.log_performance_metrics(epoch, perfs)
 
-    def training_interleaved(self,epsilon=1E-6):
-        header_written=False
+    def training_interleaved(self, epsilon=1E-6):
+        header_written = False
         self.ureg.install_scheduler()
         for epoch in range(self.start_epoch, self.start_epoch + self.args.num_epochs):
             perfs = []
 
-            train_perfs = self.train(epoch,train_ureg=False,train_supervised_model=True,)
+            train_perfs = self.train(epoch, train_ureg=False, train_supervised_model=True, )
             perfs += [train_perfs]
             if self.args.ureg:
                 self.ureg.new_epoch(epoch)
@@ -449,22 +453,19 @@ class TrainModel:
                 unsuploader_shuffled = self.problem.reg_loader_subset(0, self.args.num_shaving)
 
                 print("Training ureg to convergence.")
-                ureg_training_perf=self.ureg.train_ureg_to_convergence(train_loader_subset,unsuploader_shuffled,
-                                                    epsilon=epsilon,max_epochs=50,
-                                                    max_examples=self.args.max_examples_per_epoch)
-                perfs+=[ureg_training_perf]
-
-
+                ureg_training_perf = self.ureg.train_ureg_to_convergence(train_loader_subset, unsuploader_shuffled,
+                                                                         epsilon=epsilon, max_epochs=50,
+                                                                         max_examples=self.args.max_examples_per_epoch)
+                perfs += [ureg_training_perf]
 
             if self.args.ureg:
-                reg_perfs =self.regularize(epoch)
-                perfs+=[reg_perfs]
+                reg_perfs = self.regularize(epoch)
+                perfs += [reg_perfs]
 
             perfs += [self.test(epoch)]
-            perfs= flatten(perfs)
+            perfs = flatten(perfs)
             if (not header_written):
-                header_written=True
+                header_written = True
                 self.log_performance_header(perfs)
 
             self.log_performance_metrics(epoch, perfs)
-

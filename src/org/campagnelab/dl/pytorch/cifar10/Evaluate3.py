@@ -37,6 +37,8 @@ parser = argparse.ArgumentParser(description='Evaluate ureg against CIFAR10')
 parser.add_argument('--lr', default=0.005, type=float, help='learning rate')
 parser.add_argument('--resume', '-r', action='store_true', help='resume from checkpoint')
 parser.add_argument('--ureg', action='store_true', help='Enable unsupervised regularization (ureg)')
+parser.add_argument('--constant-learning-rates', action='store_true', help='Use constant learning rates, not schedules')
+
 parser.add_argument('--mini-batch-size', type=int, help='Size of the mini-batch', default=128)
 parser.add_argument('--num-epochs', type=int,
                     help='Number of epochs to run before stopping. Additional epochs when --resume.', default=200)

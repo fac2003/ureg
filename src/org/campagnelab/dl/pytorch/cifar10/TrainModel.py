@@ -67,6 +67,7 @@ class TrainModel:
         self.ureg = None
         self.is_parallel = False
 
+
     def init_model(self, create_model_function):
         """Resume training if necessary (args.--resume flag is True), or call the
         create_model_function to initialize a new model. This function must be called
@@ -225,7 +226,8 @@ class TrainModel:
             if (batch_idx + 1) * self.mini_batch_size > self.max_training_examples:
                 break
         unsupervised_loss = unsupervised_loss_acc / (num_batches)
-        self.scheduler_reg.step(unsupervised_loss, epoch)
+        if not self.args.constant_learning_rates:
+            self.scheduler_reg.step(unsupervised_loss, epoch)
         print()
 
         return performance_estimators
@@ -338,7 +340,8 @@ class TrainModel:
         # Apply learning rate schedule:
         test_accuracy = self.get_metric(performance_estimators, "test_accuracy")
         assert test_accuracy is not None, "test_accuracy must be found among estimated performance metrics"
-        self.scheduler_train.step(test_accuracy, epoch)
+        if not self.args.constant_learning_rates:
+            self.scheduler_train.step(test_accuracy, epoch)
 
         return performance_estimators
 

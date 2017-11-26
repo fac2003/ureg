@@ -66,7 +66,7 @@ class TrainModel:
         self.testloader = self.problem.test_loader()
         self.ureg = None
         self.is_parallel = False
-
+        self.failed_to_improve = 0
 
     def init_model(self, create_model_function):
         """Resume training if necessary (args.--resume flag is True), or call the

@@ -20,7 +20,8 @@ class URegularizer:
     the training set.
     """
 
-    def __init__(self, model, mini_batch_size, num_features=64, alpha=0.5, learning_rate=0.1, reset_every_epochs=None):
+    def __init__(self, model, mini_batch_size, num_features=64, alpha=0.5, learning_rate=0.1,
+                 reset_every_epochs=None, do_not_use_scheduler=False):
         self._mini_batch_size = mini_batch_size
         self._model = model
         self._num_activations = 0
@@ -47,6 +48,7 @@ class URegularizer:
         self.num_unsupervised_examples = 0
         self._use_scheduler=False
         self._reset_every_epochs=reset_every_epochs
+        self.do_not_use_scheduler=do_not_use_scheduler
         # def count_activations(i, o):
         #     self.add_activations(len(o))
         #
@@ -190,8 +192,8 @@ class URegularizer:
         self._my_feature_extractor2.clear_outputs()
 
     def install_scheduler(self):
-
-        self._use_scheduler=True
+        if self.do_not_use_scheduler:
+            self._use_scheduler=True
 
     def estimate_example_weights(self, xs, weight_u=None):
         """This method estimates a weight for each example in the xs minibatch. The weight

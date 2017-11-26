@@ -7,6 +7,7 @@ import string
 import sys
 
 from org.campagnelab.dl.pytorch.cifar10.Cifar10Problem import Cifar10Problem
+from org.campagnelab.dl.pytorch.cifar10.CrossValidatedProblem import CrossValidatedProblem
 from org.campagnelab.dl.pytorch.cifar10.STL10Problem import STL10Problem
 from org.campagnelab.dl.pytorch.cifar10.TrainModel import TrainModel
 from org.campagnelab.dl.pytorch.cifar10.models import *
@@ -175,13 +176,53 @@ def create_model(name):
     return net
 
 
-model_trainer = TrainModel(args=args, problem=problem, use_cuda=use_cuda)
-model_trainer.init_model(create_model_function=create_model)
+def train_once(args, problem, use_cuda):
+    model_trainer = TrainModel(args=args, problem=problem, use_cuda=use_cuda)
+    model_trainer.init_model(create_model_function=create_model)
 
-if args.mode == "combined":
-    model_trainer.training_combined()
-elif args.mode == "interleaved":
-    model_trainer.training_interleaved(epsilon=args.ureg_epsilon)
+    if args.mode == "combined":
+        return model_trainer.training_combined()
+    elif args.mode == "interleaved":
+        return model_trainer.training_interleaved(epsilon=args.ureg_epsilon)
+    else:
+        print("unknown mode specified: " + args.mode)
+        exit(1)
+
+
+if args.cross_validations_folds is None:
+    train_once(args, problem, use_cuda)
+    exit(0)
 else:
-    print("unknown mode specified: " + args.mode)
-    exit(1)
+    # load cross validation folds:
+    fold_definitions = open(args.cross_validations_folds).readlines()
+    initial_checkpoint_key = args.checkpoint_key
+    all_perfs = []
+    for fold_index, fold in enumerate(fold_definitions):
+        splitted = fold.split(sep=" ")
+        splitted.remove("\n")
+        train_indices = [int(index) for index in splitted]
+        reduced_problem = CrossValidatedProblem(problem, train_indices)
+        args.checkpoint_key = initial_checkpoint_key + "-" + str(fold_index)
+        fold_perfs = train_once(args, reduced_problem, use_cuda)
+        all_perfs += fold_perfs
+
+    metrics = ["train_loss", "train_accuracy", "test_loss", "test_accuracy"]
+    accumulators = [0] * len(metrics)
+
+    # aggregate statistics:
+    for perf in all_perfs:
+        for metric_index, metric_name in enumerate(metrics):
+            metric = perf.get_metric(metric_name)
+            if metric is not None:
+                #print("found value for "+metric_name+" "+str(metric))
+                accumulators[metric_index] += metric
+
+    for metric_index, metric_name in enumerate(metrics):
+        accumulators[metric_index] /= len(all_perfs)
+
+    with open("cv-summary-{}.tsv".format(initial_checkpoint_key), "w") as perf_file:
+
+        perf_file.write("\t".join(map(str, metrics)))
+        perf_file.write("\n")
+        perf_file.write("\t".join(map(str, accumulators)))
+        perf_file.write("\n")

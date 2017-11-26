@@ -46,7 +46,7 @@ class CrossValidatedProblem(Problem):
     def test_loader_subset(self, indices):
         # find corresponding indices in the delegate wrapper:
         delegate_indices=[ self.validation_indices[index] for index in indices]
-        return self.delegate.test_loader_subset(delegate_indices)
+        return self.delegate.train_loader_subset(delegate_indices)
 
     def example_size(self):
         """Returns the shape of the input, e.g., (3,32,32) for a 3 channel image with dimensions

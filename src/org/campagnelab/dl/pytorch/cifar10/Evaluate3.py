@@ -107,7 +107,7 @@ else:
     exit(1)
 
 # print some info about this dataset:
-problem.describe()
+
 
 
 def vgg16():
@@ -180,6 +180,7 @@ def create_model(name):
 
 
 def train_once(args, problem, use_cuda):
+    problem.describe()
     model_trainer = TrainModel(args=args, problem=problem, use_cuda=use_cuda)
     model_trainer.init_model(create_model_function=create_model)
 

@@ -8,6 +8,7 @@ class CrossValidatedProblem(Problem):
         These set of indices should be disjoint.
         The unsupervised set is returned unchanged from the delegate problem.
     """
+
     def __init__(self, delegate, training_indices, validation_indices=None):
         """
         Construct a cross-validated problem.
@@ -17,14 +18,17 @@ class CrossValidatedProblem(Problem):
         :param mini_batch_size: size of the mini batch.
         """
         super().__init__(delegate.mini_batch_size())
-        self.delegate=delegate
-        self.training_indices=training_indices
+        self.delegate = delegate
+        self.training_indices = training_indices
         if validation_indices is None:
-            #calculate the complement: indices in training set of original problem, not in training indices:
-            all=range(0,len(self.delegate.train_loader()))
-            complement=set(all)-set(training_indices)
-            validation_indices=[  i for i in complement ]
-        self.validation_indices=validation_indices
+            # calculate the complement: indices in training set of original problem, not in training indices:
+            all = range(0, len(self.delegate.trainset))
+            complement = set(all) - set(training_indices)
+            validation_indices = [i for i in complement]
+        self.validation_indices = validation_indices
+
+    def name(self):
+        return "cross-validated " + self.delegate.name()
 
     def reg_loader(self):
         return self.delegate.reg_loader()
@@ -40,12 +44,12 @@ class CrossValidatedProblem(Problem):
 
     def train_loader_subset(self, indices):
         # find corresponding indices in the delegate wrapper:
-        delegate_indices=[ self.training_indices[index] for index in indices]
+        delegate_indices = [self.training_indices[index] for index in indices]
         return self.delegate.train_loader_subset(delegate_indices)
 
     def test_loader_subset(self, indices):
         # find corresponding indices in the delegate wrapper:
-        delegate_indices=[ self.validation_indices[index] for index in indices]
+        delegate_indices = [self.validation_indices[index] for index in indices]
         return self.delegate.train_loader_subset(delegate_indices)
 
     def example_size(self):
@@ -58,4 +62,3 @@ class CrossValidatedProblem(Problem):
 
     def loss_function(self):
         return self.delegate.loss_function()
-

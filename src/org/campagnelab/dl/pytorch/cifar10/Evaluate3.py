@@ -40,7 +40,7 @@ parser.add_argument('--ureg', action='store_true', help='Enable unsupervised reg
 parser.add_argument('--constant-learning-rates', action='store_true', help='Use constant learning rates, not schedules')
 
 parser.add_argument('--mini-batch-size', type=int, help='Size of the mini-batch', default=128)
-parser.add_argument('--num-epochs','--max-epochs', type=int,
+parser.add_argument('--num-epochs', '--max-epochs', type=int,
                     help='Number of epochs to run before stopping. Additional epochs when --resume.', default=200)
 parser.add_argument('--num-training', '-n', type=int, help='Maximum number of training examples to use',
                     default=sys.maxsize)
@@ -49,7 +49,7 @@ parser.add_argument('--num-validation', '-x', type=int, help='Maximum number of 
 parser.add_argument('--num-shaving', '-u', type=int, help='Maximum number of unlabeled examples to use when shaving'
                                                           'the network', default=sys.maxsize)
 parser.add_argument('--max-examples-per-epoch', type=int, help='Maximum number of examples scanned in an epoch'
-                                                                     '(e.g., for ureg model training).', default=None)
+                                                               '(e.g., for ureg model training).', default=None)
 
 parser.add_argument('--ureg-num-features', type=int, help='Number of features in the ureg model', default=64)
 parser.add_argument('--ureg-alpha', type=float, help='Mixing coefficient (between 0 and 1) for ureg loss component',
@@ -76,6 +76,14 @@ parser.add_argument('--mode', help='Training mode: combined or interleaved, used
 
 parser.add_argument('--abort-when-failed-to-improve', default=sys.maxsize, type=int,
                     help='Abort training if performance fails to improve for more than the specified number of epochs.')
+parser.add_argument('--cross-validations-folds', type=str,
+                    help='Use cross-validation with folds defined in the argument file.'
+                         ' The file follows the format of the STL-10 fold indices:'
+                         ' one line per fold, with zero-based integers of the training examples in the train split.'
+                         ' The validation examples are the complement indices in the train split.'
+                         ' When this argument is provided, training is done sequentially for each fold, the '
+                         ' checkpoint key is appended with the folder index and a summary performance file (cv-summary-[key].tsv) is written '
+                         'at the completion of cross-validation. ', default=None)
 
 args = parser.parse_args()
 
@@ -86,23 +94,24 @@ is_parallel = False
 best_acc = 0  # best test accuracy
 start_epoch = 0  # start from epoch 0 or last checkpoint epoch
 
-if args.problem=="CIFAR10":
+if args.problem == "CIFAR10":
     problem = Cifar10Problem(args.mini_batch_size)
-elif args.problem=="STL10":
+elif args.problem == "STL10":
     problem = STL10Problem(args.mini_batch_size)
 else:
-    print("Unsupported problem: "+args.problem)
+    print("Unsupported problem: " + args.problem)
     exit(1)
 
 # print some info about this dataset:
 problem.describe()
 
-model_trainer = TrainModel(args=args, problem=problem, use_cuda=use_cuda)
 
 def vgg16():
-    return VGG('VGG16',problem.example_size())
+    return VGG('VGG16', problem.example_size())
+
+
 def vgg19():
-    return VGG('VGG19',problem.example_size())
+    return VGG('VGG19', problem.example_size())
 
 
 def resnet18():
@@ -111,6 +120,7 @@ def resnet18():
 
 def preactresnet18():
     return PreActResNet18(problem.example_size())
+
 
 def googlenet():
     return GoogLeNet()
@@ -165,6 +175,7 @@ def create_model(name):
     return net
 
 
+model_trainer = TrainModel(args=args, problem=problem, use_cuda=use_cuda)
 model_trainer.init_model(create_model_function=create_model)
 
 if args.mode == "combined":
@@ -172,5 +183,5 @@ if args.mode == "combined":
 elif args.mode == "interleaved":
     model_trainer.training_interleaved(epsilon=args.ureg_epsilon)
 else:
-    print("unknown mode specified: "+args.mode)
+    print("unknown mode specified: " + args.mode)
     exit(1)

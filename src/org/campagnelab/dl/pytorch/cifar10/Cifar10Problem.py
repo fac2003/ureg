@@ -44,14 +44,13 @@ class Cifar10Problem(Problem):
                                                   num_workers=2)
         return trainloader
 
-    def train_loader_subset(self, start, end):
+    def train_loader_subset(self,indices):
         """Returns the torch dataloader over the training set, shuffled,
         but limited to the example range start-end."""
         mini_batch_size = self.mini_batch_size()
 
         trainloader = torch.utils.data.DataLoader(self.trainset, batch_size=mini_batch_size, shuffle=False,
-                                                  sampler=ProtectedSubsetRandomSampler(range(start ,
-                                                                                    end )),
+                                                  sampler=ProtectedSubsetRandomSampler(indices),
                                                   num_workers=2)
         return trainloader
 
@@ -60,20 +59,27 @@ class Cifar10Problem(Problem):
         mini_batch_size = self.mini_batch_size()
         return torch.utils.data.DataLoader(self.testset, batch_size=mini_batch_size, shuffle=False, num_workers=2)
 
+    def test_loader_subset(self, indices):
+        """Returns the torch dataloader over the test set. """
+        mini_batch_size = self.mini_batch_size()
+        return torch.utils.data.DataLoader(self.testset,
+                                           sampler=ProtectedSubsetRandomSampler(indices),
+                                           batch_size=mini_batch_size, shuffle=False, num_workers=2)
+
+
     def reg_loader(self):
         mini_batch_size = self.mini_batch_size()
 
         return torch.utils.data.DataLoader(self.unsupset, batch_size=mini_batch_size, shuffle=True,
                                            num_workers=2)
 
-    def reg_loader_subset(self, start, end):
+    def reg_loader_subset(self, indices):
         """Returns the torch dataloader over the regularization set (unsupervised examples only). """
         # transform the unsupervised set the same way as the training set:
 
         mini_batch_size = self.mini_batch_size()
         return torch.utils.data.DataLoader(self.unsupset, batch_size=mini_batch_size, shuffle=False,
-                                           sampler=ProtectedSubsetRandomSampler(range(start,
-                                                                             end)),
+                                           sampler=ProtectedSubsetRandomSampler(indices),
                                            num_workers=2)
 
     def loss_function(self):

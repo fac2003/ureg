@@ -179,8 +179,8 @@ class TrainModel:
             performance_estimator.init_performance_metrics()
         unsupervised_loss_acc = 0
         num_batches = 0
-        train_loader_subset = self.problem.train_loader_subset(0, self.args.num_training)
-        unsuploader_shuffled = self.problem.reg_loader_subset(0, self.args.num_shaving)
+        train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
+        unsuploader_shuffled = self.problem.reg_loader_subset_range(0, self.args.num_shaving)
         unsupiter = iter(unsuploader_shuffled)
         for batch_idx, (inputs, targets) in enumerate(train_loader_subset):
             num_batches += 1
@@ -260,7 +260,7 @@ class TrainModel:
         for shaving_index in range(self.num_shaving_epochs):
             print("Shaving step {}".format(shaving_index))
             # produce a random subset of the unsupervised samples, exactly matching the number of training examples:
-            unsupsampler = self.problem.reg_loader_subset(0, use_max_shaving_records)
+            unsupsampler = self.problem.reg_loader_subset_range(0, use_max_shaving_records)
             for performance_estimator in performance_estimators:
                 performance_estimator.init_performance_metrics()
 
@@ -319,7 +319,7 @@ class TrainModel:
         self.net.eval()
         for performance_estimator in performance_estimators:
             performance_estimator.init_performance_metrics()
-        for batch_idx, (inputs, targets) in enumerate(self.testloader):
+        for batch_idx, (inputs, targets) in enumerate(self.problem.test_loader_range(0,self.args.num_validation)):
 
             if self.use_cuda:
                 inputs, targets = inputs.cuda(), targets.cuda()
@@ -416,6 +416,10 @@ class TrainModel:
             best_acc = acc
 
     def training_combined(self):
+        """Train the model with the combined approach. Returns the performance obtained
+        at the end of the configured training run.
+        :return list of performance estimators that observed performance on the last epoch run.
+        """
         header_written = False
         if self.ureg_enabled:
             # tell ureg to use a scheduler:
@@ -454,6 +458,7 @@ class TrainModel:
                 self.log_performance_header(perfs)
 
             self.log_performance_metrics(epoch, perfs)
+        return perfs
 
     def training_interleaved(self, epsilon=1E-6):
         header_written = False
@@ -465,8 +470,8 @@ class TrainModel:
             perfs += [train_perfs]
             if self.args.ureg:
                 self.ureg.new_epoch(epoch)
-                train_loader_subset = self.problem.train_loader_subset(0, self.args.num_training)
-                unsuploader_shuffled = self.problem.reg_loader_subset(0, self.args.num_shaving)
+                train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
+                unsuploader_shuffled = self.problem.reg_loader_subset_range(0, self.args.num_shaving)
 
                 print("Training ureg to convergence.")
                 ureg_training_perf = self.ureg.train_ureg_to_convergence(train_loader_subset, unsuploader_shuffled,

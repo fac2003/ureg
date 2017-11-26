@@ -84,14 +84,14 @@ class STL10Problem(Problem):
                                                   num_workers=2, drop_last=True)
         return trainloader
 
-    def train_loader_subset(self, start, end):
+    def train_loader_subset(self, indices):
         """Returns the torch dataloader over the training set, shuffled,
         but limited to the example range start-end."""
         mini_batch_size = self.mini_batch_size()
 
         trainloader = torch.utils.data.DataLoader(self.trainset, batch_size=mini_batch_size, shuffle=False,
                                                   sampler=ProtectedSubsetRandomSampler(
-                                                      range(start, end)),
+                                                      indices),
                                                   collate_fn=stl10_collate,
                                                   num_workers=2, drop_last=True)
         return trainloader
@@ -103,6 +103,16 @@ class STL10Problem(Problem):
                                            collate_fn=stl10_collate,
                                            batch_size=mini_batch_size, shuffle=False, num_workers=2, drop_last=True)
 
+    def test_loader_subset(self, indices):
+        """Returns the torch dataloader over the test set, limiting to the examples
+        identified by the indices. """
+
+        mini_batch_size = self.mini_batch_size()
+        return torch.utils.data.DataLoader(self.testset,
+                                           collate_fn=stl10_collate,
+                                           sampler=ProtectedSubsetRandomSampler(indices),
+                                           batch_size=mini_batch_size, shuffle=False, num_workers=2, drop_last=True)
+
     def reg_loader(self):
         mini_batch_size = self.mini_batch_size()
 
@@ -110,14 +120,13 @@ class STL10Problem(Problem):
                                            collate_fn=stl10_collate,
                                            num_workers=2, drop_last=True)
 
-    def reg_loader_subset(self, start, end):
+    def reg_loader_subset(self, indices):
         """Returns the torch dataloader over the regularization set (unsupervised examples only). """
         # transform the unsupervised set the same way as the training set:
 
         mini_batch_size = self.mini_batch_size()
         return torch.utils.data.DataLoader(self.unsupset, batch_size=mini_batch_size, shuffle=False,
-                                           sampler=ProtectedSubsetRandomSampler(range(start,
-                                                                                      end)),
+                                           sampler=ProtectedSubsetRandomSampler(indices),
                                            collate_fn=stl10_collate,
                                            num_workers=2, drop_last=True)
 

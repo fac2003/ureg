@@ -90,6 +90,9 @@ args = parser.parse_args()
 
 print("Executing " + args.checkpoint_key)
 
+with open("args-{}".format(args.checkpoint_key), "w") as args_file:
+    args_file.write(" ".join(sys.argv))
+
 use_cuda = torch.cuda.is_available()
 is_parallel = False
 best_acc = 0  # best test accuracy

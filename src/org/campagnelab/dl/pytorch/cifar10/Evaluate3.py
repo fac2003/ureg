@@ -40,7 +40,7 @@ parser.add_argument('--ureg', action='store_true', help='Enable unsupervised reg
 parser.add_argument('--constant-learning-rates', action='store_true', help='Use constant learning rates, not schedules')
 
 parser.add_argument('--mini-batch-size', type=int, help='Size of the mini-batch', default=128)
-parser.add_argument('--num-epochs', type=int,
+parser.add_argument('--num-epochs','--max-epochs', type=int,
                     help='Number of epochs to run before stopping. Additional epochs when --resume.', default=200)
 parser.add_argument('--num-training', '-n', type=int, help='Maximum number of training examples to use',
                     default=sys.maxsize)

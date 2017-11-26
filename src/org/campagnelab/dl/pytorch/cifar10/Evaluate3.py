@@ -96,8 +96,10 @@ problem.describe()
 
 model_trainer = TrainModel(args=args, problem=problem, use_cuda=use_cuda)
 
-def vgg():
+def vgg16():
     return VGG('VGG16',problem.example_size())
+def vgg19():
+    return VGG('VGG19',problem.example_size())
 
 
 def resnet18():
@@ -136,7 +138,8 @@ def senet18():
 
 
 models = {
-    "VGG16": vgg,
+    "VGG16": vgg16,
+    "VGG19": vgg19,
     "ResNet18": resnet18,
     "PreActResNet18": preactresnet18,
     "GoogLeNet": googlenet,

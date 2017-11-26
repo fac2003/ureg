@@ -192,7 +192,7 @@ class URegularizer:
         self._my_feature_extractor2.clear_outputs()
 
     def install_scheduler(self):
-        if self.do_not_use_scheduler:
+        if not self.do_not_use_scheduler:
             self._use_scheduler=True
 
     def estimate_example_weights(self, xs, weight_u=None):

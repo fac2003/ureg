@@ -74,6 +74,9 @@ parser.add_argument('--mode', help='Training mode: combined or interleaved, used
                                    'ureg semi-supervised training.',
                     default="interleaved")
 
+parser.add_argument('--abort-when-failed-to-improve', default=sys.maxsize, type=int,
+                    help='Abort training if performance fails to improve for more than the specified number of epochs.')
+
 args = parser.parse_args()
 
 print("Executing " + args.checkpoint_key)

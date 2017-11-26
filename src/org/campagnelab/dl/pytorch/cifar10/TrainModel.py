@@ -381,9 +381,15 @@ class TrainModel:
         metric = self.get_metric(performance_estimators, "test_accuracy")
         if metric is not None and metric > best_acc:
             self.save_checkpoint(epoch, metric)
+            self.failed_to_improve=0
             with open("best-perfs-{}.tsv".format(self.args.checkpoint_key), "a") as perf_file:
                 perf_file.write("\t".join(map(_format_nice, metrics)))
                 perf_file.write("\n")
+        if metric is not None and metric <= best_acc:
+            self.failed_to_improve+=1
+            if self.failed_to_improve>self.args.abort_when_failed_to_improve:
+                print("We failed to improve for {} epochs. Stopping here as requested.")
+                exit(0)
 
     def get_metric(self, performance_estimators, metric_name):
         for pe in performance_estimators:

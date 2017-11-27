@@ -78,6 +78,9 @@ parser.add_argument('--mode', help='Training mode: combined or interleaved, used
                                    'ureg semi-supervised training.',
                     default="interleaved")
 
+parser.add_argument('--grow-unsupervised-each-epoch', default=0, type=int,
+                    help='Add the parameter to the number of unsupervised examples used after each epoch completes. '
+                         'This parameter will grow --max-examples-per-epoch.')
 parser.add_argument('--abort-when-failed-to-improve', default=sys.maxsize, type=int,
                     help='Abort training if performance fails to improve for more than the specified number of epochs.')
 parser.add_argument('--cross-validations-folds', type=str,

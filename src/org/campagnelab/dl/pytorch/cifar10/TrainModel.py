@@ -259,8 +259,10 @@ class TrainModel:
         # max_loop_index is the number of times training examples are seen,
         # use_max_shaving_records is the number of times unsupervised examples are seen,
         # estimate weights:
-        weight_s =  use_max_shaving_records/max_loop_index
-        weight_u = 1
+        a =  use_max_shaving_records/max_loop_index
+        b = 1
+        weight_s=a/(a+b)
+        weight_u = 1/(a+b)
         print("weight_s={} weight_u={} use_max_shaving_records={} max_loop_index={}".format(
             weight_s, weight_u, use_max_shaving_records, max_loop_index))
 
@@ -471,6 +473,8 @@ class TrainModel:
             if self.log_performance_metrics(epoch, perfs):
                 # early stopping requested.
                 return perfs
+
+            self.grow_unsupervised_examples_per_epoch()
         return perfs
 
     def training_interleaved(self, epsilon=1E-6):
@@ -505,3 +509,15 @@ class TrainModel:
             if self.log_performance_metrics(epoch, perfs):
                 # early stopping requested.
                 return perfs
+
+            self.grow_unsupervised_examples_per_epoch()
+
+    def grow_unsupervised_examples_per_epoch(self):
+        if self.args.grow_unsupervised_each_epoch is not None:
+
+            self.args.max_examples_per_epoch += self.args.grow_unsupervised_each_epoch
+            self.args.num_shaving += self.args.grow_unsupervised_each_epoch
+            self.max_examples_per_epoch += self.args.grow_unsupervised_each_epoch
+            print("Increase unsupervised: --max-examples-per-epoch to {} and --num-shaving to {}."
+                  .format(self.max_examples_per_epoch,
+                          self.args.num_shaving))

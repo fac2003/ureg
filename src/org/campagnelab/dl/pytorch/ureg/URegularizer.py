@@ -20,8 +20,10 @@ class URegularizer:
     the training set.
     """
 
-    def __init__(self, model, mini_batch_size, num_features=64, alpha=0.5, learning_rate=0.1,
-                 reset_every_epochs=None, do_not_use_scheduler=False):
+    def __init__(self, model, mini_batch_size, num_features=64, alpha=0.5,
+                 learning_rate=0.1,
+                 reset_every_epochs=None, do_not_use_scheduler=False,
+                 momentum=0.9, l2=1E-4):
         self._mini_batch_size = mini_batch_size
         self._model = model
         self._num_activations = 0
@@ -49,6 +51,8 @@ class URegularizer:
         self._use_scheduler=False
         self._reset_every_epochs=reset_every_epochs
         self.do_not_use_scheduler=do_not_use_scheduler
+        self.momentum = momentum
+        self.L2 = l2
         # def count_activations(i, o):
         #     self.add_activations(len(o))
         #
@@ -158,8 +162,9 @@ class URegularizer:
             if self._use_cuda: self._which_one_model.cuda()
             # self.optimizer = torch.optim.Adam(self.which_one_model.parameters(),
             #                                   lr=self.learning_rate)
-            self._optimizer = torch.optim.SGD(self._which_one_model.parameters(), lr=self._learning_rate, momentum=0.9,
-                                              weight_decay=0.01)
+            self._optimizer = torch.optim.SGD(self._which_one_model.parameters(), lr=self._learning_rate,
+                                              momentum=self.momentum,
+                                              weight_decay=self.L2)
             if self._use_scheduler:
                 self._scheduler = construct_scheduler(self._optimizer, direction="min", lr_patience=1,
                                                       extra_patience=10,

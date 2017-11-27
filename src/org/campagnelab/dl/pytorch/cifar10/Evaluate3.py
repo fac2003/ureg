@@ -35,31 +35,34 @@ from org.campagnelab.dl.pytorch.cifar10.models import *
 # SOFTWARE.
 
 parser = argparse.ArgumentParser(description='Evaluate ureg against CIFAR10')
-parser.add_argument('--lr', default=0.005, type=float, help='learning rate')
-parser.add_argument('--resume', '-r', action='store_true', help='resume from checkpoint')
-parser.add_argument('--ureg', action='store_true', help='Enable unsupervised regularization (ureg)')
+parser.add_argument('--lr', default=0.005, type=float, help='Learning rate.')
+parser.add_argument('--resume', '-r', action='store_true', help='resume from checkpoint.')
+parser.add_argument('--ureg', action='store_true', help='Enable unsupervised regularization (ureg).')
 parser.add_argument('--constant-learning-rates', action='store_true', help='Use constant learning rates, not schedules')
 
-parser.add_argument('--mini-batch-size', type=int, help='Size of the mini-batch', default=128)
+parser.add_argument('--mini-batch-size', type=int, help='Size of the mini-batch.', default=128)
 parser.add_argument('--num-epochs', '--max-epochs', type=int,
                     help='Number of epochs to run before stopping. Additional epochs when --resume.', default=200)
-parser.add_argument('--num-training', '-n', type=int, help='Maximum number of training examples to use',
+parser.add_argument('--num-training', '-n', type=int, help='Maximum number of training examples to use.',
                     default=sys.maxsize)
-parser.add_argument('--num-validation', '-x', type=int, help='Maximum number of training examples to use',
+parser.add_argument('--num-validation', '-x', type=int, help='Maximum number of training examples to use.',
                     default=sys.maxsize)
 parser.add_argument('--num-shaving', '-u', type=int, help='Maximum number of unlabeled examples to use when shaving'
-                                                          'the network', default=sys.maxsize)
+                                                          'the network.', default=sys.maxsize)
 parser.add_argument('--max-examples-per-epoch', type=int, help='Maximum number of examples scanned in an epoch'
                                                                '(e.g., for ureg model training).', default=None)
 
-parser.add_argument('--ureg-num-features', type=int, help='Number of features in the ureg model', default=64)
-parser.add_argument('--ureg-alpha', type=float, help='Mixing coefficient (between 0 and 1) for ureg loss component',
+parser.add_argument('--ureg-num-features', type=int, help='Number of features in the ureg model.', default=64)
+parser.add_argument('--ureg-alpha', type=float, help='Mixing coefficient (between 0 and 1) for ureg loss component.',
                     default=0.5)
+parser.add_argument('--momentum', type=float, help='Momentum for SGD.',                    default=0.9)
+parser.add_argument('--L2', type=float, help='L2 regularization.',                    default=1E-4)
+
 parser.add_argument('--checkpoint-key', help='random key to save/load checkpoint',
                     default=''.join(random.choices(string.ascii_uppercase, k=5)))
 parser.add_argument("--ureg-reset-every-n-epoch", type=int, help='Reset weights of the ureg model every n epochs.')
-parser.add_argument('--ureg-learning-rate', default=0.01, type=float, help='ureg learning rate')
-parser.add_argument('--shave-lr', default=0.1, type=float, help='shave learning rate')
+parser.add_argument('--ureg-learning-rate', default=0.01, type=float, help='ureg learning rate.')
+parser.add_argument('--shave-lr', default=0.1, type=float, help='shave learning rate.')
 parser.add_argument('--lr-patience', default=10, type=int,
                     help='number of epochs to wait before applying LR schedule when loss does not improve.')
 parser.add_argument('--model', default="PreActResNet18", type=str,

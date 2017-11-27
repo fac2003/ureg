@@ -113,7 +113,7 @@ if args.resume:
 
     if ureg_enabled:
         ureg = URegularizer(net, mini_batch_size, args.ureg_num_features,
-                            args.ureg_alpha, args.ureg_learning_rate)
+                            args.ureg_alpha, args.ureg_learning_rate, l2=args.L2)
         ureg.set_num_examples(args.num_training, len(unsuploader))
         ureg.enable()
         if not args.drop_ureg_model:

@@ -389,7 +389,9 @@ class TrainModel:
             self.failed_to_improve+=1
             if self.failed_to_improve>self.args.abort_when_failed_to_improve:
                 print("We failed to improve for {} epochs. Stopping here as requested.")
-                exit(0)
+                return True # request early stopping
+
+        return False
 
     def get_metric(self, performance_estimators, metric_name):
         for pe in performance_estimators:
@@ -457,7 +459,9 @@ class TrainModel:
                 header_written = True
                 self.log_performance_header(perfs)
 
-            self.log_performance_metrics(epoch, perfs)
+            if self.log_performance_metrics(epoch, perfs):
+                # early stopping requested.
+                return perfs
         return perfs
 
     def training_interleaved(self, epsilon=1E-6):
@@ -489,4 +493,6 @@ class TrainModel:
                 header_written = True
                 self.log_performance_header(perfs)
 
-            self.log_performance_metrics(epoch, perfs)
+            if self.log_performance_metrics(epoch, perfs):
+                # early stopping requested.
+                return perfs

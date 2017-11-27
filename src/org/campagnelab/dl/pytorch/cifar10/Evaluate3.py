@@ -223,7 +223,7 @@ else:
         train_indices = [int(index) for index in splitted]
         reduced_problem = CrossValidatedProblem(problem, train_indices)
         args.checkpoint_key = initial_checkpoint_key + "-" + str(fold_index)
-        fold_perfs = train_once(args, reduced_problem, use_cuda)
+        fold_perfs = train_once(copy.deepcopy(args), reduced_problem, use_cuda)
 
         all_perfs += [fold_perfs]
 

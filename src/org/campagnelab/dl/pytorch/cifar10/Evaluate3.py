@@ -55,8 +55,8 @@ parser.add_argument('--max-examples-per-epoch', type=int, help='Maximum number o
 parser.add_argument('--ureg-num-features', type=int, help='Number of features in the ureg model.', default=64)
 parser.add_argument('--ureg-alpha', type=float, help='Mixing coefficient (between 0 and 1) for ureg loss component.',
                     default=0.5)
-parser.add_argument('--momentum', type=float, help='Momentum for SGD.',                    default=0.9)
-parser.add_argument('--L2', type=float, help='L2 regularization.',                    default=1E-4)
+parser.add_argument('--momentum', type=float, help='Momentum for SGD.', default=0.9)
+parser.add_argument('--L2', type=float, help='L2 regularization.', default=1E-4)
 
 parser.add_argument('--checkpoint-key', help='random key to save/load checkpoint',
                     default=''.join(random.choices(string.ascii_uppercase, k=5)))
@@ -88,6 +88,8 @@ parser.add_argument('--cross-validations-folds', type=str,
                          ' When this argument is provided, training is done sequentially for each fold, the '
                          ' checkpoint key is appended with the folder index and a summary performance file (cv-summary-[key].tsv) is written '
                          'at the completion of cross-validation. ', default=None)
+parser.add_argument('--cv-fold-min-perf', default=0, type=float, help='Stop cross-validation early if a fold does not'
+                                                                      ' meet this minimum performance level (test accuracy).')
 
 args = parser.parse_args()
 
@@ -108,6 +110,7 @@ elif args.problem == "STL10":
 else:
     print("Unsupported problem: " + args.problem)
     exit(1)
+
 
 # print some info about this dataset:
 
@@ -182,6 +185,13 @@ def create_model(name):
     return net
 
 
+def get_metric_value(all_perfs, query_metric_name):
+    for perf in all_perfs:
+        metric = perf.get_metric(query_metric_name)
+        if metric is not None:
+            return metric
+
+
 def train_once(args, problem, use_cuda):
     problem.describe()
     model_trainer = TrainModel(args=args, problem=problem, use_cuda=use_cuda)
@@ -211,25 +221,35 @@ else:
         reduced_problem = CrossValidatedProblem(problem, train_indices)
         args.checkpoint_key = initial_checkpoint_key + "-" + str(fold_index)
         fold_perfs = train_once(args, reduced_problem, use_cuda)
-        all_perfs += fold_perfs
+
+        all_perfs += [fold_perfs]
+
+        if get_metric_value(fold_perfs,"test_accuracy") < args.cv_fold_min_perf:
+            break;
+
+
 
     metrics = ["train_loss", "train_accuracy", "test_loss", "test_accuracy"]
     accumulators = [0] * len(metrics)
-
+    count=[0] * len(metrics)
     # aggregate statistics:
-    for perf in all_perfs:
+    for fold_perfs in all_perfs:
+      for perf in fold_perfs:
         for metric_index, metric_name in enumerate(metrics):
             metric = perf.get_metric(metric_name)
             if metric is not None:
-                #print("found value for "+metric_name+" "+str(metric))
+                # print("found value for "+metric_name+" "+str(metric))
                 accumulators[metric_index] += metric
+                count[metric_index] += 1
 
     for metric_index, metric_name in enumerate(metrics):
-        accumulators[metric_index] /= len(all_perfs)
+        accumulators[metric_index] /= count[metric_index]
 
     with open("cv-summary-{}.tsv".format(initial_checkpoint_key), "w") as perf_file:
-
+        perf_file.write("completed-folds\t")
         perf_file.write("\t".join(map(str, metrics)))
         perf_file.write("\n")
+        perf_file.write(str(len(all_perfs)))
+        perf_file.write("\t")
         perf_file.write("\t".join(map(str, accumulators)))
         perf_file.write("\n")

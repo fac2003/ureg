@@ -449,7 +449,8 @@ class TrainModel:
             perfs += [self.test(epoch)]
             if self.ureg_enabled:
                 if lr_ureg_helper is None:
-                    lr_ureg_helper = LearningRateHelper(scheduler=self.ureg._scheduler, learning_rate_name="ureg_lr")
+                    lr_ureg_helper = LearningRateHelper(scheduler=self.ureg._scheduler, learning_rate_name="ureg_lr",
+                                                        initial_learning_rate=self.args.ureg_learning_rate)
 
                 perfs += [(lr_train_helper, lr_reg_helper, lr_ureg_helper)]
             else:

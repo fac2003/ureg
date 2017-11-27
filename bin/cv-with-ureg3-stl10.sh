@@ -6,4 +6,4 @@ python ${UREG}/src/org/campagnelab/dl/pytorch/cifar10/Evaluate3.py \
 --problem STL10  \
 --model VGG16 --shaving-epochs 1 \
  --cross-validations-folds ${UREG}/data/stl10_binary/fold_indices.txt \
---max-examples-per-epoch 10000 --constant-learning-rates "$@" 2>&1 |tee ${CHECKPOINT}.log
+--max-examples-per-epoch 1000 --constant-learning-rates "$@" 2>&1 |tee ${CHECKPOINT}.log

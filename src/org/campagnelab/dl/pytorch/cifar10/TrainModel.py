@@ -14,7 +14,6 @@ from org.campagnelab.dl.pytorch.cifar10.utils import progress_bar
 from org.campagnelab.dl.pytorch.ureg.LRSchedules import LearningRateAnnealing, construct_scheduler
 from org.campagnelab.dl.pytorch.ureg.URegularizer import URegularizer
 
-best_acc = 0
 
 
 def _format_nice(n):
@@ -51,7 +50,7 @@ class TrainModel:
         self.ureg_enabled = args.ureg
         self.args = args
         self.problem = problem
-        self.best_acc = None
+        self.best_acc = 0
         self.start_epoch = 0
         self.use_cuda = use_cuda
         self.mini_batch_size = problem.mini_batch_size()
@@ -126,7 +125,8 @@ class TrainModel:
             self.net.cuda()
         cudnn.benchmark = True
 
-        self.optimizer_training = torch.optim.SGD(self.net.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.L2)
+        self.optimizer_training = torch.optim.SGD(self.net.parameters(), lr=args.lr, momentum=args.momentum,
+                                                  weight_decay=args.L2)
         self.optimizer_reg = torch.optim.SGD(self.net.parameters(), lr=args.shave_lr, momentum=0.9, weight_decay=5e-4)
         self.ureg = URegularizer(self.net, self.mini_batch_size, num_features=args.ureg_num_features,
                                  alpha=args.ureg_alpha,
@@ -256,6 +256,13 @@ class TrainModel:
 
         for performance_estimator in performance_estimators:
             performance_estimator.init_performance_metrics()
+        # max_loop_index is the number of times training examples are seen,
+        # use_max_shaving_records is the number of times unsupervised examples are seen,
+        # estimate weights:
+        weight_s =  use_max_shaving_records/max_loop_index
+        weight_u = 1
+        print("weight_s={} weight_u={} use_max_shaving_records={} max_loop_index={}".format(
+            weight_s, weight_u, use_max_shaving_records, max_loop_index))
 
         for shaving_index in range(self.num_shaving_epochs):
             print("Shaving step {}".format(shaving_index))
@@ -290,7 +297,9 @@ class TrainModel:
 
                 # then use it to calculate the unsupervised regularization contribution to the loss:
                 inputs = Variable(features)
-                regularization_loss = self.ureg.regularization_loss(inputs, uinputs)
+                regularization_loss = self.ureg.regularization_loss(inputs, uinputs,
+                                                                    weight_s=weight_s,
+                                                                    weight_u=weight_u)
                 if regularization_loss is not None:
                     optimized_loss = regularization_loss.data[0]
                     regularization_loss.backward()
@@ -315,11 +324,11 @@ class TrainModel:
 
     def test(self, epoch, performance_estimators=(LossHelper("test_loss"), AccuracyHelper("test_"))):
         print('\nTesting, epoch: %d' % epoch)
-        global best_acc
+
         self.net.eval()
         for performance_estimator in performance_estimators:
             performance_estimator.init_performance_metrics()
-        for batch_idx, (inputs, targets) in enumerate(self.problem.test_loader_range(0,self.args.num_validation)):
+        for batch_idx, (inputs, targets) in enumerate(self.problem.test_loader_range(0, self.args.num_validation)):
 
             if self.use_cuda:
                 inputs, targets = inputs.cuda(), targets.cuda()
@@ -376,20 +385,19 @@ class TrainModel:
             perf_file.write("\t".join(map(_format_nice, metrics)))
             perf_file.write("\n")
 
-        global best_acc
 
         metric = self.get_metric(performance_estimators, "test_accuracy")
-        if metric is not None and metric > best_acc:
+        if metric is not None and metric > self.best_acc:
             self.save_checkpoint(epoch, metric)
-            self.failed_to_improve=0
+            self.failed_to_improve = 0
             with open("best-perfs-{}.tsv".format(self.args.checkpoint_key), "a") as perf_file:
                 perf_file.write("\t".join(map(_format_nice, metrics)))
                 perf_file.write("\n")
-        if metric is not None and metric <= best_acc:
-            self.failed_to_improve+=1
-            if self.failed_to_improve>self.args.abort_when_failed_to_improve:
+        if metric is not None and metric <= self.best_acc:
+            self.failed_to_improve += 1
+            if self.failed_to_improve > self.args.abort_when_failed_to_improve:
                 print("We failed to improve for {} epochs. Stopping here as requested.")
-                return True # request early stopping
+                return True  # request early stopping
 
         return False
 
@@ -402,8 +410,8 @@ class TrainModel:
 
     def save_checkpoint(self, epoch, acc):
         # Save checkpoint.
-        global best_acc
-        if acc > best_acc:
+
+        if acc > self.best_acc:
             print('Saving..')
             state = {
                 'net': self.net.module if self.is_parallel else self.net,
@@ -415,7 +423,7 @@ class TrainModel:
             if not os.path.isdir('checkpoint'):
                 os.mkdir('checkpoint')
             torch.save(state, './checkpoint/ckpt_{}.t7'.format(self.args.checkpoint_key))
-            best_acc = acc
+            self.best_acc = acc
 
     def training_combined(self):
         """Train the model with the combined approach. Returns the performance obtained
@@ -480,7 +488,7 @@ class TrainModel:
 
                 print("Training ureg to convergence.")
                 ureg_training_perf = self.ureg.train_ureg_to_convergence(train_loader_subset, unsuploader_shuffled,
-                                                                         epsilon=epsilon, max_epochs=50,
+                                                                         epsilon=epsilon, max_epochs=10,
                                                                          max_examples=self.args.max_examples_per_epoch)
                 perfs += [ureg_training_perf]
 

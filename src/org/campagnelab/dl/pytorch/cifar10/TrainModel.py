@@ -46,7 +46,7 @@ class TrainModel:
         self.max_regularization_examples = args.num_shaving
         self.max_validation_examples = args.num_validation
         self.max_training_examples = args.num_training
-        self.max_examples_per_epoch = args.max_examples_per_epoch
+        self.max_examples_per_epoch = args.max_examples_per_epoch if args.max_examples_per_epoch is not None else self.max_regularization_examples
         self.criterion = problem.loss_function()
         self.ureg_enabled = args.ureg
         self.args = args

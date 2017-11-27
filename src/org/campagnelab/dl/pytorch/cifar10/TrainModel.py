@@ -201,8 +201,7 @@ class TrainModel:
 
             if train_ureg:
                 # the unsupervised regularization part goes here:
-                if (batch_idx + 1) * self.mini_batch_size > self.max_regularization_examples:
-                    break
+
                 try:
                     # first, read a minibatch from the unsupervised dataset:
                     ufeatures, ulabels = next(unsupiter)
@@ -222,11 +221,17 @@ class TrainModel:
             for performance_estimator in performance_estimators:
                 performance_estimator.observe_performance_metric(batch_idx, optimized_loss.data[0], outputs, targets)
 
+
             progress_bar(batch_idx, len(train_loader_subset),
                          " ".join([performance_estimator.progress_message() for performance_estimator in
                                    performance_estimators]))
+
+            if (batch_idx + 1) * self.mini_batch_size > self.max_regularization_examples:
+                    break
+
             if (batch_idx + 1) * self.mini_batch_size > self.max_training_examples:
                 break
+
         unsupervised_loss = unsupervised_loss_acc / (num_batches)
         if not self.args.constant_learning_rates:
             self.scheduler_reg.step(unsupervised_loss, epoch)

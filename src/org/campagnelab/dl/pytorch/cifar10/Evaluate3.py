@@ -229,7 +229,7 @@ else:
         all_perfs += [fold_perfs]
 
         if get_metric_value(fold_perfs,"test_accuracy") < args.cv_fold_min_perf:
-            break;
+            break
 
 
 

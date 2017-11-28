@@ -15,7 +15,6 @@ from org.campagnelab.dl.pytorch.ureg.LRSchedules import LearningRateAnnealing, c
 from org.campagnelab.dl.pytorch.ureg.URegularizer import URegularizer
 
 
-
 def _format_nice(n):
     try:
         if n == int(n):
@@ -92,14 +91,14 @@ class TrainModel:
         self.max_validation_examples = args.num_validation
         self.max_training_examples = args.num_training
         self.unsuploader = self.problem.reg_loader()
-        model_built=False
+        model_built = False
         if args.resume:
             # Load checkpoint.
 
             print('==> Resuming from checkpoint..')
 
             assert os.path.isdir('checkpoint'), 'Error: no checkpoint directory found!'
-            checkpoint=None
+            checkpoint = None
             try:
                 checkpoint = torch.load('./checkpoint/ckpt_{}.t7'.format(args.checkpoint_key))
             except                FileNotFoundError:
@@ -122,7 +121,7 @@ class TrainModel:
                     ureg.enable()
                     if not args.drop_ureg_model:
                         ureg.resume(checkpoint['ureg_model'])
-                model_built=True
+                model_built = True
             else:
                 print("Could not load model checkpoint, unable to --resume.")
                 model_built = False
@@ -232,13 +231,12 @@ class TrainModel:
             for performance_estimator in performance_estimators:
                 performance_estimator.observe_performance_metric(batch_idx, optimized_loss.data[0], outputs, targets)
 
-
             progress_bar(batch_idx, len(train_loader_subset),
                          " ".join([performance_estimator.progress_message() for performance_estimator in
                                    performance_estimators]))
 
             if (batch_idx + 1) * self.mini_batch_size > self.max_regularization_examples:
-                    break
+                break
 
             if (batch_idx + 1) * self.mini_batch_size > self.max_training_examples:
                 break
@@ -275,10 +273,10 @@ class TrainModel:
         # max_loop_index is the number of times training examples are seen,
         # use_max_shaving_records is the number of times unsupervised examples are seen,
         # estimate weights:
-        a =  use_max_shaving_records/max_loop_index
+        a = use_max_shaving_records / max_loop_index
         b = 1
-        weight_s=a/(a+b)
-        weight_u = 1/(a+b)
+        weight_s = a / (a + b)
+        weight_u = 1 / (a + b)
         print("weight_s={} weight_u={} use_max_shaving_records={} max_loop_index={}".format(
             weight_s, weight_u, use_max_shaving_records, max_loop_index))
 
@@ -403,7 +401,6 @@ class TrainModel:
             perf_file.write("\t".join(map(_format_nice, metrics)))
             perf_file.write("\n")
 
-
         metric = self.get_metric(performance_estimators, "test_accuracy")
         if metric is not None and metric > self.best_acc:
             self.save_checkpoint(epoch, metric)
@@ -473,11 +470,8 @@ class TrainModel:
                 perfs += [self.regularize(epoch)]
 
             perfs += [self.test(epoch)]
-            if self.ureg_enabled:
-                if lr_ureg_helper is None:
-                    lr_ureg_helper = LearningRateHelper(scheduler=self.ureg._scheduler, learning_rate_name="ureg_lr",
-                                                        initial_learning_rate=self.args.ureg_learning_rate)
-
+            lr_ureg_helper = self.install_ureg_learning_rate_helper(lr_ureg_helper)
+            if lr_ureg_helper is not None:
                 perfs += [(lr_train_helper, lr_reg_helper, lr_ureg_helper)]
             else:
                 perfs += [(lr_train_helper, lr_reg_helper)]
@@ -493,9 +487,22 @@ class TrainModel:
             self.grow_unsupervised_examples_per_epoch()
         return perfs
 
+    def install_ureg_learning_rate_helper(self, lr_ureg_helper):
+        if self.ureg_enabled:
+            if lr_ureg_helper is None:
+                lr_ureg_helper = LearningRateHelper(scheduler=self.ureg._scheduler, learning_rate_name="ureg_lr",
+                                                    initial_learning_rate=self.args.ureg_learning_rate)
+        return lr_ureg_helper
+
     def training_interleaved(self, epsilon=1E-6):
         header_written = False
         self.ureg.install_scheduler()
+        lr_train_helper = LearningRateHelper(scheduler=self.scheduler_train, learning_rate_name="train_lr")
+        lr_reg_helper = LearningRateHelper(scheduler=self.scheduler_reg, learning_rate_name="reg_lr")
+        lr_ureg_helper = None
+
+        to_reset_ureg_model = 0
+        perfs = []
         for epoch in range(self.start_epoch, self.start_epoch + self.args.num_epochs):
             perfs = []
 
@@ -515,8 +522,12 @@ class TrainModel:
             if self.args.ureg:
                 reg_perfs = self.regularize(epoch)
                 perfs += [reg_perfs]
+                lr_ureg_helper = self.install_ureg_learning_rate_helper(lr_ureg_helper)
 
             perfs += [self.test(epoch)]
+
+            perfs += [(lr_train_helper, lr_reg_helper, lr_ureg_helper)]
+
             perfs = flatten(perfs)
             if (not header_written):
                 header_written = True
@@ -527,10 +538,16 @@ class TrainModel:
                 return perfs
 
             self.grow_unsupervised_examples_per_epoch()
+            to_reset_ureg_model += 1
+            if self.args.constant_learning_rates and to_reset_ureg_model > self.args.reset_every_n_epoch:
+                # when learning rates are constant and reset_every_n_epoch is specified, reset the ureg model periodically:
+                self.ureg._which_one_model = None
+                to_reset_ureg_model = 0
+
+        return perfs
 
     def grow_unsupervised_examples_per_epoch(self):
         if self.args.grow_unsupervised_each_epoch is not None:
-
             self.args.max_examples_per_epoch += self.args.grow_unsupervised_each_epoch
             self.args.num_shaving += self.args.grow_unsupervised_each_epoch
             self.max_examples_per_epoch += self.args.grow_unsupervised_each_epoch

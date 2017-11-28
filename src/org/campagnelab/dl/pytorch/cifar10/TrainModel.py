@@ -77,13 +77,13 @@ class TrainModel:
         args = self.args
         mini_batch_size = self.mini_batch_size
         # restrict limits to actual size of datasets:
-        training_set_length = (len(self.problem.train_loader()) - 1) * mini_batch_size
+        training_set_length = (len(self.problem.train_loader())) * mini_batch_size
         if args.num_training > training_set_length:
             args.num_training = training_set_length
-        unsup_set_length = (len(self.problem.reg_loader()) - 1) * mini_batch_size
+        unsup_set_length = (len(self.problem.reg_loader())) * mini_batch_size
         if args.num_shaving > unsup_set_length:
             args.num_shaving = unsup_set_length
-        test_set_length = (len(self.problem.test_loader()) - 1) * mini_batch_size
+        test_set_length = (len(self.problem.test_loader())) * mini_batch_size
         if args.num_validation > test_set_length:
             args.num_validation = test_set_length
 

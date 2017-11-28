@@ -39,11 +39,7 @@ class Problem:
         return None
 
     def loader_for_dataset(self, dataset):
-        mini_batch_size = self.mini_batch_size()
-
-        return torch.utils.data.DataLoader(dataset, batch_size=mini_batch_size, shuffle=False,
-                                           sampler=ProtectedSubsetRandomSampler(range(0, len(dataset)))
-                                           )
+        pass
 
     def train_loader(self):
         """Returns the torch dataloader over the training set. """

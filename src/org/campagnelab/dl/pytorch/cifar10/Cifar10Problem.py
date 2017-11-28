@@ -9,11 +9,12 @@ from org.campagnelab.dl.pytorch.cifar10.Samplers import ProtectedSubsetRandomSam
 
 class Cifar10Problem(Problem):
     """A problem that exposes the  Cifar10 dataset."""
+
     def name(self):
         return "CIFAR10"
 
     def example_size(self):
-        return (3,32,32)
+        return (3, 32, 32)
 
     def train_set(self):
         return self.trainset
@@ -44,6 +45,13 @@ class Cifar10Problem(Problem):
         self.unsupset = torchvision.datasets.CIFAR10(root='./data', train=False, download=False,
                                                      transform=self.transform_train)
 
+    def loader_for_dataset(self, dataset):
+        mini_batch_size = self.mini_batch_size()
+
+        return torch.utils.data.DataLoader(dataset, batch_size=mini_batch_size, shuffle=False,
+                                           sampler=ProtectedSubsetRandomSampler(range(0, len(dataset)))
+                                           )
+
     def train_loader(self):
         """Returns the torch dataloader over the training set. """
 
@@ -53,7 +61,7 @@ class Cifar10Problem(Problem):
                                                   num_workers=2)
         return trainloader
 
-    def train_loader_subset(self,indices):
+    def train_loader_subset(self, indices):
         """Returns the torch dataloader over the training set, shuffled,
         but limited to the example range start-end."""
         mini_batch_size = self.mini_batch_size()
@@ -74,7 +82,6 @@ class Cifar10Problem(Problem):
         return torch.utils.data.DataLoader(self.testset,
                                            sampler=ProtectedSubsetRandomSampler(indices),
                                            batch_size=mini_batch_size, shuffle=False, num_workers=2)
-
 
     def reg_loader(self):
         mini_batch_size = self.mini_batch_size()

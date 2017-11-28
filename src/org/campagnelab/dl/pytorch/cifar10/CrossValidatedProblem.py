@@ -22,10 +22,14 @@ class CrossValidatedProblem(Problem):
         self.training_indices = training_indices
         if validation_indices is None:
             # calculate the complement: indices in training set of original problem, not in training indices:
-            all = range(0, len(self.delegate.trainset))
+            all = range(0, len(self.delegate.train_set()))
             complement = set(all) - set(training_indices)
             validation_indices = [i for i in complement]
         self.validation_indices = validation_indices
+
+
+    def loader_for_dataset(self, dataset):
+        return self.delegate.loader_for_dataset(dataset)
 
     def train_set(self):
         return [self.delegate.train_set()[index] for index in range(0,len(self.training_indices))]

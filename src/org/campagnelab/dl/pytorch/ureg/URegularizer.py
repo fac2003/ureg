@@ -273,7 +273,7 @@ class URegularizer:
         assert self._num_accumulator_updates > 0, "accumulator was not updated, check that you called train_ureg after new_epoch"
         return self._accumulator_total_which_model_loss / self._num_accumulator_updates
 
-    def train_ureg_to_convergence(self, problem, train_dataset,unsup_dataset,
+    def train_ureg_to_convergence(self, problem, train_dataset, unsup_dataset,
                                   performance_estimators=(LossHelper("ureg_loss"),),
                                   epsilon=0.01,
                                   max_epochs=30, max_examples=None):
@@ -316,6 +316,8 @@ class URegularizer:
                 unsupervised_iter = iter(self.shuffling_iter(problem, unsup_dataset))
             if max_examples is None:
                 max_examples = length * self._mini_batch_size
+            length = max_examples / self._mini_batch_size
+
             num_batches = 0
 
             for (batch_idx, ((s_input, s_labels), (u_input, _))) in enumerate(zip(supervised_iter, unsupervised_iter)):
@@ -339,7 +341,7 @@ class URegularizer:
                                      [performance_estimator.progress_message() for performance_estimator in
                                       performance_estimators]))
 
-                if (batch_idx * self._mini_batch_size > max_examples):
+                if ((batch_idx + 1) * self._mini_batch_size > max_examples):
                     break
             average_loss = performance_estimators[0].estimates_of_metric()[0]
             # print("ureg epoch {} average loss={} ".format(ureg_epoch, average_loss))

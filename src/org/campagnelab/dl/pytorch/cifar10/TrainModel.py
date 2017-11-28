@@ -511,11 +511,11 @@ class TrainModel:
             perfs += [train_perfs]
             if self.args.ureg:
                 self.ureg.new_epoch(epoch)
-                train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
-                unsuploader_shuffled = self.problem.reg_loader_subset_range(0, self.args.num_shaving)
+                train_dataset = self.problem.train_set()
+                unsup_dataset = self.problem.unsup_set()
 
                 print("Training ureg to convergence.")
-                ureg_training_perf = self.ureg.train_ureg_to_convergence(train_loader_subset, unsuploader_shuffled,
+                ureg_training_perf = self.ureg.train_ureg_to_convergence(self.problem, train_dataset, unsup_dataset,
                                                                          epsilon=epsilon, max_epochs=10,
                                                                          max_examples=self.args.max_examples_per_epoch)
                 perfs += [ureg_training_perf]

@@ -52,6 +52,15 @@ class STL10Problem(Problem):
     def example_size(self):
         return (3, 96, 96)
 
+    def train_set(self):
+        return self._trainset
+
+    def unsup_set(self):
+        return self._unsupset
+
+    def test_set(self):
+        return self._testset
+
     def __init__(self, mini_batch_size, num_workers=0):
         super().__init__(mini_batch_size)
         self.num_workers=num_workers
@@ -68,19 +77,19 @@ class STL10Problem(Problem):
             transforms.ToTensor(),
             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
         ])
-        self.trainset = torchvision.datasets.STL10(root='./data', split="train", download=True,
-                                                   transform=self.transform_train)
-        self.testset = torchvision.datasets.STL10(root='./data', split="test", download=False,
-                                                  transform=self.transform_test)
-        self.unsupset = torchvision.datasets.STL10(root='./data', split="unlabeled", download=False,
-                                                   transform=self.transform_train)
+        self._trainset = torchvision.datasets.STL10(root='./data', split="train", download=True,
+                                                    transform=self.transform_train)
+        self._testset = torchvision.datasets.STL10(root='./data', split="test", download=False,
+                                                   transform=self.transform_test)
+        self._unsupset = torchvision.datasets.STL10(root='./data', split="unlabeled", download=False,
+                                                    transform=self.transform_train)
 
     def train_loader(self):
         """Returns the torch dataloader over the training set. """
 
         mini_batch_size = self.mini_batch_size()
 
-        trainloader = torch.utils.data.DataLoader(self.trainset, batch_size=mini_batch_size, shuffle=False,
+        trainloader = torch.utils.data.DataLoader(self._trainset, batch_size=mini_batch_size, shuffle=False,
                                                   collate_fn=stl10_collate,
                                                   num_workers=self.num_workers)
         return trainloader
@@ -90,7 +99,7 @@ class STL10Problem(Problem):
         but limited to the example range start-end."""
         mini_batch_size = self.mini_batch_size()
 
-        trainloader = torch.utils.data.DataLoader(self.trainset, batch_size=mini_batch_size, shuffle=False,
+        trainloader = torch.utils.data.DataLoader(self._trainset, batch_size=mini_batch_size, shuffle=False,
                                                   sampler=ProtectedSubsetRandomSampler(
                                                       indices),
                                                   collate_fn=stl10_collate,
@@ -100,7 +109,7 @@ class STL10Problem(Problem):
     def test_loader(self):
         """Returns the torch dataloader over the test set. """
         mini_batch_size = self.mini_batch_size()
-        return torch.utils.data.DataLoader(self.testset,
+        return torch.utils.data.DataLoader(self._testset,
                                            collate_fn=stl10_collate,
                                            batch_size=mini_batch_size, shuffle=False,
                                            num_workers=self.num_workers)
@@ -110,7 +119,7 @@ class STL10Problem(Problem):
         identified by the indices. """
 
         mini_batch_size = self.mini_batch_size()
-        return torch.utils.data.DataLoader(self.testset,
+        return torch.utils.data.DataLoader(self._testset,
                                            collate_fn=stl10_collate,
                                            sampler=ProtectedSubsetRandomSampler(indices),
                                            batch_size=mini_batch_size, shuffle=False,
@@ -119,7 +128,7 @@ class STL10Problem(Problem):
     def reg_loader(self):
         mini_batch_size = self.mini_batch_size()
 
-        return torch.utils.data.DataLoader(self.unsupset, batch_size=mini_batch_size, shuffle=True,
+        return torch.utils.data.DataLoader(self._unsupset, batch_size=mini_batch_size, shuffle=True,
                                            collate_fn=stl10_collate,
                                            num_workers=self.num_workers)
 
@@ -128,10 +137,18 @@ class STL10Problem(Problem):
         # transform the unsupervised set the same way as the training set:
 
         mini_batch_size = self.mini_batch_size()
-        return torch.utils.data.DataLoader(self.unsupset, batch_size=mini_batch_size, shuffle=False,
+        return torch.utils.data.DataLoader(self._unsupset, batch_size=mini_batch_size, shuffle=False,
                                            sampler=ProtectedSubsetRandomSampler(indices),
                                            collate_fn=stl10_collate,
                                            num_workers=self.num_workers)
+
+    def loader_for_dataset(self, dataset):
+        mini_batch_size = self.mini_batch_size()
+
+        return torch.utils.data.DataLoader(dataset, batch_size=mini_batch_size, shuffle=False,
+                                       sampler=ProtectedSubsetRandomSampler(range(0,len(dataset))),
+                                       collate_fn=stl10_collate,
+                                       num_workers=self.num_workers)
 
     def loss_function(self):
         return torch.nn.CrossEntropyLoss()

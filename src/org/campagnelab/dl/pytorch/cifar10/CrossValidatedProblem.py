@@ -27,6 +27,17 @@ class CrossValidatedProblem(Problem):
             validation_indices = [i for i in complement]
         self.validation_indices = validation_indices
 
+    def train_set(self):
+        return [self.delegate.train_set()[index] for index in range(0,len(self.training_indices))]
+
+
+    def unsup_set(self):
+
+        return self.delegate.unsup_set()
+
+    def test_set(self):
+        return [self.delegate.test_set()[index] for index in range(0, len(self.test_set()))]
+
     def name(self):
         return "cross-validated " + self.delegate.name()
 

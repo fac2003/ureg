@@ -8,7 +8,7 @@ class TestCrossValidatedProblem(unittest.TestCase):
     def testTrainingSize(self):
         batch_size=50
         problem = STL10Problem(mini_batch_size=batch_size)
-        self.assertEqual(5000, len(problem.trainset))
+        self.assertEqual(5000, len(problem._trainset))
         with  open("./data/stl10_binary/fold_indices.txt") as folds:
             fold_definitions =folds.readlines()
             fold =fold_definitions[0]

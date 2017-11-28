@@ -5,8 +5,8 @@ import torch
 from torch.autograd import Variable
 from torch.nn import Sequential
 
-
 from org.campagnelab.dl.pytorch.cifar10.LossHelper import LossHelper
+from org.campagnelab.dl.pytorch.cifar10.Samplers import ProtectedIterator
 from org.campagnelab.dl.pytorch.cifar10.utils import init_params, progress_bar
 from org.campagnelab.dl.pytorch.ureg.LRSchedules import construct_scheduler
 from org.campagnelab.dl.pytorch.ureg.MyFeatureExtractor import MyFeatureExtractor
@@ -45,12 +45,12 @@ class URegularizer:
         self._n_correct = 0
         self._last_epoch_accuracy = 0.5
         self._accumulator_total_which_model_loss = 0
-        self._num_accumulator_updates =0
+        self._num_accumulator_updates = 0
         self.num_training = 0
         self.num_unsupervised_examples = 0
-        self._use_scheduler=False
-        self._reset_every_epochs=reset_every_epochs
-        self.do_not_use_scheduler=do_not_use_scheduler
+        self._use_scheduler = False
+        self._reset_every_epochs = reset_every_epochs
+        self.do_not_use_scheduler = do_not_use_scheduler
         self.momentum = momentum
         self.L2 = l2
         # def count_activations(i, o):
@@ -69,7 +69,6 @@ class URegularizer:
         self._alpha = alpha
         # define the model tasked with predicting if activations are generated from
         # a sample in the training or unsupervised set:
-
 
     def add_activations(self, num):
         self._num_activations += num
@@ -107,7 +106,6 @@ class URegularizer:
         self._n_total = 0
         self._n_correct = 0
         return accuracy
-
 
     def forget_model(self, N_epoch):
         """
@@ -198,7 +196,7 @@ class URegularizer:
 
     def install_scheduler(self):
         if not self.do_not_use_scheduler:
-            self._use_scheduler=True
+            self._use_scheduler = True
 
     def estimate_example_weights(self, xs, weight_u=None):
         """This method estimates a weight for each example in the xs minibatch. The weight
@@ -212,13 +210,12 @@ class URegularizer:
         num_activations_supervised = supervised_output.size()[1]
 
         self.create_which_one_model(num_activations_supervised)
-        #self._which_one_model.eval()
+        # self._which_one_model.eval()
         ys = self._which_one_model(supervised_output)
         print("probabilities that samples belong to the training and test sets:" + str(ys))
 
-        prob_from_unsupset=ys.narrow(1,1,1)
-        #print("probabilities that samples belong to test set:"+str(prob_from_unsupset))
-
+        prob_from_unsupset = ys.narrow(1, 1, 1)
+        # print("probabilities that samples belong to test set:"+str(prob_from_unsupset))
 
     def train_ureg(self, xs, xu, weight_s=None, weight_u=None):
         if not self._enabled:
@@ -265,19 +262,18 @@ class URegularizer:
         # print("loss_ys: {} loss_yu: {} ".format(loss_ys.data[0],loss_yu.data[0]))
         # total_which_model_loss =torch.max(loss_ys,loss_yu)
         self._accumulator_total_which_model_loss += total_which_model_loss.data[0] / self._mini_batch_size
-        self._num_accumulator_updates+=1
+        self._num_accumulator_updates += 1
         total_which_model_loss.backward(retain_graph=True)
         self._optimizer.step()
         return total_which_model_loss
 
-
     def get_ureg_loss(self):
         """Return the average ureg _which_one_model training loss since the new_epoch method was called.
         This average loss is """
-        assert self._num_accumulator_updates>0,"accumulator was not updated, check that you called train_ureg after new_epoch"
-        return self._accumulator_total_which_model_loss/self._num_accumulator_updates
+        assert self._num_accumulator_updates > 0, "accumulator was not updated, check that you called train_ureg after new_epoch"
+        return self._accumulator_total_which_model_loss / self._num_accumulator_updates
 
-    def train_ureg_to_convergence(self, supervised_loader, unsupervised_loader,
+    def train_ureg_to_convergence(self, problem, train_dataset,unsup_dataset,
                                   performance_estimators=(LossHelper("ureg_loss"),),
                                   epsilon=0.01,
                                   max_epochs=30, max_examples=None):
@@ -290,69 +286,72 @@ class URegularizer:
         :param max_examples maximum number of examples to scan per epoch.
         :return list of performance estimators
         """
-        len_supervised = len(supervised_loader)
-        len_unsupervised = len(unsupervised_loader)
+        len_supervised = len(train_dataset)
+        len_unsupervised = len(unsup_dataset)
         print("Training ureg to convergence with {} training and {} unsupervised samples,"
               " using at most {} shuffled combinations of examples per training epoch".format(
-            len_supervised*self._mini_batch_size,
-            len_unsupervised*self._mini_batch_size,max_examples))
+            len_supervised * self._mini_batch_size,
+            len_unsupervised * self._mini_batch_size, max_examples))
         self._adjust_learning_rate(self._learning_rate)
-        previous_average_loss=sys.maxsize
+        previous_average_loss = sys.maxsize
         for ureg_epoch in range(0, max_epochs):
             # reset metric at each ureg training epoch (we use the loss average as stopping condition):
             for performance_estimator in performance_estimators:
                 performance_estimator.init_performance_metrics()
 
             from itertools import cycle
-            length=0
+            length = 0
+
             if len_supervised < len_unsupervised:
-                supervised_iter = iter(cycle(supervised_loader))
-                length=len_unsupervised
+
+                supervised_iter = iter(cycle(self.shuffling_iter(problem, train_dataset)))
+                length = len_unsupervised
             else:
-                supervised_iter = iter(supervised_loader)
-                length=len_supervised
+                supervised_iter = iter(self.shuffling_iter(problem, train_dataset))
+                length = len_supervised
 
             if len_unsupervised < len_supervised:
-                unsupervised_iter = iter(cycle(unsupervised_loader))
+                unsupervised_iter = iter(cycle(self.shuffling_iter(problem, train_dataset)))
             else:
-                unsupervised_iter = iter(unsupervised_loader)
+                unsupervised_iter = iter(self.shuffling_iter(problem, unsup_dataset))
             if max_examples is None:
-                max_examples=length*self._mini_batch_size
-            num_batches=0
+                max_examples = length * self._mini_batch_size
+            num_batches = 0
 
             for (batch_idx, ((s_input, s_labels), (u_input, _))) in enumerate(zip(supervised_iter, unsupervised_iter)):
 
                 xs = Variable(s_input)
                 xu = Variable(u_input)
                 if self._use_cuda:
-                    xs=xs.cuda()
-                    xu=xu.cuda()
-                loss=self.train_ureg(xs, xu,weight_s=1,weight_u=1)
+                    xs = xs.cuda()
+                    xu = xu.cuda()
+                loss = self.train_ureg(xs, xu, weight_s=1, weight_u=1)
                 if loss is not None:
-                    #print("ureg batch {} average loss={} ".format(batch_idx, loss.data[0]))
-                    num_batches+=1
+                    # print("ureg batch {} average loss={} ".format(batch_idx, loss.data[0]))
+                    num_batches += 1
                     for performance_estimator in performance_estimators:
                         performance_estimator.observe_performance_metric(batch_idx, loss.data[0],
                                                                          None,
                                                                          None)
                     epoch_ = "epoch " + str(ureg_epoch) + " "
                     progress_bar(batch_idx, length,
-                                 epoch_ + " ".join([performance_estimator.progress_message() for performance_estimator in
-                                       performance_estimators]))
+                                 epoch_ + " ".join(
+                                     [performance_estimator.progress_message() for performance_estimator in
+                                      performance_estimators]))
 
-                if (batch_idx*self._mini_batch_size>max_examples):
+                if (batch_idx * self._mini_batch_size > max_examples):
                     break
-            average_loss=performance_estimators[0].estimates_of_metric()[0]
-            #print("ureg epoch {} average loss={} ".format(ureg_epoch, average_loss))
+            average_loss = performance_estimators[0].estimates_of_metric()[0]
+            # print("ureg epoch {} average loss={} ".format(ureg_epoch, average_loss))
             if average_loss > previous_average_loss:
                 if self._scheduler is not None:
-                    self.schedule(epoch=ureg_epoch,val_loss=average_loss)
+                    self.schedule(epoch=ureg_epoch, val_loss=average_loss)
                 else:
                     break
-            if average_loss < previous_average_loss and abs(average_loss-previous_average_loss)<epsilon:
+            if average_loss < previous_average_loss and abs(average_loss - previous_average_loss) < epsilon:
                 break
 
-            previous_average_loss=average_loss
+            previous_average_loss = average_loss
 
         return performance_estimators
 
@@ -419,10 +418,10 @@ class URegularizer:
             weight_s = 1 / (self.num_training / (self.num_training + self.num_unsupervised_examples))
         if weight_u is None:
             weight_u = 1 / (self.num_unsupervised_examples / (self.num_training + self.num_unsupervised_examples))
-         # print("using weights: T={} U={} weight_s={} weight_u={}".format(
-         #     self.num_training,
-         #     self.num_unsupervised_examples,
-         #     weight_s, weight_u))
+            # print("using weights: T={} U={} weight_s={} weight_u={}".format(
+            #     self.num_training,
+            #     self.num_unsupervised_examples,
+            #     weight_s, weight_u))
         return weight_s, weight_u
 
     def combine_losses(self, supervised_loss, regularization_loss):
@@ -442,7 +441,7 @@ class URegularizer:
         #              self._accumulator_total_which_model_loss))
 
         self._accumulator_total_which_model_loss = 0
-        self._num_accumulator_updates =0
+        self._num_accumulator_updates = 0
         if self._forget_every_n_epoch is not None:
             self._epoch_counter += 1
             # halve the learning rate for each extra epoch we don't reset:
@@ -457,7 +456,7 @@ class URegularizer:
         if self._optimizer is not None:
             self.adjust_learning_rate(self._optimizer, learning_rate, self._eps)
 
-    def adjust_learning_rate( self, optimizer, learning_rate, epsilon=1E-8):
+    def adjust_learning_rate(self, optimizer, learning_rate, epsilon=1E-8):
         """Set learning rate of which_one_model to the parameter. """
         if optimizer is not None:
             for i, param_group in enumerate(optimizer.param_groups):
@@ -467,6 +466,7 @@ class URegularizer:
                     param_group['lr'] = new_lr
                     print('Adjusting learning rate to {:.4e}'
                           .format(new_lr))
+
     def set_num_examples(self, num_training, num_unsupervised_examples):
         self.num_training = num_training
         self.num_unsupervised_examples = num_unsupervised_examples
@@ -488,3 +488,7 @@ class URegularizer:
             bag = [xs[index] for index in range(len(xs))]
             xs = torch.stack(random.choices(bag, k=max_len))
         return xs, xu
+
+    def shuffling_iter(self, problem, dataset):
+
+        return problem.loader_for_dataset(dataset)

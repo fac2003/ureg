@@ -15,6 +15,15 @@ class Cifar10Problem(Problem):
     def example_size(self):
         return (3,32,32)
 
+    def train_set(self):
+        return self.trainset
+
+    def unsup_set(self):
+        return self.unsupset
+
+    def test_set(self):
+        return self.testset
+
     def __init__(self, mini_batch_size):
         super().__init__(mini_batch_size)
         self.transform_train = transforms.Compose([

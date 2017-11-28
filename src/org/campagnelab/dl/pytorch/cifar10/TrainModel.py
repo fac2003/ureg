@@ -92,31 +92,42 @@ class TrainModel:
         self.max_validation_examples = args.num_validation
         self.max_training_examples = args.num_training
         self.unsuploader = self.problem.reg_loader()
-
+        model_built=False
         if args.resume:
             # Load checkpoint.
 
             print('==> Resuming from checkpoint..')
 
             assert os.path.isdir('checkpoint'), 'Error: no checkpoint directory found!'
-            checkpoint = torch.load('./checkpoint/ckpt_{}.t7'.format(args.checkpoint_key))
-            self.net = checkpoint['net']
-            self.best_acc = checkpoint['acc']
-            self.start_epoch = checkpoint['epoch']
-            ureg_enabled = checkpoint['ureg']
+            checkpoint=None
+            try:
+                checkpoint = torch.load('./checkpoint/ckpt_{}.t7'.format(args.checkpoint_key))
+            except                FileNotFoundError:
+                pass
+            if checkpoint is not None:
 
-            if ureg_enabled:
-                ureg = URegularizer(self.net, mini_batch_size, args.ureg_num_features,
-                                    args.ureg_alpha, args.ureg_learning_rate,
-                                    reset_every_epochs=args.ureg_reset_every_n_epoch,
-                                    do_not_use_scheduler=self.args.constant_learning_rates)
+                self.net = checkpoint['net']
+                self.best_acc = checkpoint['acc']
+                self.start_epoch = checkpoint['epoch']
+                ureg_enabled = checkpoint['ureg']
 
-                ureg.set_num_examples(min(len(self.trainloader), args.num_training),
-                                      min(len(self.unsuploader), args.num_shaving))
-                ureg.enable()
-                if not args.drop_ureg_model:
-                    ureg.resume(checkpoint['ureg_model'])
-        else:
+                if ureg_enabled:
+                    ureg = URegularizer(self.net, mini_batch_size, args.ureg_num_features,
+                                        args.ureg_alpha, args.ureg_learning_rate,
+                                        reset_every_epochs=args.ureg_reset_every_n_epoch,
+                                        do_not_use_scheduler=self.args.constant_learning_rates)
+
+                    ureg.set_num_examples(min(len(self.trainloader), args.num_training),
+                                          min(len(self.unsuploader), args.num_shaving))
+                    ureg.enable()
+                    if not args.drop_ureg_model:
+                        ureg.resume(checkpoint['ureg_model'])
+                model_built=True
+            else:
+                print("Could not load model checkpoint, unable to --resume.")
+                model_built = False
+
+        if not model_built:
             print('==> Building model {}'.format(args.model))
 
             self.net = create_model_function(args.model)

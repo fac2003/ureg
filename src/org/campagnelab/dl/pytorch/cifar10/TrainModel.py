@@ -270,15 +270,16 @@ class TrainModel:
 
         for performance_estimator in performance_estimators:
             performance_estimator.init_performance_metrics()
+        unsuper_records_to_be_seen=min(max_loop_index,use_max_shaving_records)
         # max_loop_index is the number of times training examples are seen,
         # use_max_shaving_records is the number of times unsupervised examples are seen,
         # estimate weights:
-        a = use_max_shaving_records / max_loop_index
+        a = unsuper_records_to_be_seen / max_loop_index
         b = 1
         weight_s = a / (a + b)
         weight_u = 1 / (a + b)
-        print("weight_s={} weight_u={} use_max_shaving_records={} max_loop_index={}".format(
-            weight_s, weight_u, use_max_shaving_records, max_loop_index))
+        print("weight_s={} weight_u={} unsuper_records_to_be_seen={} max_loop_index={}".format(
+            weight_s, weight_u, unsuper_records_to_be_seen, max_loop_index))
 
         for shaving_index in range(self.num_shaving_epochs):
             print("Shaving step {}".format(shaving_index))

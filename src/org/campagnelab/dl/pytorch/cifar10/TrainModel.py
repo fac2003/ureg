@@ -540,7 +540,8 @@ class TrainModel:
 
             self.grow_unsupervised_examples_per_epoch()
             to_reset_ureg_model += 1
-            if self.args.constant_learning_rates and to_reset_ureg_model > self.args.ureg_reset_every_n_epoch:
+            if self.args.constant_learning_rates and self.args.ureg_reset_every_n_epoch is not None and \
+                            to_reset_ureg_model > self.args.ureg_reset_every_n_epoch:
                 # when learning rates are constant and ureg_reset_every_n_epoch is specified,
                 # reset the ureg model periodically:
                 self.ureg._which_one_model = None

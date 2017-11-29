@@ -246,7 +246,9 @@ class TrainModel:
 
         unsupervised_loss = unsupervised_loss_acc / (num_batches)
         if not self.args.constant_learning_rates:
-            self.scheduler_reg.step(unsupervised_loss, epoch)
+            if  self.epoch_is_test_epoch(epoch):
+                # adjust regularization learning rate only when
+                self.scheduler_reg.step(unsupervised_loss, epoch)
         print()
 
         return performance_estimators
@@ -473,7 +475,7 @@ class TrainModel:
                 perfs += [(perf_ureg_loss,)]
                 perfs += [self.regularize(epoch)]
 
-            if previous_test_perfs is None or (epoch % self.args.test_every_n_epochs+1) == 1:
+            if previous_test_perfs is None or self.epoch_is_test_epoch(epoch):
                 previous_test_perfs=self.test(epoch)
 
             perfs += [previous_test_perfs]
@@ -564,3 +566,6 @@ class TrainModel:
             print("Increase unsupervised: --max-examples-per-epoch to {} and --num-shaving to {}."
                   .format(self.max_examples_per_epoch,
                           self.args.num_shaving))
+
+    def epoch_is_test_epoch(self, epoch):
+        return (epoch % self.args.test_every_n_epochs + 1) == 1

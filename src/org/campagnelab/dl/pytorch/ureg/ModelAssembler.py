@@ -27,7 +27,10 @@ class ModelAssembler:
             if included:
                 reduced_output.append(activation)
 
-                print("{} num activations: {}".format(index,
+                print("included layer {} with num activations: {}".format(index,
+                                                      activation.size()))
+            else:
+                print("excluded layer {} with num activations {}".format(index,
                                                       activation.size()))
             index += 1
         self.collect_output = collect_output

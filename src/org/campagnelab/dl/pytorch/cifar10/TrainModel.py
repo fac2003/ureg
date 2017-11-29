@@ -233,7 +233,8 @@ class TrainModel:
             for performance_estimator in performance_estimators:
                 performance_estimator.observe_performance_metric(batch_idx, optimized_loss.data[0], outputs, targets)
 
-            progress_bar(batch_idx, len(train_loader_subset),
+            progress_bar(batch_idx * self.mini_batch_size,
+                         min(self.max_regularization_examples, self.max_training_examples),
                          " ".join([performance_estimator.progress_message() for performance_estimator in
                                    performance_estimators]))
 
@@ -272,7 +273,7 @@ class TrainModel:
 
         for performance_estimator in performance_estimators:
             performance_estimator.init_performance_metrics()
-        unsuper_records_to_be_seen=min(max_loop_index,use_max_shaving_records)
+        unsuper_records_to_be_seen = min(max_loop_index, use_max_shaving_records)
         # max_loop_index is the number of times training examples are seen,
         # use_max_shaving_records is the number of times unsupervised examples are seen,
         # estimate weights:
@@ -331,7 +332,7 @@ class TrainModel:
                     performance_estimator.observe_performance_metric(batch_idx, optimized_loss,
                                                                      inputs, uinputs)
 
-                progress_bar(batch_idx, max_loop_index,
+                progress_bar(batch_idx * self.mini_batch_size, max_loop_index,
                              " ".join([performance_estimator.progress_message() for performance_estimator in
                                        performance_estimators]))
                 if ((batch_idx + 1) * self.mini_batch_size) > max_loop_index:
@@ -359,7 +360,7 @@ class TrainModel:
                 performance_estimator.observe_performance_metric(batch_idx, loss.data[0], outputs, targets)
 
             self.ureg.estimate_accuracy(inputs)
-            progress_bar(batch_idx, len(self.testloader),
+            progress_bar(batch_idx * self.mini_batch_size, self.max_validation_examples,
                          " ".join([performance_estimator.progress_message() for performance_estimator in
                                    performance_estimators]))
 

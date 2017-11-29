@@ -38,7 +38,7 @@ class URegularizer:
         :param threshold_activation_size do not include layer outputs that have more activations than this threshold.
 
         """
-        self.model_assembler = ModelAssembler(num_features,threshold_activation_size)
+        self.model_assembler = ModelAssembler(num_features, threshold_activation_size)
         self._mini_batch_size = mini_batch_size
         self._model = model
         self._num_activations = 0
@@ -68,9 +68,8 @@ class URegularizer:
         self.do_not_use_scheduler = do_not_use_scheduler
         self.momentum = momentum
         self.L2 = l2
-        self.chosen_activations=None
+        self.chosen_activations = None
         self._alpha = alpha
-
 
     def add_activations(self, num):
         self._num_activations += num
@@ -85,7 +84,7 @@ class URegularizer:
         self._n_total += self._mini_batch_size
 
     def estimate_accuracy(self, xs):
-        #num_activations_supervised = supervised_output.size()[1]
+        # num_activations_supervised = supervised_output.size()[1]
 
         self.create_which_one_model(xs)
 
@@ -138,11 +137,12 @@ class URegularizer:
         """
         if self._scheduler is not None:
             self._scheduler.step(val_loss, epoch)
-    def reset_model(self):
-        self._which_one_model=None
-        self.chosen_activations=None
 
-    def create_which_one_model(self,  xs):
+    def reset_model(self):
+        self._which_one_model = None
+        self.chosen_activations = None
+
+    def create_which_one_model(self, xs):
         num_features = self._num_features
         if self._which_one_model is None:
             if (self._checkpointModel):
@@ -151,8 +151,8 @@ class URegularizer:
             else:
                 activation_list = self.extract_activation_list(xs)
 
-                self._which_one_model=self.model_assembler.assemble(activation_list)
-                self.chosen_activations=self.model_assembler.get_collect_output()
+                self._which_one_model = self.model_assembler.assemble(activation_list)
+                self.chosen_activations = self.model_assembler.get_collect_output()
             # (we will use BCEWithLogitsLoss on top of linar to get the cross entropy after
             # applying a sigmoid).
             self.model_assembler.init_params()
@@ -327,7 +327,7 @@ class URegularizer:
                                                                          None,
                                                                          None)
                     epoch_ = "epoch " + str(ureg_epoch) + " "
-                    progress_bar(batch_idx, length,
+                    progress_bar(batch_idx * self._mini_batch_size, max_examples,
                                  epoch_ + " ".join(
                                      [performance_estimator.progress_message() for performance_estimator in
                                       performance_estimators]))
@@ -349,7 +349,7 @@ class URegularizer:
         return performance_estimators
 
     def extract_activations(self, features):
-        unsupervised_outputs=self.extract_activation_list(features)
+        unsupervised_outputs = self.extract_activation_list(features)
         unsupervised_output = torch.cat(unsupervised_outputs, dim=1)
 
         # obtain activations for supervised samples:
@@ -386,7 +386,6 @@ class URegularizer:
             return None
         if len(xu) != len(xs):
             xu, xs = self._adjust_batch_sizes(xs, xu)
-
 
         self.create_which_one_model(xs)
 

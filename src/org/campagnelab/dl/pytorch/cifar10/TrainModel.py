@@ -114,7 +114,8 @@ class TrainModel:
                     ureg = URegularizer(self.net, mini_batch_size, args.ureg_num_features,
                                         args.ureg_alpha, args.ureg_learning_rate,
                                         reset_every_epochs=args.ureg_reset_every_n_epoch,
-                                        do_not_use_scheduler=self.args.constant_learning_rates)
+                                        do_not_use_scheduler=self.args.constant_learning_rates,
+                                        threshold_activation_size=self.args.threshold_activation_size)
 
                     ureg.set_num_examples(min(len(self.trainloader), args.num_training),
                                           min(len(self.unsuploader), args.num_shaving))
@@ -142,7 +143,8 @@ class TrainModel:
                                  alpha=args.ureg_alpha,
                                  learning_rate=args.ureg_learning_rate,
                                  reset_every_epochs=args.ureg_reset_every_n_epoch,
-                                 do_not_use_scheduler=self.args.constant_learning_rates)
+                                 do_not_use_scheduler=self.args.constant_learning_rates,
+                                 threshold_activation_size=self.args.threshold_activation_size)
         if args.ureg:
             self.ureg.enable()
             self.ureg.set_num_examples(min(len(self.trainloader), args.num_training),

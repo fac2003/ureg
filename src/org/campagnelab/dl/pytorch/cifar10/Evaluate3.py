@@ -78,7 +78,8 @@ parser.add_argument('--ureg-epsilon', default=1e-6, type=float, help='Epsilon to
 parser.add_argument('--mode', help='Training mode: combined or interleaved, used to alter the mode of '
                                    'ureg semi-supervised training.',
                     default="interleaved")
-
+parser.add_argument('--threshold-activation-size', default=4096, type=int,
+                    help='Do not include layers if they produce more than the specified number of activations.')
 parser.add_argument('--grow-unsupervised-each-epoch', default=0, type=int,
                     help='Add the parameter to the number of unsupervised examples used after each epoch completes. '
                          'This parameter will grow --max-examples-per-epoch.')

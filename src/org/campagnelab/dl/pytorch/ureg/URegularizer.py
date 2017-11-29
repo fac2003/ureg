@@ -24,8 +24,21 @@ class URegularizer:
     def __init__(self, model, mini_batch_size, num_features=64, alpha=0.5,
                  learning_rate=0.1,
                  reset_every_epochs=None, do_not_use_scheduler=False,
-                 momentum=0.9, l2=1E-4):
-        self.model_assembler = ModelAssembler(num_features)
+                 momentum=0.9, l2=1E-4, threshold_activation_size=4096):
+        """
+        :param model:
+        :param mini_batch_size:
+        :param num_features:
+        :param alpha:
+        :param learning_rate:
+        :param reset_every_epochs:
+        :param do_not_use_scheduler:
+        :param momentum:
+        :param l2:
+        :param threshold_activation_size do not include layer outputs that have more activations than this threshold.
+
+        """
+        self.model_assembler = ModelAssembler(num_features,threshold_activation_size)
         self._mini_batch_size = mini_batch_size
         self._model = model
         self._num_activations = 0
@@ -56,22 +69,8 @@ class URegularizer:
         self.momentum = momentum
         self.L2 = l2
         self.chosen_activations=None
-        # def count_activations(i, o):
-        #     self.add_activations(len(o))
-        #
-        # removeHandles = []
-        # for namedModule in model.modules():
-        #     print(namedModule)
-        #     removeHandles.append( namedModule.register_forward_hook(count_activations))
-        #
-        # model(torch.zeros(num_inputs))
-        # for handle in removeHandles:
-        #     handle.remove()
-
-        num_input_features = self._num_activations
         self._alpha = alpha
-        # define the model tasked with predicting if activations are generated from
-        # a sample in the training or unsupervised set:
+
 
     def add_activations(self, num):
         self._num_activations += num

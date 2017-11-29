@@ -450,7 +450,7 @@ class TrainModel:
         :return list of performance estimators that observed performance on the last epoch run.
         """
         header_written = False
-        if self.ureg_enabled:
+        if self.ureg_enabled and not self.args.constant_ureg_learning_rate:
             # tell ureg to use a scheduler:
             self.ureg.install_scheduler()
         lr_train_helper = LearningRateHelper(scheduler=self.scheduler_train, learning_rate_name="train_lr")
@@ -500,7 +500,8 @@ class TrainModel:
 
     def training_interleaved(self, epsilon=1E-6):
         header_written = False
-        self.ureg.install_scheduler()
+        if self.ureg_enabled and not self.args.constant_ureg_learning_rate:
+            self.ureg.install_scheduler()
         lr_train_helper = LearningRateHelper(scheduler=self.scheduler_train, learning_rate_name="train_lr")
         lr_reg_helper = LearningRateHelper(scheduler=self.scheduler_reg, learning_rate_name="reg_lr")
         lr_ureg_helper = None

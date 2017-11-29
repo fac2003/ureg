@@ -456,7 +456,7 @@ class TrainModel:
         lr_train_helper = LearningRateHelper(scheduler=self.scheduler_train, learning_rate_name="train_lr")
         lr_reg_helper = LearningRateHelper(scheduler=self.scheduler_reg, learning_rate_name="reg_lr")
         lr_ureg_helper = None  # will be installed on the fly when the ureg model is built, below.
-
+        previous_test_perfs=None
         for epoch in range(self.start_epoch, self.start_epoch + self.args.num_epochs):
             self.ureg.new_epoch(epoch)
             perfs = []
@@ -473,7 +473,10 @@ class TrainModel:
                 perfs += [(perf_ureg_loss,)]
                 perfs += [self.regularize(epoch)]
 
-            perfs += [self.test(epoch)]
+            if previous_test_perfs is None or (epoch % self.args.test_every_n_epochs+1) == 1:
+                previous_test_perfs=self.test(epoch)
+
+            perfs += [previous_test_perfs]
             lr_ureg_helper = self.install_ureg_learning_rate_helper(lr_ureg_helper)
             if lr_ureg_helper is not None:
                 perfs += [(lr_train_helper, lr_reg_helper, lr_ureg_helper)]

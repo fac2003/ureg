@@ -544,7 +544,7 @@ class TrainModel:
                             to_reset_ureg_model > self.args.ureg_reset_every_n_epoch:
                 # when learning rates are constant and ureg_reset_every_n_epoch is specified,
                 # reset the ureg model periodically:
-                self.ureg._which_one_model = None
+                self.ureg.reset_model()
                 to_reset_ureg_model = 0
 
         return perfs

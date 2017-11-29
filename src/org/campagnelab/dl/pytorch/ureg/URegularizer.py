@@ -139,6 +139,9 @@ class URegularizer:
         """
         if self._scheduler is not None:
             self._scheduler.step(val_loss, epoch)
+    def reset_model(self):
+        self._which_one_model=None
+        self.chosen_activations=None
 
     def create_which_one_model(self,  xs):
         num_features = self._num_features

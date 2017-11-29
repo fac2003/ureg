@@ -8,10 +8,18 @@ import threading
 
 class MyFeatureExtractor(nn.Module):
     def __init__(self, submodule, extracted_layers=None):
+        """
+
+        :param submodule:
+        :param extracted_layers:
+        :param max_output_size: maximum size of an output to collect.
+        """
         super(MyFeatureExtractor, self).__init__()
         self.submodule = submodule
         self.outputs = []
+        self.collect_output=None
         self.lock = threading.Lock()
+        self.output_index=0
         if extracted_layers is None:
             self.match_all = True
             self.extracted_layers = []
@@ -21,39 +29,57 @@ class MyFeatureExtractor(nn.Module):
         self.remove_handles = []
         self.use_cuda = torch.cuda.is_available()
 
+    def register(self, container=None):
+        if container is None:
+            container = self.submodule
 
-    def register(self):
-        with self.lock:
-            for name, module in self.submodule._modules.items():
-                if self.match_all or name in self.extracted_layers:
-                    # print("registering hook on {}".format(name))
-                    self.remove_handles += [module.register_forward_hook(lambda m, i, o: self._accumulate_output(m, o))]
+            self._register_internal(container)
+
+    def _register_internal(self, container):
+        if sum(1 for _ in container._modules.items()) == 0:
+            #print("Registering module " + str(container))
+            # this module is a leaf, register its activations:
+            with self.lock:
+                self.remove_handles += [
+                    container.register_forward_hook(lambda m, i, o: self._accumulate_output(m, o))]
+        else:
+            for name, module in container._modules.items():
+                # if self.match_all or name in self.extracted_layers:
+                # else:
+                #print("Registering children of module " + name)
+                # register the submodules of this module:
+
+                self._register_internal(module)
 
     def _accumulate_output(self, module, output):
         with self.lock:
-            mini_batch_size = output.size()[0]
+            if self.collect_output is None or self.collect_output[self.output_index]:
 
-            flattened = output.view(mini_batch_size, -1)
-            if self.use_cuda:
-                flattened= flattened.cuda()
-            #print("output.size={}".format(flattened.size()))
-            self.outputs += [flattened]
-            #print("obtaining outputs {} from module: # outputs {}".format(module, [len(o) for o in self.outputs]))
+                mini_batch_size = output.size()[0]
 
-    def collect_outputs(self, x, seed):
+                flattened = output.view(mini_batch_size, -1).clone()
+                if self.use_cuda:
+                    flattened = flattened.cuda()
+                # print("output.size={}".format(flattened.size()))
+                self.outputs += [flattened]
+                # print("obtaining outputs {} from module: # outputs {}".format(module, [len(o) for o in self.outputs]))
 
-        #print("x.cuda? {}".format(x.is_cuda))
+            self.output_index += 1
+
+    def collect_outputs(self,x , collect_output=None):
+        self.collect_output=collect_output
+        # print("x.cuda? {}".format(x.is_cuda))
         # do a forward to collect the outputs:
         self.submodule(x)
-        #print("returning #outputs: {}".format(len(self.outputs)))
+        # print("returning #outputs: {}".format(len(self.outputs)))
         # return the outputs
         return self.outputs
 
-
     def clear_outputs(self):
-        with self.lock:
-            self.outputs = []
 
+        with self.lock:
+            self.output_index=0
+            self.outputs = []
 
     def cleanup(self):
         with self.lock:

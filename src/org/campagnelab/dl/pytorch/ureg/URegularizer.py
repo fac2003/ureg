@@ -9,6 +9,7 @@ from org.campagnelab.dl.pytorch.cifar10.LossHelper import LossHelper
 from org.campagnelab.dl.pytorch.cifar10.Samplers import ProtectedIterator
 from org.campagnelab.dl.pytorch.cifar10.utils import init_params, progress_bar
 from org.campagnelab.dl.pytorch.ureg.LRSchedules import construct_scheduler
+from org.campagnelab.dl.pytorch.ureg.ModelAssembler import ModelAssembler
 from org.campagnelab.dl.pytorch.ureg.MyFeatureExtractor import MyFeatureExtractor
 
 
@@ -24,6 +25,7 @@ class URegularizer:
                  learning_rate=0.1,
                  reset_every_epochs=None, do_not_use_scheduler=False,
                  momentum=0.9, l2=1E-4):
+        self.model_assembler = ModelAssembler(num_features)
         self._mini_batch_size = mini_batch_size
         self._model = model
         self._num_activations = 0
@@ -53,6 +55,7 @@ class URegularizer:
         self.do_not_use_scheduler = do_not_use_scheduler
         self.momentum = momentum
         self.L2 = l2
+        self.chosen_activations=None
         # def count_activations(i, o):
         #     self.add_activations(len(o))
         #
@@ -83,17 +86,17 @@ class URegularizer:
         self._n_total += self._mini_batch_size
 
     def estimate_accuracy(self, xs):
-        supervised_output = self.extract_activations(xs)  # print("length of output: "+str(len(supervised_output)))
-        num_activations_supervised = supervised_output.size()[1]
+        #num_activations_supervised = supervised_output.size()[1]
 
-        self.create_which_one_model(num_activations_supervised)
+        self.create_which_one_model(xs)
+
+        supervised_outputs = self.extract_activation_list(xs)  # print("length of output: "+str(len(supervised_output)))
 
         # now we use the model:
         self._which_one_model.eval()
         # the more the activations on the supervised set deviate from the unsupervised data,
         # the more we need to regularize:
-        ys = self._which_one_model(supervised_output)
-        # yu = self._which_one_model(unsupervised_output)
+        ys = self.model_assembler.evaluate(supervised_outputs)
 
         self._estimate_accuracy(ys, self.ys_true)
 
@@ -137,24 +140,20 @@ class URegularizer:
         if self._scheduler is not None:
             self._scheduler.step(val_loss, epoch)
 
-    def create_which_one_model(self, num_activations):
+    def create_which_one_model(self,  xs):
         num_features = self._num_features
         if self._which_one_model is None:
             if (self._checkpointModel):
                 self._which_one_model = self._checkpointModel
                 self._checkpointModel = None
             else:
-                self._which_one_model = Sequential(
-                    torch.nn.Linear(num_activations, num_features),
-                    torch.nn.ReLU(),
-                    torch.nn.Linear(num_features, num_features),
-                    torch.nn.ReLU(),
-                    torch.nn.Linear(num_features, 2),
-                    torch.nn.Softmax()
-                )
+                activation_list = self.extract_activation_list(xs)
+
+                self._which_one_model=self.model_assembler.assemble(activation_list)
+                self.chosen_activations=self.model_assembler.get_collect_output()
             # (we will use BCEWithLogitsLoss on top of linar to get the cross entropy after
             # applying a sigmoid).
-            init_params(self._which_one_model)
+            self.model_assembler.init_params()
 
             print("done building which_one_model:" + str(self._which_one_model))
             if self._use_cuda: self._which_one_model.cuda()
@@ -206,10 +205,10 @@ class URegularizer:
 
         if not self._enabled:
             return
-        supervised_output = self.extract_activations(xs)
-        num_activations_supervised = supervised_output.size()[1]
 
-        self.create_which_one_model(num_activations_supervised)
+        self.create_which_one_model(xs)
+        supervised_output = self.extract_activations(xs)
+
         # self._which_one_model.eval()
         ys = self._which_one_model(supervised_output)
         print("probabilities that samples belong to the training and test sets:" + str(ys))
@@ -224,25 +223,15 @@ class URegularizer:
         if len(xu) != len(xs):
             xu, xs = self._adjust_batch_sizes(xs, xu)
 
-        mini_batch_size = len(xs)
+        self.create_which_one_model(xs)
+        supervised_output_list = self.extract_activation_list(xs)
+        unsupervised_output_list = self.extract_activation_list(xu)
 
-        supervised_output = self.extract_activations(xs)  # print("length of output: "+str(len(supervised_output)))
-        unsupervised_output = self.extract_activations(xu)  # print("length of output: "+str(len(supervised_output)))
-        num_activations_supervised = supervised_output.size()[1]
-        num_activations_unsupervised = unsupervised_output.size()[1]
-        # print("num_activations: {}".format(str(num_activations_supervised)))
-        # print("num_activations: {}".format(str(num_activations_unsupervised)))
-
-        # supervised_output = Variable(supervised_output.data, requires_grad = True)
-        # print("has gradient: " + str(hasattr(supervised_output.grad, "data")))  # prints False
-
-
-        self.create_which_one_model(num_activations_supervised)
         self._optimizer.zero_grad()
         # predict which dataset (s or u) the samples were from:
         self._which_one_model.train()
-        ys = self._which_one_model(supervised_output)
-        yu = self._which_one_model(unsupervised_output)
+        ys = self.model_assembler.evaluate(supervised_output_list)
+        yu = self.model_assembler.evaluate(unsupervised_output_list)
         if (len(ys) != len(self.ys_true)):
             print("lengths ys differ: {} !={}".format(len(ys), len(self.ys_true)))
             return None
@@ -358,21 +347,28 @@ class URegularizer:
         return performance_estimators
 
     def extract_activations(self, features):
-        # determine the number of activations in model:
-        self.create_feature_extractors()
-        # obtain activations for unsupervised samples:
-        self._my_feature_extractor1.register()
-        self._my_feature_extractor1.clear_outputs()
-        unsupervised_output = self._my_feature_extractor1.collect_outputs(features, [])
-        self._my_feature_extractor1.cleanup()
-        self._my_feature_extractor1.clear_outputs()
-        unsupervised_output = torch.cat(unsupervised_output, dim=1)
+        unsupervised_outputs=self.extract_activation_list(features)
+        unsupervised_output = torch.cat(unsupervised_outputs, dim=1)
 
         # obtain activations for supervised samples:
         if self._use_cuda:
             unsupervised_output = unsupervised_output.cuda()
 
         return unsupervised_output
+
+    def extract_activation_list(self, features):
+        # determine the number of activations in model:
+        self.create_feature_extractors()
+        # obtain activations for unsupervised samples:
+        self._my_feature_extractor1.register()
+        self._my_feature_extractor1.clear_outputs()
+        collect_output = self.model_assembler.get_collect_output()
+        unsupervised_outputs = self._my_feature_extractor1.collect_outputs(features,
+                                                                           collect_output)
+        self._my_feature_extractor1.cleanup()
+        self._my_feature_extractor1.clear_outputs()
+
+        return unsupervised_outputs
 
     def regularization_loss(self, xs, xu, weight_s=None, weight_u=None):
         """
@@ -389,11 +385,11 @@ class URegularizer:
         if len(xu) != len(xs):
             xu, xs = self._adjust_batch_sizes(xs, xu)
 
+
+        self.create_which_one_model(xs)
+
         supervised_output = self.extract_activations(xs)  # print("length of output: "+str(len(supervised_output)))
         unsupervised_output = self.extract_activations(xu)  # print("length of output: "+str(len(supervised_output)))
-        num_activations_supervised = supervised_output.size()[1]
-
-        self.create_which_one_model(num_activations_supervised)
 
         # now we use the model:
         self._which_one_model.eval()

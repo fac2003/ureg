@@ -125,7 +125,7 @@ else:
 
 
     def vgg():
-        return VGG('VGG16')
+        return VGG('VGG16',(3,32,32))
 
 
     def resnet18():

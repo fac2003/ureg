@@ -164,13 +164,11 @@ class TrainModel:
             construct_scheduler(self.optimizer_training, 'min',
                                 lr_patience=self.args.lr_patience,
                                 ureg_reset_every_n_epoch=self.args.ureg_reset_every_n_epoch)
-
-        # use max for regularization lr because the more regularization
-        # progresses, the harder it becomes to differentiate training from test activations, we want larger ureg training losses,
-        # so we drop the ureg learning rate whenever the metric does not improve:
+        # the regularizer aims to increase uncertainty between training and unsup set. Smaller losses are closer to
+        # success, optimize for min of the loss.
         self.scheduler_reg = \
             construct_scheduler(self.optimizer_reg,
-                                'max', extra_patience=5,
+                                'min', extra_patience=5,
                                 lr_patience=self.args.lr_patience,
                                 ureg_reset_every_n_epoch=self.args.ureg_reset_every_n_epoch)
         self.num_shaving_epochs = self.args.shaving_epochs

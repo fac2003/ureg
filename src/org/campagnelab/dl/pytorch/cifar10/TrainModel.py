@@ -511,6 +511,15 @@ class TrainModel:
         lr_reg_helper = LearningRateHelper(scheduler=self.scheduler_reg, learning_rate_name="reg_lr")
         lr_ureg_helper = None  # will be installed on the fly when the ureg model is built, below.
         previous_test_perfs = None
+
+        if self.args.resume and self.ureg_enabled:
+            print("Training ureg to convergence on --resume.")
+            # train ureg to convergence on resume:
+            train_dataset = self.problem.train_set()
+            unsup_dataset = self.problem.unsup_set()
+            self.ureg.train_ureg_to_convergence(self.problem, train_dataset, unsup_dataset,
+                                                                     epsilon=self.args.ureg_epsilon, max_epochs=10,
+                                                                     max_examples=self.args.max_examples_per_epoch)
         for epoch in range(self.start_epoch, self.start_epoch + self.args.num_epochs):
             self.ureg.new_epoch(epoch)
             perfs = []

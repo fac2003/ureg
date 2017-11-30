@@ -3,16 +3,13 @@ import os
 import torch
 from torch.autograd import Variable
 from torch.backends import cudnn
-from torch.optim.lr_scheduler import ReduceLROnPlateau
-from torch.utils.data.sampler import RandomSampler, BatchSampler
 
 from org.campagnelab.dl.pytorch.cifar10.AccuracyHelper import AccuracyHelper
 from org.campagnelab.dl.pytorch.cifar10.FloatHelper import FloatHelper
 from org.campagnelab.dl.pytorch.cifar10.LRHelper import LearningRateHelper
 from org.campagnelab.dl.pytorch.cifar10.LossHelper import LossHelper
-from org.campagnelab.dl.pytorch.cifar10.Samplers import TrimSampler
 from org.campagnelab.dl.pytorch.cifar10.utils import progress_bar
-from org.campagnelab.dl.pytorch.ureg.LRSchedules import LearningRateAnnealing, construct_scheduler
+from org.campagnelab.dl.pytorch.ureg.LRSchedules import construct_scheduler
 from org.campagnelab.dl.pytorch.ureg.URegularizer import URegularizer
 
 
@@ -169,7 +166,7 @@ class TrainModel:
         # success, optimize for min of the loss.
         self.scheduler_reg = \
             construct_scheduler(self.optimizer_reg,
-                                'min', extra_patience=5,
+                                'min', extra_patience=0 if args.mode=="one_pass" else 5,
                                 lr_patience=self.args.lr_patience,
                                 ureg_reset_every_n_epoch=self.args.ureg_reset_every_n_epoch)
         self.num_shaving_epochs = self.args.shaving_epochs
@@ -299,6 +296,7 @@ class TrainModel:
                 # adjust regularization learning rate only when not one pass (which keeps reg_lr in sync with lr)
                 if self.args.mode != "one_pass":
                     self.scheduler_reg.step(unsupervised_loss, epoch)
+
         print()
 
         return performance_estimators

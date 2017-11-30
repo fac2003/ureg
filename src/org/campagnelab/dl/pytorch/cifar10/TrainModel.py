@@ -296,8 +296,9 @@ class TrainModel:
         unsupervised_loss = unsupervised_loss_acc / (num_batches)
         if not self.args.constant_learning_rates:
             if self.epoch_is_test_epoch(epoch):
-                # adjust regularization learning rate only when
-                self.scheduler_reg.step(unsupervised_loss, epoch)
+                # adjust regularization learning rate only when not one pass (which keeps reg_lr in sync with lr)
+                if self.args.mode != "one_pass":
+                    self.scheduler_reg.step(unsupervised_loss, epoch)
         print()
 
         return performance_estimators
@@ -424,6 +425,8 @@ class TrainModel:
         assert test_accuracy is not None, "test_accuracy must be found among estimated performance metrics"
         if not self.args.constant_learning_rates:
             self.scheduler_train.step(test_accuracy, epoch)
+            if self.args.mode == "one_pass":
+                self.scheduler_reg.step(test_accuracy, epoch)
 
         return performance_estimators
 

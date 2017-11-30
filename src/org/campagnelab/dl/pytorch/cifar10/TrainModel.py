@@ -159,7 +159,7 @@ class TrainModel:
             print("ureg is disabled")
 
         self.scheduler_train = \
-            construct_scheduler(self.optimizer_training, 'min',
+            construct_scheduler(self.optimizer_training, 'min', factor=0.9,
                                 lr_patience=self.args.lr_patience,
                                 ureg_reset_every_n_epoch=self.args.ureg_reset_every_n_epoch)
         # the regularizer aims to increase uncertainty between training and unsup set. Smaller losses are closer to
@@ -167,7 +167,7 @@ class TrainModel:
         self.scheduler_reg = \
             construct_scheduler(self.optimizer_reg,
                                 'min', extra_patience=0 if args.mode=="one_pass" else 5,
-                                lr_patience=self.args.lr_patience,
+                                lr_patience=self.args.lr_patience,factor=0.9,
                                 ureg_reset_every_n_epoch=self.args.ureg_reset_every_n_epoch)
         self.num_shaving_epochs = self.args.shaving_epochs
         if self.args.num_training > self.args.num_shaving:

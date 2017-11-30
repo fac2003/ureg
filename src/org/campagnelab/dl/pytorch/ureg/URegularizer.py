@@ -83,6 +83,10 @@ class URegularizer:
         self._n_correct += predicted.eq(truth).cpu().sum()
         self._n_total += self._mini_batch_size
 
+    def _clear_accuracy(self):
+        self._n_correct =0
+        self._n_total =0
+
     def estimate_accuracy(self, xs):
         # num_activations_supervised = supervised_output.size()[1]
 
@@ -256,6 +260,11 @@ class URegularizer:
         self._num_accumulator_updates += 1
         total_which_model_loss.backward(retain_graph=True)
         self._optimizer.step()
+        # updates counts for estimation of accuracy in this minibatch:
+
+        self._estimate_accuracy(ys, self.ys_true)
+        self._estimate_accuracy(yu, self.yu_true)
+
         return total_which_model_loss
 
     def get_ureg_loss(self):
@@ -389,15 +398,15 @@ class URegularizer:
 
         self.create_which_one_model(xs)
 
-        supervised_output = self.extract_activations(xs)  # print("length of output: "+str(len(supervised_output)))
-        unsupervised_output = self.extract_activations(xu)  # print("length of output: "+str(len(supervised_output)))
+        supervised_output = self.extract_activation_list(xs)  # print("length of output: "+str(len(supervised_output)))
+        unsupervised_output = self.extract_activation_list(xu)  # print("length of output: "+str(len(supervised_output)))
 
         # now we use the model:
         self._which_one_model.eval()
         # the more the activations on the supervised set deviate from the unsupervised data,
         # the more we need to regularize:
-        ys = self._which_one_model(supervised_output)
-        yu = self._which_one_model(unsupervised_output)
+        ys = self.model_assembler.evaluate(supervised_output)
+        yu = self.model_assembler.evaluate(unsupervised_output)
 
         weight_s, weight_u = self.loss_weights(weight_s, weight_u)
 

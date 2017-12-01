@@ -133,7 +133,7 @@ else:
 
 
     def preactresnet18():
-        return PreActResNet18()
+        return PreActResNet18((3,32,32))
 
 
     def googlenet():

@@ -146,8 +146,9 @@ class TrainModel:
                                  threshold_activation_size=self.args.threshold_activation_size)
         if args.ureg:
             self.ureg.enable()
-            self.ureg.set_num_examples(min(len(self.trainloader), args.num_training),
-                                       min(len(self.unsuploader), args.num_shaving))
+            self.ureg.set_num_examples(min(len(self.trainloader)*mini_batch_size, args.num_training),
+                                       min(len(self.unsuploader)*mini_batch_size, args.num_shaving))
+            print("weights: {} ".format(self.ureg.loss_weights(None,None)))
             self.ureg.forget_model(args.ureg_reset_every_n_epoch)
             print(
                 "ureg is enabled with alpha={}, reset every {} epochs. ".format(args.ureg_alpha,
@@ -155,8 +156,8 @@ class TrainModel:
 
         else:
             self.ureg.disable()
-            self.ureg.set_num_examples(min(len(self.trainloader), args.num_training),
-                                       min(len(self.unsuploader), args.num_shaving))
+            self.ureg.set_num_examples(min(len(self.trainloader) * mini_batch_size, args.num_training),
+                                       min(len(self.unsuploader) * mini_batch_size, args.num_shaving))
             print("ureg is disabled")
 
         self.scheduler_train = \

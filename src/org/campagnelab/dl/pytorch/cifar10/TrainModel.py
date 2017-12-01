@@ -671,4 +671,5 @@ class TrainModel:
                           self.args.num_shaving))
 
     def epoch_is_test_epoch(self, epoch):
-        return (epoch % self.args.test_every_n_epochs + 1) == 1
+        epoch_is_one_of_last_ten = epoch > (self.start_epoch + self.args.num_epochs - 10)
+        return (epoch % self.args.test_every_n_epochs + 1) == 1 or epoch_is_one_of_last_ten

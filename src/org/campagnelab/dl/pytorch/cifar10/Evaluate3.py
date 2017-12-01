@@ -93,7 +93,9 @@ parser.add_argument('--abort-when-failed-to-improve', default=sys.maxsize, type=
 parser.add_argument('--test-every-n-epochs', type=int,
                     help='Estimate performance on the test set every n epochs. '
                          'Note that when test is skipped, the previous test '
-                         'performances are reported in the log until new ones are available.', default=1)
+                         'performances are reported in the log until new ones are available.'
+                         'This parameter does not affect testing for the last 10 epochs of a run, each test is '
+                         'performed for these epochs.', default=1)
 
 parser.add_argument('--cross-validations-folds', type=str,
                     help='Use cross-validation with folds defined in the argument file.'

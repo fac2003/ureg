@@ -273,6 +273,7 @@ class TrainModel:
                     self.optimizer_reg.step()
                 else:
                     reg_loss_float = 0
+
                 performance_estimators[REG_INDEX_2].observe_performance_metric(batch_idx, reg_loss_float, None, None)
                 performance_estimators[ALPHA_INDEX].observe_performance_metric(batch_idx, self.ureg._alpha,
                                                                                None, None)
@@ -381,8 +382,8 @@ class TrainModel:
                                                                     weight_s=weight_s,
                                                                     weight_u=weight_u)
                 if regularization_loss is not None:
-                    optimized_loss = regularization_loss.data[0]
                     regularization_loss=regularization_loss*mixing_coeficient
+                    optimized_loss = regularization_loss.data[0]
                     regularization_loss.backward()
                     self.optimizer_reg.step()
                 else:

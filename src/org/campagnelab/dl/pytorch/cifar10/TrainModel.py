@@ -309,7 +309,8 @@ class TrainModel:
 
         return performance_estimators
 
-    def regularize(self, epoch, performance_estimators=(LossHelper("reg_loss"),)):
+    def regularize(self, epoch, performance_estimators=(LossHelper("reg_loss"),),
+                   previous_ureg_loss=1.0,previous_training_loss=1.0                   ):
         """
         Performs training vs test regularization/shaving phase.
         :param epoch:
@@ -341,6 +342,7 @@ class TrainModel:
         weight_u = 1 / (a + b)
         print("weight_s={} weight_u={} unsuper_records_to_be_seen={} max_loop_index={}".format(
             weight_s, weight_u, unsuper_records_to_be_seen, max_loop_index))
+        mixing_coeficient = previous_ureg_loss / previous_training_loss * self.args.ureg_alpha
 
         for shaving_index in range(self.num_shaving_epochs):
             print("Shaving step {}".format(shaving_index))
@@ -380,6 +382,7 @@ class TrainModel:
                                                                     weight_u=weight_u)
                 if regularization_loss is not None:
                     optimized_loss = regularization_loss.data[0]
+                    regularization_loss=regularization_loss*mixing_coeficient
                     regularization_loss.backward()
                     self.optimizer_reg.step()
                 else:
@@ -593,7 +596,9 @@ class TrainModel:
                 perf_ureg_loss = LossHelper("ureg_loss")
                 perf_ureg_loss.observe_performance_metric(1, ureg_loss, None, None)
                 perfs += [(perf_ureg_loss,)]
-                perfs += [self.regularize(epoch)]
+
+                perfs += [self.regularize(epoch, previous_ureg_loss=previous_ureg_loss,
+                                          previous_training_loss=previous_training_loss)]
 
             if previous_test_perfs is None or self.epoch_is_test_epoch(epoch):
                 previous_test_perfs = self.test(epoch)
@@ -659,7 +664,8 @@ class TrainModel:
                 perfs += [ureg_training_perf]
 
             if self.args.ureg:
-                reg_perfs = self.regularize(epoch)
+                reg_perfs = self.regularize(epoch, previous_ureg_loss=previous_ureg_loss,
+                                          previous_training_loss=previous_training_loss)
                 perfs += [reg_perfs]
                 lr_ureg_helper = self.install_ureg_learning_rate_helper(lr_ureg_helper)
 

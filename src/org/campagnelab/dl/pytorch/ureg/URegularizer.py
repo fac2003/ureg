@@ -84,8 +84,8 @@ class URegularizer:
         self._n_total += self._mini_batch_size
 
     def _clear_accuracy(self):
-        self._n_correct =0
-        self._n_total =0
+        self._n_correct = 0
+        self._n_total = 0
 
     def estimate_accuracy(self, xs):
         # num_activations_supervised = supervised_output.size()[1]
@@ -328,8 +328,8 @@ class URegularizer:
                     xs = xs.cuda()
                     xu = xu.cuda()
 
-                weight_s , weight_u = self.loss_weights(1,1)
-                loss = self.train_ureg(xs, xu, weight_s , weight_u)
+                weight_s, weight_u = self.loss_weights(1, 1)
+                loss = self.train_ureg(xs, xu, weight_s, weight_u)
                 if loss is not None:
                     # print("ureg batch {} average loss={} ".format(batch_idx, loss.data[0]))
                     num_batches += 1
@@ -401,7 +401,8 @@ class URegularizer:
         self.create_which_one_model(xs)
 
         supervised_output = self.extract_activation_list(xs)  # print("length of output: "+str(len(supervised_output)))
-        unsupervised_output = self.extract_activation_list(xu)  # print("length of output: "+str(len(supervised_output)))
+        unsupervised_output = self.extract_activation_list(
+            xu)  # print("length of output: "+str(len(supervised_output)))
 
         # now we use the model:
         self._which_one_model.eval()
@@ -414,9 +415,9 @@ class URegularizer:
 
         # self.loss_ys.weight=torch.from_numpy(numpy.array([weight_s,weight_u]))
         # self.loss_yu.weight=torch.from_numpy(numpy.array([weight_u,weight_s]))
-
-        rLoss = weight_s * self.loss_ys(ys, self.ys_uncertain) + \
-                weight_u * self.loss_yu(yu, self.ys_uncertain)
+        optimum_loss = self.loss_ys(self.ys_uncertain, self.ys_uncertain)
+        rLoss = torch.abs(weight_s * (optimum_loss - self.loss_ys(ys, self.ys_uncertain)) + \
+                          weight_u * (optimum_loss - self.loss_yu(yu, self.ys_uncertain)))
         # self._alpha = 0.5 - (0.5 - self._last_epoch_accuracy)
         # rLoss = (self.loss_ys(ys, self.ys_uncertain))
         # self.loss_yu(yu, self.ys_uncertain)) / 2
@@ -432,8 +433,8 @@ class URegularizer:
             #     self.num_training,
             #     self.num_unsupervised_examples,
             #     weight_s, weight_u))
-        normalized_weight_s=    weight_s/(weight_s+weight_u)
-        normalized_weight_u=    weight_u/(weight_s+weight_u)
+        normalized_weight_s = weight_s / (weight_s + weight_u)
+        normalized_weight_u = weight_u / (weight_s + weight_u)
         return normalized_weight_s, normalized_weight_u
 
     def combine_losses(self, supervised_loss, regularization_loss):

@@ -261,8 +261,9 @@ class TrainModel:
                 self.optimizer_reg.zero_grad()
                 regularization_loss = self.ureg.regularization_loss(inputs, uinputs)
                 if regularization_loss is not None:
-                    # NB. we used ureg_alpha to adjust the learning rate for regularization
+                    regularization_loss *= self.ureg._alpha
                     reg_loss_float = regularization_loss.data[0]
+
                     regularization_loss.backward()
                     self.optimizer_reg.step()
                 else:

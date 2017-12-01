@@ -5,5 +5,6 @@ python ${UREG}/src/org/campagnelab/dl/pytorch/cifar10/Evaluate3.py \
 --checkpoint-key ${CHECKPOINT} \
 --problem STL10  \
 --model VGG16 --shaving-epochs 1 \
+--cv-fold-min-perf 0.57 \
  --cross-validations-folds ${UREG}/data/stl10_binary/fold_indices.txt \
 --max-examples-per-epoch 1000  "$@" 2>&1 |tee ${CHECKPOINT}.log

@@ -3,15 +3,13 @@ import os
 import torch
 from torch.autograd import Variable
 from torch.backends import cudnn
-from torch.optim.lr_scheduler import ReduceLROnPlateau
-from torch.utils.data.sampler import RandomSampler, BatchSampler
 
 from org.campagnelab.dl.pytorch.cifar10.AccuracyHelper import AccuracyHelper
+from org.campagnelab.dl.pytorch.cifar10.FloatHelper import FloatHelper
 from org.campagnelab.dl.pytorch.cifar10.LRHelper import LearningRateHelper
 from org.campagnelab.dl.pytorch.cifar10.LossHelper import LossHelper
-from org.campagnelab.dl.pytorch.cifar10.Samplers import TrimSampler
 from org.campagnelab.dl.pytorch.cifar10.utils import progress_bar
-from org.campagnelab.dl.pytorch.ureg.LRSchedules import LearningRateAnnealing, construct_scheduler
+from org.campagnelab.dl.pytorch.ureg.LRSchedules import construct_scheduler
 from org.campagnelab.dl.pytorch.ureg.URegularizer import URegularizer
 
 
@@ -138,7 +136,7 @@ class TrainModel:
 
         self.optimizer_training = torch.optim.SGD(self.net.parameters(), lr=args.lr, momentum=args.momentum,
                                                   weight_decay=args.L2)
-        self.optimizer_reg = torch.optim.SGD(self.net.parameters(), lr=args.shave_lr, momentum=0.9, weight_decay=5e-4)
+        self.optimizer_reg = torch.optim.SGD(self.net.parameters(), lr=args.shave_lr, momentum=0.9, weight_decay=args.L2)
         self.ureg = URegularizer(self.net, self.mini_batch_size, num_features=args.ureg_num_features,
                                  alpha=args.ureg_alpha,
                                  learning_rate=args.ureg_learning_rate,
@@ -161,15 +159,15 @@ class TrainModel:
             print("ureg is disabled")
 
         self.scheduler_train = \
-            construct_scheduler(self.optimizer_training, 'min',
+            construct_scheduler(self.optimizer_training, 'min', factor=0.9,
                                 lr_patience=self.args.lr_patience,
                                 ureg_reset_every_n_epoch=self.args.ureg_reset_every_n_epoch)
         # the regularizer aims to increase uncertainty between training and unsup set. Smaller losses are closer to
         # success, optimize for min of the loss.
         self.scheduler_reg = \
             construct_scheduler(self.optimizer_reg,
-                                'min', extra_patience=5,
-                                lr_patience=self.args.lr_patience,
+                                'min', extra_patience=0 if args.mode=="one_pass" else 5,
+                                lr_patience=self.args.lr_patience,factor=0.9,
                                 ureg_reset_every_n_epoch=self.args.ureg_reset_every_n_epoch)
         self.num_shaving_epochs = self.args.shaving_epochs
         if self.args.num_training > self.args.num_shaving:
@@ -179,14 +177,44 @@ class TrainModel:
             print("shaving-epochs set  to " + str(self.num_shaving_epochs))
 
     def train(self, epoch,
-              performance_estimators=(LossHelper("train_loss"), AccuracyHelper("train_")),
+              performance_estimators=None,
               train_supervised_model=True,
-              train_ureg=True):
+              train_ureg=True,
+              regularize=False):
+        TRAIN_INDEX_1=0
+        TRAIN_INDEX_2=0
+        REG_INDEX_2=0
+        ALPHA_INDEX=0
+        UREG_INDEX_1=0
+        UREG_INDEX_2=0
+        if performance_estimators is None:
+            i=0
+            performance_estimators = [LossHelper("train_loss"), AccuracyHelper("train_")]
+            TRAIN_INDEX_1=i
+            i+=1
+            TRAIN_INDEX_2=i
+            i+=1
+            if regularize:
+                performance_estimators += [LossHelper("reg_loss")]
+                REG_INDEX_2 =i
+                i+=1
+                performance_estimators += [FloatHelper("ureg_alpha")]
+                ALPHA_INDEX = i
+                i += 1
+            if train_ureg:
+                performance_estimators += [LossHelper("ureg_loss"), FloatHelper("ureg_accuracy")]
+                UREG_INDEX_1 = i
+                i+=1
+                UREG_INDEX_2 =i
+                i += 1
+
+
         print('\nTraining, epoch: %d' % epoch)
         self.net.train()
 
         for performance_estimator in performance_estimators:
             performance_estimator.init_performance_metrics()
+
         unsupervised_loss_acc = 0
         num_batches = 0
         train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
@@ -208,9 +236,13 @@ class TrainModel:
                 supervised_loss = self.criterion(outputs, targets)
                 supervised_loss.backward()
                 self.optimizer_training.step()
+                performance_estimators[TRAIN_INDEX_1].observe_performance_metric(batch_idx, supervised_loss.data[0], outputs,
+                                                                     targets)
+                performance_estimators[TRAIN_INDEX_2].observe_performance_metric(batch_idx, supervised_loss.data[0], outputs,
+                                                                     targets)
 
-            if train_ureg:
-                # the unsupervised regularization part goes here:
+            if train_ureg or regularize:
+                # obtain an unsupervised sample, put it in uinputs autograd Variable:
 
                 try:
                     # first, read a minibatch from the unsupervised dataset:
@@ -222,14 +254,30 @@ class TrainModel:
                 if self.use_cuda: ufeatures = ufeatures.cuda()
                 # then use it to calculate the unsupervised regularization contribution to the loss:
                 uinputs = Variable(ufeatures)
+
+            if regularize:
+                # then use it to calculate the unsupervised regularization contribution to the loss:
+
+                self.optimizer_reg.zero_grad()
+                regularization_loss = self.ureg.regularization_loss(inputs, uinputs)
+                if regularization_loss is not None:
+                    # NB. we used ureg_alpha to adjust the learning rate for regularization
+                    reg_loss_float = regularization_loss.data[0]
+                    regularization_loss.backward()
+                    self.optimizer_reg.step()
+                else:
+                    reg_loss_float = 0
+                performance_estimators[REG_INDEX_2].observe_performance_metric(batch_idx, reg_loss_float, None, None)
+                performance_estimators[ALPHA_INDEX].observe_performance_metric(batch_idx, self.ureg._alpha,
+                                                                                None, None)
+
+            if train_ureg:
+
                 ureg_loss = self.ureg.train_ureg(inputs, uinputs)
                 if (ureg_loss is not None):
-                    unsupervised_loss_acc += ureg_loss.data[0]
 
-            optimized_loss = supervised_loss
-
-            for performance_estimator in performance_estimators:
-                performance_estimator.observe_performance_metric(batch_idx, optimized_loss.data[0], outputs, targets)
+                    performance_estimators[UREG_INDEX_1].observe_performance_metric(batch_idx, ureg_loss.data[0], None, None)
+                    performance_estimators[UREG_INDEX_2].observe_performance_metric(batch_idx, self.ureg.ureg_accuracy(), None, None)
 
             progress_bar(batch_idx * self.mini_batch_size,
                          min(self.max_regularization_examples, self.max_training_examples),
@@ -244,9 +292,11 @@ class TrainModel:
 
         unsupervised_loss = unsupervised_loss_acc / (num_batches)
         if not self.args.constant_learning_rates:
-            if  self.epoch_is_test_epoch(epoch):
-                # adjust regularization learning rate only when
-                self.scheduler_reg.step(unsupervised_loss, epoch)
+            if self.epoch_is_test_epoch(epoch):
+                # adjust regularization learning rate only when not one pass (which keeps reg_lr in sync with lr)
+                if self.args.mode != "one_pass":
+                    self.scheduler_reg.step(unsupervised_loss, epoch)
+
         print()
 
         return performance_estimators
@@ -373,6 +423,8 @@ class TrainModel:
         assert test_accuracy is not None, "test_accuracy must be found among estimated performance metrics"
         if not self.args.constant_learning_rates:
             self.scheduler_train.step(test_accuracy, epoch)
+            if self.args.mode == "one_pass":
+                self.scheduler_reg.step(test_accuracy, epoch)
 
         return performance_estimators
 
@@ -384,7 +436,7 @@ class TrainModel:
         metrics = ["epoch", "checkpoint"]
 
         for performance_estimator in performance_estimators:
-            metrics = metrics + [performance_estimator.metric_names()]
+            metrics = metrics + performance_estimator.metric_names()
 
         if not self.args.resume:
             with open("all-perfs-{}.tsv".format(self.args.checkpoint_key), "w") as perf_file:
@@ -444,7 +496,60 @@ class TrainModel:
             torch.save(state, './checkpoint/ckpt_{}.t7'.format(self.args.checkpoint_key))
             self.best_acc = acc
 
-    def training_combined(self):
+    def training_one_pass(self):
+        """Train the model with a single pass through the training set. Returns the performance obtained
+           at the end of the configured training run.
+        :return list of performance estimators that observed performance on the last epoch run.
+        """
+        header_written = False
+        if self.ureg_enabled and not self.args.constant_ureg_learning_rate:
+            # tell ureg to use a scheduler:
+            self.ureg.install_scheduler()
+        lr_train_helper = LearningRateHelper(scheduler=self.scheduler_train, learning_rate_name="train_lr")
+        lr_reg_helper = LearningRateHelper(scheduler=self.scheduler_reg, learning_rate_name="reg_lr")
+        lr_ureg_helper = None  # will be installed on the fly when the ureg model is built, below.
+        previous_test_perfs = None
+
+        if self.args.resume and self.ureg_enabled:
+            print("Training ureg to convergence on --resume.")
+            # train ureg to convergence on resume:
+            train_dataset = self.problem.train_set()
+            unsup_dataset = self.problem.unsup_set()
+            self.ureg.train_ureg_to_convergence(self.problem, train_dataset, unsup_dataset,
+                                                                     epsilon=self.args.ureg_epsilon, max_epochs=10,
+                                                                     max_examples=self.args.max_examples_per_epoch)
+        for epoch in range(self.start_epoch, self.start_epoch + self.args.num_epochs):
+            self.ureg.new_epoch(epoch)
+            perfs = []
+
+            perfs += [self.train(epoch,
+                                 train_supervised_model=True,
+                                 train_ureg=True,
+                                 regularize=True)]
+
+            if previous_test_perfs is None or self.epoch_is_test_epoch(epoch):
+
+                previous_test_perfs = self.test(epoch)
+
+            perfs += [previous_test_perfs]
+            lr_ureg_helper = self.install_ureg_learning_rate_helper(lr_ureg_helper)
+            if lr_ureg_helper is not None:
+                perfs += [(lr_train_helper, lr_reg_helper, lr_ureg_helper)]
+            else:
+                perfs += [(lr_train_helper, lr_reg_helper)]
+            perfs = flatten(perfs)
+            if (not header_written):
+                header_written = True
+                self.log_performance_header(perfs)
+
+            if self.log_performance_metrics(epoch, perfs):
+                # early stopping requested.
+                return perfs
+
+            self.grow_unsupervised_examples_per_epoch()
+        return perfs
+
+    def training_two_passes(self):
         """Train the model with the combined approach. Returns the performance obtained
         at the end of the configured training run.
         :return list of performance estimators that observed performance on the last epoch run.
@@ -456,7 +561,7 @@ class TrainModel:
         lr_train_helper = LearningRateHelper(scheduler=self.scheduler_train, learning_rate_name="train_lr")
         lr_reg_helper = LearningRateHelper(scheduler=self.scheduler_reg, learning_rate_name="reg_lr")
         lr_ureg_helper = None  # will be installed on the fly when the ureg model is built, below.
-        previous_test_perfs=None
+        previous_test_perfs = None
         for epoch in range(self.start_epoch, self.start_epoch + self.args.num_epochs):
             self.ureg.new_epoch(epoch)
             perfs = []
@@ -474,7 +579,7 @@ class TrainModel:
                 perfs += [self.regularize(epoch)]
 
             if previous_test_perfs is None or self.epoch_is_test_epoch(epoch):
-                previous_test_perfs=self.test(epoch)
+                previous_test_perfs = self.test(epoch)
 
             perfs += [previous_test_perfs]
             lr_ureg_helper = self.install_ureg_learning_rate_helper(lr_ureg_helper)
@@ -501,7 +606,7 @@ class TrainModel:
                                                     initial_learning_rate=self.args.ureg_learning_rate)
         return lr_ureg_helper
 
-    def training_interleaved(self, epsilon=1E-6):
+    def training_three_passes(self, epsilon=1E-6):
         header_written = False
         if self.ureg_enabled and not self.args.constant_ureg_learning_rate:
             self.ureg.install_scheduler()

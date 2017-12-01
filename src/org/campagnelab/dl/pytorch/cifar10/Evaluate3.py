@@ -54,7 +54,8 @@ parser.add_argument('--num-validation', '-x', type=int, help='Maximum number of 
 parser.add_argument('--num-shaving', '-u', type=int, help='Maximum number of unlabeled examples to use when shaving'
                                                           'the network.', default=sys.maxsize)
 parser.add_argument('--max-examples-per-epoch', type=int, help='Maximum number of examples scanned in an epoch'
-                                                               '(e.g., for ureg model training).', default=None)
+                                                               '(e.g., for ureg model training). By default, equal to the '
+                                                               'number of examples in the training set.', default=None)
 
 parser.add_argument('--ureg-num-features', type=int, help='Number of features in the ureg model.', default=64)
 parser.add_argument('--ureg-alpha', type=float, help='Mixing coefficient (between 0 and 1) for ureg loss component.',
@@ -83,7 +84,7 @@ parser.add_argument('--mode', help='Training mode: combined or interleaved, used
                     default="interleaved")
 parser.add_argument('--threshold-activation-size', default=4096, type=int,
                     help='Do not include layers if they produce more than the specified number of activations.')
-parser.add_argument('--grow-unsupervised-each-epoch', default=0, type=int,
+parser.add_argument('--grow-unsupervised-each-epoch', default=None, type=int,
                     help='Add the parameter to the number of unsupervised examples used after each epoch completes. '
                          'This parameter will grow --max-examples-per-epoch.')
 parser.add_argument('--abort-when-failed-to-improve', default=sys.maxsize, type=int,
@@ -106,6 +107,9 @@ parser.add_argument('--cv-fold-min-perf', default=0, type=float, help='Stop cros
                                                                       ' meet this minimum performance level (test accuracy).')
 
 args = parser.parse_args()
+
+if args.max_examples_per_epoch is None:
+    args.max_examples_per_epoch=args.num_training
 
 print("Executing " + args.checkpoint_key)
 
@@ -208,13 +212,20 @@ def get_metric_value(all_perfs, query_metric_name):
 
 def train_once(args, problem, use_cuda):
     problem.describe()
+
+    if args.mode == "one_pass":
+        # use ureg_alpha to adjust regularization learning rate from main model learning rate:
+        args.shave_lr = args.lr * args.ureg_alpha
+
     model_trainer = TrainModel(args=args, problem=problem, use_cuda=use_cuda)
     model_trainer.init_model(create_model_function=create_model)
 
-    if args.mode == "combined":
-        return model_trainer.training_combined()
-    elif args.mode == "interleaved":
-        return model_trainer.training_interleaved(epsilon=args.ureg_epsilon)
+    if args.mode == "one_pass":
+        return model_trainer.training_one_pass()
+    elif args.mode == "two_passes":
+        return model_trainer.training_two_passes()
+    elif args.mode == "three_passes":
+        return model_trainer.training_three_passes(epsilon=args.ureg_epsilon)
     else:
         print("unknown mode specified: " + args.mode)
         exit(1)

@@ -508,6 +508,47 @@ class TrainModel:
             torch.save(state, './checkpoint/ckpt_{}.t7'.format(self.args.checkpoint_key))
             self.best_acc = acc
 
+
+    def training_supervised(self):
+        """Train the model in a completely supervised manner. Returns the performance obtained
+           at the end of the configured training run.
+        :return list of performance estimators that observed performance on the last epoch run.
+        """
+        header_written = False
+        if self.ureg_enabled and not self.args.constant_ureg_learning_rate:
+            # tell ureg to use a scheduler:
+            self.ureg.install_scheduler()
+        lr_train_helper = LearningRateHelper(scheduler=self.scheduler_train, learning_rate_name="train_lr")
+        previous_test_perfs = None
+
+
+        for epoch in range(self.start_epoch, self.start_epoch + self.args.num_epochs):
+            self.ureg.new_epoch(epoch)
+            perfs = []
+
+            perfs += [self.train(epoch,
+                                 train_supervised_model=True,
+                                 train_ureg=False,
+                                 regularize=False
+                                 )]
+
+            if previous_test_perfs is None or self.epoch_is_test_epoch(epoch):
+
+                previous_test_perfs = self.test(epoch)
+
+            perfs += [previous_test_perfs]
+
+            perfs = flatten(perfs)
+            if (not header_written):
+                header_written = True
+                self.log_performance_header(perfs)
+
+            if self.log_performance_metrics(epoch, perfs):
+                # early stopping requested.
+                return perfs
+
+        return perfs
+
     def training_one_pass(self):
         """Train the model with a single pass through the training set. Returns the performance obtained
            at the end of the configured training run.

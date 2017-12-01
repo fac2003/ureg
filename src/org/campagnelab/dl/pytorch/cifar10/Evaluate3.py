@@ -39,10 +39,11 @@ parser = argparse.ArgumentParser(description='Evaluate ureg against CIFAR10')
 parser.add_argument('--lr', default=0.005, type=float, help='Learning rate.')
 parser.add_argument('--resume', '-r', action='store_true', help='resume from checkpoint.')
 parser.add_argument('--ureg', action='store_true', help='Enable unsupervised regularization (ureg).')
-parser.add_argument('--constant-learning-rates', action='store_true', help='Use constant learning rates, not schedules.')
+parser.add_argument('--constant-learning-rates', action='store_true',
+                    help='Use constant learning rates, not schedules.')
 
-parser.add_argument('--constant-ureg-learning-rate', action='store_true', help='Keep ureg learning rate constant, do not use a schedule.')
-
+parser.add_argument('--constant-ureg-learning-rate', action='store_true',
+                    help='Keep ureg learning rate constant, do not use a schedule.')
 
 parser.add_argument('--mini-batch-size', type=int, help='Size of the mini-batch.', default=128)
 parser.add_argument('--num-epochs', '--max-epochs', type=int,
@@ -111,7 +112,7 @@ parser.add_argument('--cv-fold-min-perf', default=0, type=float, help='Stop cros
 args = parser.parse_args()
 
 if args.max_examples_per_epoch is None:
-    args.max_examples_per_epoch=args.num_training
+    args.max_examples_per_epoch = args.num_training
 
 print("Executing " + args.checkpoint_key)
 
@@ -219,9 +220,14 @@ def train_once(args, problem, use_cuda):
         # use ureg_alpha to adjust regularization learning rate from main model learning rate:
         args.shave_lr = args.lr * args.ureg_alpha
 
+    if args.mode == "supervised":
+        args.ureg = None
+
     model_trainer = TrainModel(args=args, problem=problem, use_cuda=use_cuda)
     model_trainer.init_model(create_model_function=create_model)
 
+    if args.mode == "supervised":
+        return model_trainer.training_supervised()
     if args.mode == "one_pass":
         return model_trainer.training_one_pass()
     elif args.mode == "two_passes":
@@ -251,23 +257,21 @@ else:
 
         all_perfs += [fold_perfs]
 
-        if get_metric_value(fold_perfs,"test_accuracy") < args.cv_fold_min_perf:
+        if get_metric_value(fold_perfs, "test_accuracy") < args.cv_fold_min_perf:
             break
-
-
 
     metrics = ["train_loss", "train_accuracy", "test_loss", "test_accuracy"]
     accumulators = [0] * len(metrics)
-    count=[0] * len(metrics)
+    count = [0] * len(metrics)
     # aggregate statistics:
     for fold_perfs in all_perfs:
-      for perf in fold_perfs:
-        for metric_index, metric_name in enumerate(metrics):
-            metric = perf.get_metric(metric_name)
-            if metric is not None:
-                # print("found value for "+metric_name+" "+str(metric))
-                accumulators[metric_index] += metric
-                count[metric_index] += 1
+        for perf in fold_perfs:
+            for metric_index, metric_name in enumerate(metrics):
+                metric = perf.get_metric(metric_name)
+                if metric is not None:
+                    # print("found value for "+metric_name+" "+str(metric))
+                    accumulators[metric_index] += metric
+                    count[metric_index] += 1
 
     for metric_index, metric_name in enumerate(metrics):
         accumulators[metric_index] /= count[metric_index]

@@ -287,6 +287,8 @@ class TrainModel:
                     performance_estimators[UREG_INDEX_2].observe_performance_metric(batch_idx,
                                                                                     self.ureg.ureg_accuracy(), None,
                                                                                     None)
+                    # adjust ureg model learning rate as needed:
+                    self.ureg.schedule(ureg_loss.data[0], epoch)
 
             progress_bar(batch_idx * self.mini_batch_size,
                          min(self.max_regularization_examples, self.max_training_examples),
@@ -624,13 +626,6 @@ class TrainModel:
                                  previous_training_loss=previous_training_loss)]
 
             if (self.args.ureg):
-                ureg_loss = self.ureg.get_ureg_loss()
-                # adjust ureg model learning rate as needed:
-                self.ureg.schedule(ureg_loss, epoch)
-                # log the ureg loss:
-                perf_ureg_loss = LossHelper("ureg_loss")
-                perf_ureg_loss.observe_performance_metric(1, ureg_loss, None, None)
-                perfs += [(perf_ureg_loss,)]
 
                 perfs += [self.regularize(epoch, previous_ureg_loss=previous_ureg_loss,
                                           previous_training_loss=previous_training_loss)]

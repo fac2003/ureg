@@ -86,3 +86,4 @@ class MyFeatureExtractor(nn.Module):
             # remove the registered hook:
             for handle in self.remove_handles:
                 handle.remove()
+            self.output_index = 0

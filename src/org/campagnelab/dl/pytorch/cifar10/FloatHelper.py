@@ -14,7 +14,8 @@ class FloatHelper(PerformanceEstimator):
         self.count = 0
 
     def estimates_of_metric(self):
-
+        if self.count==0:
+            print("Invalid count for "+self.name)
         return [self.value/self.count]
 
     def metric_names(self):

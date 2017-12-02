@@ -342,13 +342,13 @@ class TrainModel:
             weight_s, weight_u, unsuper_records_to_be_seen, max_loop_index))
         mixing_coeficient = previous_ureg_loss / previous_training_loss * self.args.ureg_alpha
 
-        performance_estimators[1].observe_performance_metric(1, self.ureg._alpha, None, None)
         for shaving_index in range(self.num_shaving_epochs):
             print("Shaving step {}".format(shaving_index))
             # produce a random subset of the unsupervised samples, exactly matching the number of training examples:
             unsupsampler = self.problem.reg_loader_subset_range(0, use_max_shaving_records)
-            for performance_estimator in performance_estimators:
-                performance_estimator.init_performance_metrics()
+
+            performance_estimators[0].init_performance_metrics()
+            performance_estimators[1].observe_performance_metric(1, self.ureg._alpha, None, None)
 
             for batch_idx, (inputs, targets) in enumerate(unsupsampler):
 

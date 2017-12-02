@@ -388,7 +388,7 @@ class TrainModel:
                     print("Found None in regularize")
                     optimized_loss = 0
 
-                    performance_estimators[0].observe_performance_metric(batch_idx, optimized_loss,
+                performance_estimators[0].observe_performance_metric(batch_idx, optimized_loss,
                                                                          inputs, uinputs)
 
                 progress_bar(batch_idx * self.mini_batch_size, max_loop_index,

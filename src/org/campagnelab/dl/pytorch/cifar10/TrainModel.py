@@ -136,8 +136,7 @@ class TrainModel:
 
         self.optimizer_training = torch.optim.SGD(self.net.parameters(), lr=args.lr, momentum=args.momentum,
                                                   weight_decay=args.L2)
-        self.optimizer_reg = torch.optim.SGD(self.net.parameters(), lr=args.shave_lr, momentum=0.9,
-                                             weight_decay=args.L2)
+        self.optimizer_reg = self.optimizer_training
         self.ureg = URegularizer(self.net, self.mini_batch_size, num_features=args.ureg_num_features,
                                  alpha=args.ureg_alpha,
                                  learning_rate=args.ureg_learning_rate,
@@ -227,25 +226,10 @@ class TrainModel:
         for batch_idx, (inputs, targets) in enumerate(train_loader_subset):
             num_batches += 1
 
-            if train_supervised_model:
-                if self.use_cuda:
-                    inputs, targets = inputs.cuda(), targets.cuda()
-                self.optimizer_training.zero_grad()
-                inputs, targets = Variable(inputs), Variable(targets)
-                outputs = self.net(inputs)
+            if self.use_cuda:
+                inputs, targets = inputs.cuda(), targets.cuda()
 
-                # if self.ureg._which_one_model is not None:
-                #    self.ureg.estimate_example_weights(inputs)
-
-                supervised_loss = self.criterion(outputs, targets)
-                supervised_loss.backward()
-                self.optimizer_training.step()
-                performance_estimators[TRAIN_INDEX_1].observe_performance_metric(batch_idx, supervised_loss.data[0],
-                                                                                 outputs,
-                                                                                 targets)
-                performance_estimators[TRAIN_INDEX_2].observe_performance_metric(batch_idx, supervised_loss.data[0],
-                                                                                 outputs,
-                                                                                 targets)
+            inputs, targets = Variable(inputs), Variable(targets)
 
             if train_ureg or regularize:
                 # obtain an unsupervised sample, put it in uinputs autograd Variable:
@@ -290,6 +274,26 @@ class TrainModel:
                                                                                     None)
                     # adjust ureg model learning rate as needed:
                     self.ureg.schedule(ureg_loss.data[0], epoch)
+
+
+            if train_supervised_model:
+                self.optimizer_training.zero_grad()
+                outputs = self.net(inputs)
+
+                # if self.ureg._which_one_model is not None:
+                #    self.ureg.estimate_example_weights(inputs)
+
+                supervised_loss = self.criterion(outputs, targets)
+                supervised_loss.backward()
+                self.optimizer_training.step()
+                performance_estimators[TRAIN_INDEX_1].observe_performance_metric(batch_idx, supervised_loss.data[0],
+                                                                                 outputs,
+                                                                                 targets)
+                performance_estimators[TRAIN_INDEX_2].observe_performance_metric(batch_idx, supervised_loss.data[0],
+                                                                                 outputs,
+                                                                                 targets)
+
+
 
             progress_bar(batch_idx * self.mini_batch_size,
                          min(self.max_regularization_examples, self.max_training_examples),

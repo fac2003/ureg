@@ -415,9 +415,9 @@ class URegularizer:
 
         # self.loss_ys.weight=torch.from_numpy(numpy.array([weight_s,weight_u]))
         # self.loss_yu.weight=torch.from_numpy(numpy.array([weight_u,weight_s]))
-        optimum_loss = self.loss_ys(self.ys_uncertain, self.ys_uncertain)
-        rLoss = torch.abs(weight_s * (optimum_loss - self.loss_ys(ys, self.ys_uncertain)) + \
-                          weight_u * (optimum_loss - self.loss_yu(yu, self.ys_uncertain)))
+
+        rLoss = weight_s * self.loss_ys(ys, self.ys_uncertain) + \
+                weight_u * self.loss_yu(yu, self.ys_uncertain)
         # self._alpha = 0.5 - (0.5 - self._last_epoch_accuracy)
         # rLoss = (self.loss_ys(ys, self.ys_uncertain))
         # self.loss_yu(yu, self.ys_uncertain)) / 2

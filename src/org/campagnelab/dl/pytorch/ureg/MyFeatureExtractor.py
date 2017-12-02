@@ -17,9 +17,9 @@ class MyFeatureExtractor(nn.Module):
         super(MyFeatureExtractor, self).__init__()
         self.submodule = submodule
         self.outputs = []
-        self.collect_output=None
+        self.collect_output = None
         self.lock = threading.Lock()
-        self.output_index=0
+        self.output_index = 0
         if extracted_layers is None:
             self.match_all = True
             self.extracted_layers = []
@@ -37,7 +37,7 @@ class MyFeatureExtractor(nn.Module):
 
     def _register_internal(self, container):
         if sum(1 for _ in container._modules.items()) == 0:
-            #print("Registering module " + str(container))
+            # print("Registering module " + str(container))
             # this module is a leaf, register its activations:
             with self.lock:
                 self.remove_handles += [
@@ -46,7 +46,7 @@ class MyFeatureExtractor(nn.Module):
             for name, module in container._modules.items():
                 # if self.match_all or name in self.extracted_layers:
                 # else:
-                #print("Registering children of module " + name)
+                # print("Registering children of module " + name)
                 # register the submodules of this module:
 
                 self._register_internal(module)
@@ -66,8 +66,12 @@ class MyFeatureExtractor(nn.Module):
 
             self.output_index += 1
 
-    def collect_outputs(self,x , collect_output=None):
-        self.collect_output=collect_output
+    def collect_outputs(self, x, collect_output=None):
+        """Return the model's outputs, for those output selected by the collect_output booleans.
+            The collect_output parameter is either None (to accept all outputs), or a list with True for outputs
+            that must be collected and False for those should must not.
+               """
+        self.collect_output = collect_output
         # print("x.cuda? {}".format(x.is_cuda))
         # do a forward to collect the outputs:
         self.submodule(x)
@@ -78,7 +82,7 @@ class MyFeatureExtractor(nn.Module):
     def clear_outputs(self):
 
         with self.lock:
-            self.output_index=0
+            self.output_index = 0
             self.outputs = []
 
     def cleanup(self):

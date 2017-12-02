@@ -90,6 +90,24 @@ class TrainModel:
         self.max_training_examples = args.num_training
         self.unsuploader = self.problem.reg_loader()
         model_built = False
+
+        # setup the function which decides which layer outputs to use for ureg training:
+        if args.threshold_activation_size is not None:
+            include_output_function= lambda layer_index, activations: True \
+                    if activations.size()[1] <= args.threshold_activation_size else False
+        elif args.include_layer_indices is not None:
+            layer_indices=[]
+            for index in map(int,args.include_layer_indices.split(",")):
+                layer_indices.append(index)
+            include_output_function = lambda layer_index, activations: True \
+                if layer_index in layer_indices else False
+        else:
+            include_output_function=None
+
+        if args.threshold_activation_size is not None and args.include_layer_indices is not None:
+            print ("--include-layer-indices and --threshold-activation-size are mutually exclusive, please pick one.")
+            exit(1)
+
         if args.resume:
             # Load checkpoint.
 
@@ -113,7 +131,7 @@ class TrainModel:
                                         args.ureg_alpha, args.ureg_learning_rate,
                                         reset_every_epochs=args.ureg_reset_every_n_epoch,
                                         do_not_use_scheduler=self.args.constant_learning_rates,
-                                        threshold_activation_size=self.args.threshold_activation_size)
+                                        include_output_function=include_output_function)
 
                     ureg.set_num_examples(min(len(self.trainloader), args.num_training),
                                           min(len(self.unsuploader), args.num_shaving))
@@ -142,7 +160,7 @@ class TrainModel:
                                  learning_rate=args.ureg_learning_rate,
                                  reset_every_epochs=args.ureg_reset_every_n_epoch,
                                  do_not_use_scheduler=self.args.constant_learning_rates,
-                                 threshold_activation_size=self.args.threshold_activation_size)
+                                 include_output_function=include_output_function)
         if args.ureg:
             self.ureg.enable()
             self.ureg.set_num_examples(min(len(self.trainloader) * mini_batch_size, args.num_training),

@@ -41,6 +41,7 @@ class URegTest(unittest.TestCase):
         ureg = URegularizer(self.model, 1, num_features=2,
                             alpha=1,  # gradient only from ureg.
                             learning_rate=0.1)
+        ureg.set_num_examples(1000,1000)
 
         loss = self.criterion(self.y, self.y_true)
         xs = self.x

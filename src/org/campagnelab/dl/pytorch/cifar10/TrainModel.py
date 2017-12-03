@@ -28,6 +28,12 @@ def _format_nice(n):
 
 flatten = lambda l: [item for sublist in l for item in sublist]
 
+def print_params(epoch, net):
+    params=[]
+    for param in net.parameters():
+        params+=[p for p in param.view(-1).data]
+    print("epoch="+str(epoch)+" "+" ".join(map(str, params)))
+
 
 class TrainModel:
     """Train a model."""
@@ -93,19 +99,19 @@ class TrainModel:
 
         # setup the function which decides which layer outputs to use for ureg training:
         if args.threshold_activation_size is not None:
-            include_output_function= lambda layer_index, activations: True \
-                    if activations.size()[1] <= args.threshold_activation_size else False
+            include_output_function = lambda layer_index, activations: True \
+                if activations.size()[1] <= args.threshold_activation_size else False
         elif args.include_layer_indices is not None:
-            layer_indices=[]
-            for index in map(int,args.include_layer_indices.split(",")):
+            layer_indices = []
+            for index in map(int, args.include_layer_indices.split(",")):
                 layer_indices.append(index)
             include_output_function = lambda layer_index, activations: True \
                 if layer_index in layer_indices else False
         else:
-            include_output_function=None
+            include_output_function = None
 
         if args.threshold_activation_size is not None and args.include_layer_indices is not None:
-            print ("--include-layer-indices and --threshold-activation-size are mutually exclusive, please pick one.")
+            print("--include-layer-indices and --threshold-activation-size are mutually exclusive, please pick one.")
             exit(1)
 
         if args.resume:
@@ -209,6 +215,7 @@ class TrainModel:
         UREG_INDEX_1 = 0
         UREG_INDEX_2 = 0
         if performance_estimators is None:
+            measure_performance = True
             i = 0
             performance_estimators = [LossHelper("train_loss"), AccuracyHelper("train_")]
             TRAIN_INDEX_1 = i
@@ -228,7 +235,8 @@ class TrainModel:
                 i += 1
                 UREG_INDEX_2 = i
                 i += 1
-
+        else:
+            measure_performance = False
         print('\nTraining, epoch: %d' % epoch)
         self.net.train()
 
@@ -248,6 +256,11 @@ class TrainModel:
                 inputs, targets = inputs.cuda(), targets.cuda()
 
             inputs, targets = Variable(inputs), Variable(targets)
+            # outputs used to calculate the loss of the supervised model
+            # must be done with the model prior to regularization:
+            self.optimizer_training.zero_grad()
+            outputs = self.net(inputs)
+
 
             if train_ureg or regularize:
                 # obtain an unsupervised sample, put it in uinputs autograd Variable:
@@ -266,36 +279,40 @@ class TrainModel:
             if regularize:
                 # then use it to calculate the unsupervised regularization contribution to the loss:
 
-                self.optimizer_reg.zero_grad()
+                self.optimizer_training.zero_grad()
                 regularization_loss = self.ureg.regularization_loss(inputs, uinputs)
                 if regularization_loss is not None:
+                    #print_params(epoch, self.net)
+
                     regularization_loss = regularization_loss * mixing_coeficient
                     # NB. we used ureg_alpha to adjust the learning rate for regularization
                     reg_loss_float = regularization_loss.data[0]
                     regularization_loss.backward()
-                    self.optimizer_reg.step()
+                    self.optimizer_training.step()
+                    #print_params(epoch, self.net)
+                    #print("\n")
                 else:
                     reg_loss_float = 0
+                    if measure_performance:
+                        performance_estimators[REG_INDEX_2].observe_performance_metric(batch_idx, reg_loss_float, None,
+                                                                                       None)
+                        performance_estimators[ALPHA_INDEX].observe_performance_metric(batch_idx, self.ureg._alpha,
+                                                                                       None, None)
+                if train_ureg:
 
-                performance_estimators[REG_INDEX_2].observe_performance_metric(batch_idx, reg_loss_float, None, None)
-                performance_estimators[ALPHA_INDEX].observe_performance_metric(batch_idx, self.ureg._alpha,
-                                                                               None, None)
-
-            if train_ureg:
-
-                ureg_loss = self.ureg.train_ureg(inputs, uinputs)
-                if (ureg_loss is not None):
-                    performance_estimators[UREG_INDEX_1].observe_performance_metric(batch_idx, ureg_loss.data[0], None,
-                                                                                    None)
-                    performance_estimators[UREG_INDEX_2].observe_performance_metric(batch_idx,
-                                                                                    self.ureg.ureg_accuracy(), None,
-                                                                                    None)
-                    # adjust ureg model learning rate as needed:
-                    self.ureg.schedule(ureg_loss.data[0], epoch)
+                    ureg_loss = self.ureg.train_ureg(inputs, uinputs)
+                    if (ureg_loss is not None):
+                        if measure_performance:
+                            performance_estimators[UREG_INDEX_1].observe_performance_metric(batch_idx,
+                                                                                            ureg_loss.data[0], None,
+                                                                                            None)
+                            performance_estimators[UREG_INDEX_2].observe_performance_metric(batch_idx,
+                                                                                            self.ureg.ureg_accuracy(),
+                                                                                            None, None)
+                            # adjust ureg model learning rate as needed:
+                            self.ureg.schedule(ureg_loss.data[0], epoch)
 
             if train_supervised_model:
-                self.optimizer_training.zero_grad()
-                outputs = self.net(inputs)
 
                 # if self.ureg._which_one_model is not None:
                 #    self.ureg.estimate_example_weights(inputs)
@@ -303,12 +320,13 @@ class TrainModel:
                 supervised_loss = self.criterion(outputs, targets)
                 supervised_loss.backward()
                 self.optimizer_training.step()
-                performance_estimators[TRAIN_INDEX_1].observe_performance_metric(batch_idx, supervised_loss.data[0],
-                                                                                 outputs,
-                                                                                 targets)
-                performance_estimators[TRAIN_INDEX_2].observe_performance_metric(batch_idx, supervised_loss.data[0],
-                                                                                 outputs,
-                                                                                 targets)
+                if measure_performance:
+                    performance_estimators[TRAIN_INDEX_1].observe_performance_metric(batch_idx, supervised_loss.data[0],
+                                                                                     outputs,
+                                                                                     targets)
+                    performance_estimators[TRAIN_INDEX_2].observe_performance_metric(batch_idx, supervised_loss.data[0],
+                                                                                     outputs,
+                                                                                     targets)
 
             progress_bar(batch_idx * self.mini_batch_size,
                          min(self.max_regularization_examples, self.max_training_examples),
@@ -407,7 +425,7 @@ class TrainModel:
                     optimized_loss = 0
 
                 performance_estimators[0].observe_performance_metric(batch_idx, optimized_loss,
-                                                                         inputs, uinputs)
+                                                                     inputs, uinputs)
 
                 progress_bar(batch_idx * self.mini_batch_size, max_loop_index,
                              " ".join([performance_estimator.progress_message() for performance_estimator in

@@ -6,15 +6,18 @@ from torch.autograd import Variable
 from torch.legacy.nn import MSECriterion, AbsCriterion
 from torch.nn import BCELoss
 
+from org.campagnelab.dl.pytorch.cifar10.TrainModel import TrainModel, print_params
 from org.campagnelab.dl.pytorch.ureg.URegularizer import URegularizer
+from org.campagnelab.dl.pytorch.ureg.tests.DummyArgs import DummyArgs
 from org.campagnelab.dl.pytorch.ureg.tests.SimpleModel import SimpleModel
 import torch.nn.functional as F
 
+from org.campagnelab.dl.pytorch.ureg.tests.TestProblem import TestProblem
 
 
 def rmse(y, y_hat):
-        """Compute root mean squared error"""
-        return torch.sqrt(torch.mean((y - y_hat).pow(2)))
+    """Compute root mean squared error"""
+    return torch.sqrt(torch.mean((y - y_hat).pow(2)))
 
 
 class URegTest(unittest.TestCase):
@@ -25,7 +28,7 @@ class URegTest(unittest.TestCase):
         self.y = self.model.forward(self.x)
         self.y_true = Variable(torch.ones(1), requires_grad=False)
         self.epsilon = 1e-12
-        self.bs=10
+        self.dataset_size = 10
 
     def test_grad_not_null(self):
         """
@@ -70,25 +73,24 @@ class URegTest(unittest.TestCase):
         random.seed(12)
         torch.manual_seed(12)
 
-
         ureg = URegularizer(self.model, 1, num_features=2,
                             alpha=1,
                             learning_rate=0.1)
         ureg.set_num_examples(100, 100)
-        training_set_bias_enabled=True
+        training_set_bias_enabled = True
         train_inputs, train_targets = self.build_inputs(add_bias=training_set_bias_enabled)
         test_inputs, test_targets = self.build_inputs(add_bias=False)
 
-        self.bs = 10
-        model = torch.nn.Sequential(torch.nn.Linear(2, 2),torch.nn.ReLU(),torch.nn.Linear(2, 1))
+        self.dataset_size = 10
+        model = torch.nn.Sequential(torch.nn.Linear(2, 2), torch.nn.ReLU(), torch.nn.Linear(2, 1))
         model = torch.nn.Linear(2, 1)
         optimizer = torch.optim.SGD(model.parameters(), lr=0.1, momentum=0.9,
                                     weight_decay=0.0)
 
-        ureg_enabled=True
+        ureg_enabled = True
         for epoch in range(0, 100):
-            average_loss=0
-            for index in range(0, self.bs):
+            average_loss = 0
+            for index in range(0, self.dataset_size):
                 optimizer.zero_grad()
                 inputs, targets = Variable(train_inputs[index]), \
                                   Variable(train_targets[index], requires_grad=False)
@@ -99,42 +101,82 @@ class URegTest(unittest.TestCase):
                     unsup = Variable(test_inputs[index])
                     ureg.train_ureg(inputs, unsup)
                     r_loss = ureg.regularization_loss(inputs, unsup)
+                    r_loss *= ureg._alpha
                     r_loss.backward()
                     optimizer.step()
                 else:
-                    r_loss =0
+                    r_loss = 0
 
                 supervised_loss = rmse(outputs, targets)
 
-                average_loss+=supervised_loss.data[0]
+                average_loss += supervised_loss.data[0]
                 supervised_loss.backward()
                 optimizer.step()
-            average_loss/=self.bs
+            average_loss /= self.dataset_size
             print("average supervised_loss= {:3f}".format(average_loss))
         for param in model.parameters():
             print("parameter {}".format(param))
+        print_params(0,model)
+
+        eps = 0.001
 
         for index in range(0, 4):
             inputs = Variable(train_inputs[index])
-            result=model(inputs)
-            true_target=train_targets[index]
-            if inputs.data[0,1]==0.6:
+            result = model(inputs)
+            true_target = train_targets[index]
+            if abs(inputs.data[0, 1] - 0.6) < eps:
                 self.assertTrue(ureg_enabled and training_set_bias_enabled and
-                    result.data[0,0]>0.9, msg="probability must be larger than 0.9 on true signal when ureg is enabled")
+                                result.data[0, 0] > 0.9,
+                                msg="probability must be larger than 0.9 on true signal when ureg is enabled")
             print("train_inputs: ({:.3f}, {:.3f}) predicted target: {:.3f} true target: {:.1f} ".format(
-                inputs.data[0,0],inputs.data[0,1],
-                result.data[0,0], true_target[0,0]))
+                inputs.data[0, 0], inputs.data[0, 1],
+                result.data[0, 0], true_target[0, 0]))
 
         for index in range(0, 4):
             inputs = Variable(test_inputs[index])
-            result=model(inputs)
-            true_target=test_targets[index]
+            result = model(inputs)
+            true_target = test_targets[index]
             print("test_inputs: ({:.3f}, {:.3f}) predicted target: {:.3f} true target: {:.1f} ".format(
-                inputs.data[0,0],inputs.data[0,1],
-                result.data[0,0], true_target[0,0]))
+                inputs.data[0, 0], inputs.data[0, 1],
+                result.data[0, 0], true_target[0, 0]))
+
+    def test_optimize_with_train_model(self):
+        test_problem = TestProblem()
+
+        model_trainer = TrainModel(DummyArgs(ureg=True), problem=test_problem, use_cuda=False)
+        model_trainer.init_model(create_model_function=lambda name: torch.nn.Linear(2, 1))
+        for epoch in range(0, 100):
+            model_trainer.train(epoch=epoch, performance_estimators=[],
+                                train_supervised_model=True,
+                                train_ureg=True,
+                                regularize=True)
+
+        test_inputs = test_problem.test_loader()
+        eps = 0.001
+        for (index, (input, true_target)) in enumerate(test_inputs):
+            input = Variable(input)
+            result = model_trainer.net(input)
+            print("test_inputs: ({:.3f}, {:.3f}) predicted target: {:.3f} true target: {:.1f} ".format(
+                input.data[0, 0], input.data[0, 1],
+                result.data[0, 0], true_target[0, 0]))
+
+        for (index, (input, true_target)) in enumerate(test_inputs):
+            input = Variable(input)
+            result = model_trainer.net(input)
+            if abs(input.data[0, 1] - 0.6) < eps:
+                self.assertTrue(
+                    result.data[0, 0] > 0.8,
+                    msg="probability must be larger than 0.9 on true signal when ureg is enabled")
+
+            if abs(input.data[0, 0] - 0.45) < eps and abs(input.data[0, 1] - 0.4) < eps:
+                self.assertTrue(
+                    result.data[0, 0] < 0.6,
+                    msg="probability must be larger than 0.4 on biased signal when ureg is enabled")
+
+
 
     def build_inputs(self, add_bias):
-        bs=self.bs
+        bs = self.dataset_size
         inputs = [[0, 0]] * bs
         targets = [[0]] * bs
 
@@ -153,7 +195,7 @@ class URegTest(unittest.TestCase):
                     y = 1
 
             target = torch.FloatTensor([[y]])
-            print("inputs=({:.3f},{:.3f}) targets={:.1f}".format(value[0,0], value[0, 1], target[0, 0]))
+            print("inputs=({:.3f},{:.3f}) targets={:.1f}".format(value[0, 0], value[0, 1], target[0, 0]))
 
             inputs[index] = value
             targets[index] = target

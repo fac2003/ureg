@@ -12,6 +12,8 @@ class ModelAssembler:
         self.num_features = num_features
         self.collect_output = None
         self.model = None
+        self.layer_predicate_function=lambda layer_index, activations: True
+        
         if threshold_activation_size is not None and layer_predicate_function is None:
             self.threshold_activation_size=threshold_activation_size
             self.layer_predicate_function=lambda layer_index, activations: True \

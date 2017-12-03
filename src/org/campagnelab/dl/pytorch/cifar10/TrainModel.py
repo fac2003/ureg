@@ -28,11 +28,12 @@ def _format_nice(n):
 
 flatten = lambda l: [item for sublist in l for item in sublist]
 
+
 def print_params(epoch, net):
-    params=[]
+    params = []
     for param in net.parameters():
-        params+=[p for p in param.view(-1).data]
-    print("epoch="+str(epoch)+" "+" ".join(map(str, params)))
+        params += [p for p in param.view(-1).data]
+    print("epoch=" + str(epoch) + " " + " ".join(map(str, params)))
 
 
 class TrainModel:
@@ -261,7 +262,6 @@ class TrainModel:
             self.optimizer_training.zero_grad()
             outputs = self.net(inputs)
 
-
             if train_ureg or regularize:
                 # obtain an unsupervised sample, put it in uinputs autograd Variable:
 
@@ -282,22 +282,22 @@ class TrainModel:
                 self.optimizer_training.zero_grad()
                 regularization_loss = self.ureg.regularization_loss(inputs, uinputs)
                 if regularization_loss is not None:
-                    #print_params(epoch, self.net)
+                    # print_params(epoch, self.net)
 
                     regularization_loss = regularization_loss * mixing_coeficient
                     # NB. we used ureg_alpha to adjust the learning rate for regularization
                     reg_loss_float = regularization_loss.data[0]
                     regularization_loss.backward()
                     self.optimizer_training.step()
-                    #print_params(epoch, self.net)
-                    #print("\n")
+                    # print_params(epoch, self.net)
+                    # print("\n")
                 else:
                     reg_loss_float = 0
-                    if measure_performance:
-                        performance_estimators[REG_INDEX_2].observe_performance_metric(batch_idx, reg_loss_float, None,
-                                                                                       None)
-                        performance_estimators[ALPHA_INDEX].observe_performance_metric(batch_idx, self.ureg._alpha,
-                                                                                       None, None)
+                if measure_performance:
+                    performance_estimators[REG_INDEX_2].observe_performance_metric(batch_idx, reg_loss_float, None,
+                                                                                   None)
+                    performance_estimators[ALPHA_INDEX].observe_performance_metric(batch_idx, self.ureg._alpha,
+                                                                                   None, None)
                 if train_ureg:
 
                     ureg_loss = self.ureg.train_ureg(inputs, uinputs)

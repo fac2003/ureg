@@ -1,3 +1,4 @@
+import sys
 import torch
 
 from org.campagnelab.dl.pytorch.cifar10.PerformanceEstimator import PerformanceEstimator
@@ -16,6 +17,7 @@ class FloatHelper(PerformanceEstimator):
     def estimates_of_metric(self):
         if self.count==0:
             print("Invalid count for "+self.name)
+            sys.stdout.flush()
         return [self.value/self.count]
 
     def metric_names(self):

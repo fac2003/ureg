@@ -106,7 +106,7 @@ class URegularizer:
         if self._n_total == 0:
             return float("nan")
         accuracy = self._n_correct / self._n_total
-        print("ureg accuracy={0:.3f} correct: {1}/{2}".format(accuracy, self._n_correct, self._n_total))
+        #print("ureg accuracy={0:.3f} correct: {1}/{2}".format(accuracy, self._n_correct, self._n_total))
         self._last_epoch_accuracy = accuracy
         self._n_total = 0
         self._n_correct = 0
@@ -188,8 +188,7 @@ class URegularizer:
             uncertain_values.fill_(0.5)
             self.ys_uncertain = Variable(uncertain_values, requires_grad=False)
 
-            for index in range(self._mini_batch_size):
-                self.yu_true[index] = 1
+
             if self._use_cuda:
                 self.ys_true = self.ys_true.cuda()
                 self.yu_true = self.yu_true.cuda()
@@ -244,7 +243,7 @@ class URegularizer:
         if (len(yu) != len(self.yu_true)):
             print("lengths yu differ: {} !={}".format(len(yu), len(self.yu_true)))
             return None
-        # print("ys: {} yu: {}".format(ys.data,yu.data))
+        #print("ys: {} yu: {}".format(ys.data,yu.data))
         # derive the loss of binary classifications:
 
         # step the whichOne model's parameters in the direction that
@@ -254,11 +253,12 @@ class URegularizer:
         loss_ys = self.loss_ys(ys, self.ys_true)
         loss_yu = self.loss_yu(yu, self.yu_true)
         total_which_model_loss = (weight_s * loss_ys + weight_u * loss_yu)
+        #total_which_model_loss =  loss_ys
         # print("loss_ys: {} loss_yu: {} ".format(loss_ys.data[0],loss_yu.data[0]))
         # total_which_model_loss =torch.max(loss_ys,loss_yu)
         self._accumulator_total_which_model_loss += total_which_model_loss.data[0] / self._mini_batch_size
         self._num_accumulator_updates += 1
-        total_which_model_loss.backward(retain_graph=True)
+        total_which_model_loss.backward()
         self._optimizer.step()
         # updates counts for estimation of accuracy in this minibatch:
 

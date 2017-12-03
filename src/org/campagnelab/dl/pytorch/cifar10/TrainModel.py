@@ -256,7 +256,7 @@ class TrainModel:
             if self.use_cuda:
                 inputs, targets = inputs.cuda(), targets.cuda()
 
-            inputs, targets = Variable(inputs), Variable(targets)
+            inputs, targets = Variable(inputs), Variable(targets, requires_grad=False)
             # outputs used to calculate the loss of the supervised model
             # must be done with the model prior to regularization:
             self.optimizer_training.zero_grad()
@@ -293,6 +293,7 @@ class TrainModel:
                     # print("\n")
                 else:
                     reg_loss_float = 0
+
                 if measure_performance:
                     performance_estimators[REG_INDEX_2].observe_performance_metric(batch_idx, reg_loss_float, None,
                                                                                    None)

@@ -270,8 +270,11 @@ class URegularizer:
     def get_ureg_loss(self):
         """Return the average ureg _which_one_model training loss since the new_epoch method was called.
         This average loss is """
-        assert self._num_accumulator_updates > 0, "accumulator was not updated, check that you called train_ureg after new_epoch"
-        return self._accumulator_total_which_model_loss / self._num_accumulator_updates
+        if self._enabled:
+            assert self._num_accumulator_updates > 0, "accumulator was not updated, check that you called train_ureg after new_epoch"
+            return self._accumulator_total_which_model_loss / self._num_accumulator_updates
+        else:
+            return 0
 
     def train_ureg_to_convergence(self, problem, train_dataset, unsup_dataset,
                                   performance_estimators=(LossHelper("ureg_loss"),),

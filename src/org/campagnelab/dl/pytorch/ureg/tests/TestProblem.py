@@ -30,8 +30,6 @@ class TestProblem(Problem):
         torch.manual_seed(12)
 
         self.biased_inputs=self.build_inputs(add_bias=True)
-        random.seed(12)
-        torch.manual_seed(12)
 
         self.nobias_inputs=self.build_inputs(add_bias=False)
 
@@ -56,10 +54,10 @@ class TestProblem(Problem):
     def loss_function(self):
         return rmse
 
-    def build_inputs(self, add_bias, dataset_size=10):
+    def build_inputs(self, add_bias, dataset_size=30):
         combined=[(0,0)]*dataset_size
         for index in range(0, dataset_size):
-            a = 0.45 if random.uniform(0., 1.) > 0.5 else 0.5
+            a = 0.45 if random.uniform(0., 1.) >  0.6 else 0.5
             b = 0.6 if random.uniform(0., 1.) > 0.5 else 0.4
             value = torch.FloatTensor([[a, b]])
 

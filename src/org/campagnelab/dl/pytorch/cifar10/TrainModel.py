@@ -282,7 +282,7 @@ class TrainModel:
 
 
                 performance_estimators.set_metric(batch_idx, "reg_loss", reg_loss_float)
-                performance_estimators.set_metric(batch_idx, "ureg_alpha", self.ureg._alph)
+                performance_estimators.set_metric(batch_idx, "ureg_alpha", self.ureg._alpha)
 
             if train_ureg:
 

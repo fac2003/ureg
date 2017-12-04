@@ -162,9 +162,9 @@ class TrainModel:
 
         self.optimizer_training = torch.optim.SGD(self.net.parameters(), lr=args.lr, momentum=args.momentum,
                                                   weight_decay=args.L2)
-        self.optimizer_reg = self.optimizer_training if args.mode=="one_pass" else \
+        self.optimizer_reg = self.optimizer_training if args.mode == "one_pass" else \
             torch.optim.SGD(self.net.parameters(), lr=args.shave_lr, momentum=args.momentum,
-                                                  weight_decay=args.L2)
+                            weight_decay=args.L2)
         self.ureg = URegularizer(self.net, self.mini_batch_size, num_features=args.ureg_num_features,
                                  alpha=args.ureg_alpha,
                                  learning_rate=args.ureg_learning_rate,
@@ -215,12 +215,12 @@ class TrainModel:
 
         if performance_estimators is None:
             performance_estimators = PerformanceList()
-            performance_estimators+=[LossHelper("train_loss"), AccuracyHelper("train_")]
+            performance_estimators += [LossHelper("train_loss"), AccuracyHelper("train_")]
 
             if regularize:
-                performance_estimators+=[LossHelper("reg_loss")]
+                performance_estimators += [LossHelper("reg_loss")]
             if train_ureg:
-                performance_estimators+= [LossHelper("ureg_loss"), FloatHelper("ureg_accuracy")]
+                performance_estimators += [LossHelper("ureg_loss"), FloatHelper("ureg_accuracy")]
 
         print('\nTraining, epoch: %d' % epoch)
         self.net.train()
@@ -265,7 +265,7 @@ class TrainModel:
                 # then use it to calculate the unsupervised regularization contribution to the loss:
 
                 self.optimizer_training.zero_grad()
-                regularization_loss = self.ureg.regularization_loss(inputs, uinputs)
+                regularization_loss = self.estimate_regularization_loss(inputs, uinputs,1.,1.)
                 if regularization_loss is not None:
                     # print_params(epoch, self.net)
 
@@ -280,22 +280,20 @@ class TrainModel:
                 else:
                     reg_loss_float = 0
 
-
                 performance_estimators.set_metric(batch_idx, "reg_loss", reg_loss_float)
                 performance_estimators.set_metric(batch_idx, "ureg_alpha", self.ureg._alpha)
 
             if train_ureg:
 
-                    ureg_loss = self.ureg.train_ureg(inputs, uinputs)
-                    if (ureg_loss is not None):
-                        performance_estimators.set_metric(batch_idx, "ureg_loss", ureg_loss.data[0])
-                        performance_estimators.set_metric(batch_idx, "ureg_accuracy", self.ureg.ureg_accuracy())
+                ureg_loss = self.ureg.train_ureg(inputs, uinputs)
+                if (ureg_loss is not None):
+                    performance_estimators.set_metric(batch_idx, "ureg_loss", ureg_loss.data[0])
+                    performance_estimators.set_metric(batch_idx, "ureg_accuracy", self.ureg.ureg_accuracy())
 
-                        # adjust ureg model learning rate as needed:
-                        self.ureg.schedule(ureg_loss.data[0], epoch)
+                    # adjust ureg model learning rate as needed:
+                    self.ureg.schedule(ureg_loss.data[0], epoch)
 
             if train_supervised_model:
-
                 # if self.ureg._which_one_model is not None:
                 #    self.ureg.estimate_example_weights(inputs)
 
@@ -307,7 +305,6 @@ class TrainModel:
                                                                outputs, targets)
                 performance_estimators.set_metric_with_outputs(batch_idx, "train_accuracy", supervised_loss.data[0],
                                                                outputs, targets)
-
 
             progress_bar(batch_idx * self.mini_batch_size,
                          min(self.max_regularization_examples, self.max_training_examples),
@@ -393,9 +390,9 @@ class TrainModel:
 
                 # then use it to calculate the unsupervised regularization contribution to the loss:
                 inputs = Variable(features)
-                regularization_loss = self.ureg.regularization_loss(inputs, uinputs,
-                                                                    weight_s=weight_s,
-                                                                    weight_u=weight_u)
+                regularization_loss = self.estimate_regularization_loss(inputs, uinputs,
+                                                                        weight_s=weight_s,
+                                                                        weight_u=weight_u)
                 if regularization_loss is not None:
                     regularization_loss = regularization_loss * mixing_coeficient
                     optimized_loss = regularization_loss.data[0]
@@ -752,3 +749,12 @@ class TrainModel:
     def epoch_is_test_epoch(self, epoch):
         epoch_is_one_of_last_ten = epoch > (self.start_epoch + self.args.num_epochs - 10)
         return (epoch % self.args.test_every_n_epochs + 1) == 1 or epoch_is_one_of_last_ten
+
+    def estimate_regularization_loss(self, inputs, uinputs, weight_s, weight_u):
+        if self.args.optimize == "uncertainty":
+            return self.ureg.regularization_loss(inputs, uinputs,
+                                                 weight_s=weight_s,
+                                                 weight_u=weight_u)
+        if self.args.optimize == "similarity":
+            return self.ureg.regularization_loss_unsup_similarity(inputs)
+        assert False, 'self.args.optimize must be "uncertainty" or "similarity"'

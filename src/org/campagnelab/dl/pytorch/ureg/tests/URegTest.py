@@ -168,7 +168,8 @@ class URegTest(unittest.TestCase):
     def test_optimize_with_train_model(self):
         test_problem = TestProblem()
 
-        model_trainer = TrainModel(DummyArgs(ureg=True), problem=test_problem, use_cuda=False)
+        model_trainer = TrainModel(DummyArgs(ureg=True,
+                                             optimize="similarity"), problem=test_problem, use_cuda=False)
         model_trainer.init_model(create_model_function=lambda name:
 
         torch.nn.Sequential(torch.nn.Linear(2, 2), torch.nn.Linear(2, 1))
@@ -177,7 +178,10 @@ class URegTest(unittest.TestCase):
         model_trainer.ureg.set_num_examples(100, 100)
 
         for epoch in range(0, 100):
-            model_trainer.train(epoch=epoch, performance_estimators=[],
+            estimators = PerformanceList()
+            estimators += [LossHelper("train_loss")]
+            estimators += [LossHelper("reg_loss")]
+            model_trainer.train(epoch=epoch, performance_estimators=estimators,
                                 train_supervised_model=True,
                                 train_ureg=True,
                                 regularize=True)

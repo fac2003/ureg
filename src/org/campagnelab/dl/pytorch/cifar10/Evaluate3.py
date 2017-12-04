@@ -82,7 +82,10 @@ parser.add_argument('--problem', default="CIFAR10", type=str,
 parser.add_argument('--ureg-epsilon', default=1e-6, type=float, help='Epsilon to determine ureg model convergence.')
 parser.add_argument('--mode', help='Training mode: combined or interleaved, used to alter the mode of '
                                    'ureg semi-supervised training.',
-                    default="interleaved")
+                    default="one_pass")
+parser.add_argument('--optimize', help='What to optimize for when regularizing: uncertainty or similarity to the '
+                                       'unlabeled set.',
+                    default="similarity")
 parser.add_argument('--threshold-activation-size', default=None, type=int,
                     help='Do not include layers if they produce more than the specified number of activations.')
 parser.add_argument('--include-layer-indices', default=None, type=str,

@@ -259,6 +259,7 @@ class TrainModel:
             inputs, targets = Variable(inputs), Variable(targets, requires_grad=False)
             # outputs used to calculate the loss of the supervised model
             # must be done with the model prior to regularization:
+            self.net.train()
             self.optimizer_training.zero_grad()
             outputs = self.net(inputs)
 
@@ -287,6 +288,7 @@ class TrainModel:
                     regularization_loss = regularization_loss * mixing_coeficient
                     # NB. we used ureg_alpha to adjust the learning rate for regularization
                     reg_loss_float = regularization_loss.data[0]
+                    self.net.train()
                     regularization_loss.backward()
                     self.optimizer_training.step()
                     # print_params(epoch, self.net)

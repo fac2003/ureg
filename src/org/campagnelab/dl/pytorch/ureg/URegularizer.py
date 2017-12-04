@@ -229,6 +229,7 @@ class URegularizer:
             xu, xs = self._adjust_batch_sizes(xs, xu)
 
         self.create_which_one_model(xs)
+        self.model_assembler.model.eval()
         supervised_output_list = self.extract_activation_list(xs)
         unsupervised_output_list = self.extract_activation_list(xu)
 
@@ -251,9 +252,9 @@ class URegularizer:
         weight_s, weight_u = self.loss_weights(weight_s, weight_u)
 
         loss_ys = self.loss_ys(ys, self.ys_true)
-        loss_yu = self.loss_yu(yu, self.yu_true)
-        total_which_model_loss = (weight_s * loss_ys + weight_u * loss_yu)
-        #total_which_model_loss =  loss_ys
+        #loss_yu = self.loss_yu(yu, self.yu_true)
+        #total_which_model_loss = (weight_s * loss_ys + weight_u * loss_yu)
+        total_which_model_loss =  loss_ys
         # print("loss_ys: {} loss_yu: {} ".format(loss_ys.data[0],loss_yu.data[0]))
         # total_which_model_loss =torch.max(loss_ys,loss_yu)
         self._accumulator_total_which_model_loss += total_which_model_loss.data[0] / self._mini_batch_size

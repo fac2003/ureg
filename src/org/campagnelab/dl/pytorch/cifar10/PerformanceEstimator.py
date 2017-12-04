@@ -1,9 +1,12 @@
-
 class PerformanceEstimator:
     def init_performance_metrics(self):
         """Initializes accumulators. Must be called before starting another round of estimations.
         """
         pass
+
+    def observe_named_metric(self, iteration, metric_name, loss, outputs, targets):
+        if metric_name in self.metric_names():
+            self.observe_performance_metric( iteration, loss, outputs, targets)
 
     def observe_performance_metric(self, iteration, loss, outputs, targets):
         """Collect information to calculate metrics. Must be called at each iteration (mini-batch).
@@ -28,7 +31,7 @@ class PerformanceEstimator:
         """ Return a message suitable for logging progress of the metrics."""
         return ""
 
-    def get_metric(self,metric_name):
+    def get_metric(self, metric_name):
         """ return the metric estimate corresponding to this name, or None if not estimated
         by this estimator."""
         for index in range(len(self.metric_names())):

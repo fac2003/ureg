@@ -6,6 +6,8 @@ from torch.autograd import Variable
 from torch.legacy.nn import MSECriterion, AbsCriterion
 from torch.nn import BCELoss
 
+from org.campagnelab.dl.pytorch.cifar10.LossHelper import LossHelper
+from org.campagnelab.dl.pytorch.cifar10.PerformanceList import PerformanceList
 from org.campagnelab.dl.pytorch.cifar10.TrainModel import TrainModel, print_params
 from org.campagnelab.dl.pytorch.ureg.URegularizer import URegularizer
 from org.campagnelab.dl.pytorch.ureg.tests.DummyArgs import DummyArgs
@@ -72,9 +74,9 @@ class URegTest(unittest.TestCase):
         """
         random.seed(12)
         torch.manual_seed(12)
-
+        ureg_alpha=1
         ureg = URegularizer(self.model, 1, num_features=2,
-                            alpha=1,
+                            alpha=ureg_alpha,
                             learning_rate=0.01)
         ureg.set_num_examples(100, 100)
         training_set_bias_enabled = True
@@ -178,7 +180,7 @@ class URegTest(unittest.TestCase):
                                 train_supervised_model=True,
                                 train_ureg=True,
                                 regularize=True)
-            #print("ureg loss={:3f} acc={:3f}".format(
+            # print("ureg loss={:3f} acc={:3f}".format(
             #    model_trainer.ureg.get_ureg_loss(),
             #    model_trainer.ureg.ureg_accuracy()))
 
@@ -203,6 +205,55 @@ class URegTest(unittest.TestCase):
                 self.assertTrue(
                     result.data[0, 0] < 0.6,
                     msg="probability must be larger than 0.4 on biased signal when ureg is enabled")
+
+    def test_optimize_with_train_model_two_passes(self):
+        test_problem = TestProblem()
+
+        model_trainer = TrainModel(DummyArgs(ureg=True), problem=test_problem, use_cuda=False)
+        model_trainer.init_model(create_model_function=lambda name:
+
+        torch.nn.Sequential(torch.nn.Linear(2, 2), torch.nn.Linear(2, 1))
+                                 )
+
+        model_trainer.ureg.set_num_examples(100, 100)
+
+
+        for epoch in range(0, 100):
+            estimators=PerformanceList()
+            estimators+=[LossHelper("train_loss")]
+            estimators += [LossHelper("reg_loss")]
+
+            model_trainer.train(epoch=epoch, performance_estimators=estimators,
+                                train_supervised_model=True,
+                                train_ureg=True,
+                                regularize=False)
+            model_trainer.regularize(epoch=epoch)
+            print("train_loss {:3f} ureg loss={:3f}".format(
+                estimators.get_metric("train_loss"),
+                estimators.get_metric("reg_loss")))
+
+        test_inputs = test_problem.test_loader()
+        eps = 0.001
+        for (index, (input, true_target)) in enumerate(test_problem.test_loader()):
+            input = Variable(input)
+            result = model_trainer.net(input)
+            print("test_inputs: ({:.3f}, {:.3f}) predicted target: {:.3f} true target: {:.1f} ".format(
+                input.data[0, 0], input.data[0, 1],
+                result.data[0, 0], true_target[0, 0]))
+
+        for (index, (input, true_target)) in enumerate(test_problem.test_loader()):
+            input = Variable(input)
+            result = model_trainer.net(input)
+            if abs(input.data[0, 1] - 0.6) < eps:
+                self.assertTrue(
+                    result.data[0, 0] > 0.8,
+                    msg="probability must be larger than 0.9 on true signal when ureg is enabled")
+
+            if abs(input.data[0, 0] - 0.45) < eps and abs(input.data[0, 1] - 0.4) < eps:
+                self.assertTrue(
+                    result.data[0, 0] < 0.6,
+                    msg="probability must be larger than 0.4 on biased signal when ureg is enabled")
+
 
     def build_inputs(self, add_bias):
         bs = self.dataset_size

@@ -8,6 +8,7 @@ from org.campagnelab.dl.pytorch.cifar10.AccuracyHelper import AccuracyHelper
 from org.campagnelab.dl.pytorch.cifar10.FloatHelper import FloatHelper
 from org.campagnelab.dl.pytorch.cifar10.LRHelper import LearningRateHelper
 from org.campagnelab.dl.pytorch.cifar10.LossHelper import LossHelper
+from org.campagnelab.dl.pytorch.cifar10.PerformanceList import PerformanceList
 from org.campagnelab.dl.pytorch.cifar10.utils import progress_bar
 from org.campagnelab.dl.pytorch.ureg.LRSchedules import construct_scheduler
 from org.campagnelab.dl.pytorch.ureg.URegularizer import URegularizer
@@ -209,35 +210,16 @@ class TrainModel:
               regularize=False,
               previous_training_loss=1.0,
               previous_ureg_loss=1.0):
-        TRAIN_INDEX_1 = 0
-        TRAIN_INDEX_2 = 0
-        REG_INDEX_2 = 0
-        ALPHA_INDEX = 0
-        UREG_INDEX_1 = 0
-        UREG_INDEX_2 = 0
+
         if performance_estimators is None:
-            measure_performance = True
-            i = 0
-            performance_estimators = [LossHelper("train_loss"), AccuracyHelper("train_")]
-            TRAIN_INDEX_1 = i
-            i += 1
-            TRAIN_INDEX_2 = i
-            i += 1
+            performance_estimators = PerformanceList()
+            performance_estimators+=[LossHelper("train_loss"), AccuracyHelper("train_")]
+
             if regularize:
-                performance_estimators += [LossHelper("reg_loss")]
-                REG_INDEX_2 = i
-                i += 1
-                performance_estimators += [FloatHelper("ureg_alpha")]
-                ALPHA_INDEX = i
-                i += 1
+                performance_estimators+=[LossHelper("reg_loss")]
             if train_ureg:
-                performance_estimators += [LossHelper("ureg_loss"), FloatHelper("ureg_accuracy")]
-                UREG_INDEX_1 = i
-                i += 1
-                UREG_INDEX_2 = i
-                i += 1
-        else:
-            measure_performance = False
+                performance_estimators+= [LossHelper("ureg_loss"), FloatHelper("ureg_accuracy")]
+
         print('\nTraining, epoch: %d' % epoch)
         self.net.train()
 
@@ -296,24 +278,19 @@ class TrainModel:
                 else:
                     reg_loss_float = 0
 
-                if measure_performance:
-                    performance_estimators[REG_INDEX_2].observe_performance_metric(batch_idx, reg_loss_float, None,
-                                                                                   None)
-                    performance_estimators[ALPHA_INDEX].observe_performance_metric(batch_idx, self.ureg._alpha,
-                                                                                   None, None)
-                if train_ureg:
+
+                performance_estimators.set_metric(batch_idx, "reg_loss", reg_loss_float)
+                performance_estimators.set_metric(batch_idx, "ureg_alpha", self.ureg._alph)
+
+            if train_ureg:
 
                     ureg_loss = self.ureg.train_ureg(inputs, uinputs)
                     if (ureg_loss is not None):
-                        if measure_performance:
-                            performance_estimators[UREG_INDEX_1].observe_performance_metric(batch_idx,
-                                                                                            ureg_loss.data[0], None,
-                                                                                            None)
-                            performance_estimators[UREG_INDEX_2].observe_performance_metric(batch_idx,
-                                                                                            self.ureg.ureg_accuracy(),
-                                                                                            None, None)
-                            # adjust ureg model learning rate as needed:
-                            self.ureg.schedule(ureg_loss.data[0], epoch)
+                        performance_estimators.set_metric(batch_idx, "ureg_loss", ureg_loss.data[0])
+                        performance_estimators.set_metric(batch_idx, "ureg_accuracy", self.ureg.ureg_accuracy())
+
+                        # adjust ureg model learning rate as needed:
+                        self.ureg.schedule(ureg_loss.data[0], epoch)
 
             if train_supervised_model:
 
@@ -323,13 +300,12 @@ class TrainModel:
                 supervised_loss = self.criterion(outputs, targets)
                 supervised_loss.backward()
                 self.optimizer_training.step()
-                if measure_performance:
-                    performance_estimators[TRAIN_INDEX_1].observe_performance_metric(batch_idx, supervised_loss.data[0],
-                                                                                     outputs,
-                                                                                     targets)
-                    performance_estimators[TRAIN_INDEX_2].observe_performance_metric(batch_idx, supervised_loss.data[0],
-                                                                                     outputs,
-                                                                                     targets)
+
+                performance_estimators.set_metric_with_outputs(batch_idx, "train_loss", supervised_loss.data[0],
+                                                               outputs, targets)
+                performance_estimators.set_metric_with_outputs(batch_idx, "train_accuracy", supervised_loss.data[0],
+                                                               outputs, targets)
+
 
             progress_bar(batch_idx * self.mini_batch_size,
                          min(self.max_regularization_examples, self.max_training_examples),

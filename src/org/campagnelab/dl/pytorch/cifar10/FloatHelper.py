@@ -17,7 +17,7 @@ class FloatHelper(PerformanceEstimator):
     def estimates_of_metric(self):
         if self.count==0:
             print("Invalid count for "+self.name)
-            sys.stdout.flush()
+            return [float('nan')]
         return [self.value/self.count]
 
     def metric_names(self):

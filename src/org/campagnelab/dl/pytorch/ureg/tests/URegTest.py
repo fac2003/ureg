@@ -96,9 +96,10 @@ class URegTest(unittest.TestCase):
         else:
             ureg.disable()
 
-        for epoch in range(0, 100):
+        for epoch in range(0, 62):
             average_loss = 0
             ureg.new_epoch(epoch=epoch)
+            model.train()
             for index in range(0, self.dataset_size):
                 optimizer.zero_grad()
                 inputs, targets = Variable(train_inputs[index]), \

@@ -1,5 +1,7 @@
 class DummyArgs:
-    def __init__(self, ureg=True, ureg_alpha=1) -> None:
+    def __init__(self, ureg=True, ureg_alpha=1,
+                 lr=0.001,
+                 shave_lr=0.001) -> None:
         super().__init__()
         self.num_shaving = 30
         self.num_validation = 30
@@ -10,8 +12,8 @@ class DummyArgs:
         self.include_layer_indices = "0"
         self.resume = False
         self.model = "test-model"
-        self.lr = 0.001
-        self.shave_lr = 0.001
+        self.lr =lr
+        self.shave_lr = shave_lr
         self.ureg_learning_rate = 0.01
         self.ureg_reset_every_n_epoch = None
         self.momentum = 0.9

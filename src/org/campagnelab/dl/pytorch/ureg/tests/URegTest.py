@@ -1,6 +1,7 @@
 import random
 import unittest
 
+import sys
 import torch
 from torch.autograd import Variable
 from torch.legacy.nn import MSECriterion, AbsCriterion
@@ -209,7 +210,9 @@ class URegTest(unittest.TestCase):
     def test_optimize_with_train_model_two_passes(self):
         test_problem = TestProblem()
 
-        model_trainer = TrainModel(DummyArgs(ureg=True), problem=test_problem, use_cuda=False)
+        model_trainer = TrainModel(DummyArgs(ureg=True,
+                                             lr=0.001,
+                                             shave_lr=0.01), problem=test_problem, use_cuda=False)
         model_trainer.init_model(create_model_function=lambda name:
 
         torch.nn.Sequential(torch.nn.Linear(2, 2), torch.nn.Linear(2, 1))
@@ -234,13 +237,15 @@ class URegTest(unittest.TestCase):
 
         test_inputs = test_problem.test_loader()
         eps = 0.001
+        print("\n")
+
         for (index, (input, true_target)) in enumerate(test_problem.test_loader()):
             input = Variable(input)
             result = model_trainer.net(input)
             print("test_inputs: ({:.3f}, {:.3f}) predicted target: {:.3f} true target: {:.1f} ".format(
                 input.data[0, 0], input.data[0, 1],
-                result.data[0, 0], true_target[0, 0]))
-
+                         result.data[0, 0], true_target[0, 0]))
+        sys.stdout.flush()
         for (index, (input, true_target)) in enumerate(test_problem.test_loader()):
             input = Variable(input)
             result = model_trainer.net(input)

@@ -162,7 +162,9 @@ class TrainModel:
 
         self.optimizer_training = torch.optim.SGD(self.net.parameters(), lr=args.lr, momentum=args.momentum,
                                                   weight_decay=args.L2)
-        self.optimizer_reg = self.optimizer_training
+        self.optimizer_reg = self.optimizer_training if args.mode=="one_pass" else \
+            torch.optim.SGD(self.net.parameters(), lr=args.shave_lr, momentum=args.momentum,
+                                                  weight_decay=args.L2)
         self.ureg = URegularizer(self.net, self.mini_batch_size, num_features=args.ureg_num_features,
                                  alpha=args.ureg_alpha,
                                  learning_rate=args.ureg_learning_rate,
@@ -318,7 +320,7 @@ class TrainModel:
             if (batch_idx + 1) * self.mini_batch_size > self.max_training_examples:
                 break
 
-        print()
+            print("\n")
 
         return performance_estimators
 
@@ -663,8 +665,8 @@ class TrainModel:
 
             self.grow_unsupervised_examples_per_epoch()
 
-            previous_training_loss = self.get_metric(performance_estimators=perfs, metric_name="train_loss")
-            previous_ureg_loss = self.get_metric(performance_estimators=perfs, metric_name="ureg_loss")
+        previous_training_loss = self.get_metric(performance_estimators=perfs, metric_name="train_loss")
+        previous_ureg_loss = self.get_metric(performance_estimators=perfs, metric_name="ureg_loss")
 
         return perfs
 

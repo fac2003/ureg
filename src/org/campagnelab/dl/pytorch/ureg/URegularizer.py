@@ -428,6 +428,39 @@ class URegularizer:
         # return the regularization loss:
         return rLoss
 
+    def regularization_loss_unsup_similarity(self, xs):
+        """
+        Calculates the regularization loss whose minimum indicates maximum similarity to the
+        unsupervised set.
+
+        :param loss: loss to be optimized without regularization
+        :param xs: supervised features.
+        :param xu: unsupervised features.
+        :return: a variable with the regularization loss.
+        """
+        if not self._enabled:
+            return None
+
+        self.create_which_one_model(xs)
+
+        supervised_output = self.extract_activation_list(xs)  # print("length of output: "+str(len(supervised_output)))
+
+        # now we use the model:
+        self._which_one_model.eval()
+        # the more the activations on the supervised set deviate from the unsupervised data,
+        # the more we need to regularize:
+        ys = self.model_assembler.evaluate(supervised_output)
+
+        # rLoss is zero when the ureg model predicts the training example is part of the unsupervised set
+        rLoss = self.loss_ys(ys, self.yu_true)
+
+        # self._alpha = 0.5 - (0.5 - self._last_epoch_accuracy)
+        # rLoss = (self.loss_ys(ys, self.ys_uncertain))
+        # self.loss_yu(yu, self.ys_uncertain)) / 2
+        # return the regularization loss:
+        return rLoss
+
+
     def loss_weights(self, weight_s, weight_u):
         if weight_s is None:
             weight_s = 1 / (self.num_training / (self.num_training + self.num_unsupervised_examples))

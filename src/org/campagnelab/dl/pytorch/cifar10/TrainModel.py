@@ -264,7 +264,7 @@ class TrainModel:
             if regularize:
                 # then use it to calculate the unsupervised regularization contribution to the loss:
 
-                self.optimizer_training.zero_grad()
+                self.optimizer_reg.zero_grad() # not used
                 regularization_loss = self.estimate_regularization_loss(inputs, uinputs, 1., 1.)
                 if regularization_loss is not None:
                     # print_params(epoch, self.net)

@@ -24,7 +24,7 @@ class URegularizer:
     def __init__(self, model, mini_batch_size, num_features=64, alpha=0.5,
                  learning_rate=0.1,
                  reset_every_epochs=None, do_not_use_scheduler=False,
-                 momentum=0.9, l2=1E-4, include_output_function=None):
+                 momentum=0.9, l2=0, include_output_function=None):
         """
         :param model:
         :param mini_batch_size:
@@ -248,10 +248,13 @@ class URegularizer:
 
         # step the whichOne model's parameters in the direction that
         # reduces the loss:
-        weight_s, weight_u = self.loss_weights(weight_s, weight_u)
 
-        loss_ys = self.loss_ys(ys, self.ys_true)
-        loss_yu = self.loss_yu(yu, self.yu_true)
+        weight_s, weight_u =(1.,1.)
+        loss = torch.nn.BCELoss()
+        if self._use_cuda: loss = loss.cuda()
+
+        loss_ys = loss(ys, self.ys_true)
+        loss_yu = loss(yu, self.yu_true)
         total_which_model_loss = (weight_s * loss_ys + weight_u * loss_yu)
         # print("loss_ys: {} loss_yu: {} ".format(loss_ys.data[0],loss_yu.data[0]))
         # total_which_model_loss =torch.max(loss_ys,loss_yu)
@@ -261,7 +264,8 @@ class URegularizer:
         self._optimizer.step()
         # updates counts for estimation of accuracy in this minibatch:
 
-        self._estimate_accuracy(ys, self.ys_true)
+        # Estimate accuracy on the unup set only (less likely to see these examples often then
+        # those of the training set.
         self._estimate_accuracy(yu, self.yu_true)
 
         return total_which_model_loss
@@ -453,7 +457,10 @@ class URegularizer:
         ys = self.model_assembler.evaluate(supervised_output)
 
         # rLoss is zero when the ureg model predicts the training example is part of the unsupervised set
-        rLoss = self.loss_ys(ys, self.yu_true)
+        loss_yu = torch.nn.BCELoss()
+        if self._use_cuda: loss_yu=loss_yu.cuda()
+
+        rLoss = loss_yu(ys, self.yu_true)
 
         # self._alpha = 0.5 - (0.5 - self._last_epoch_accuracy)
         # rLoss = (self.loss_ys(ys, self.ys_uncertain))

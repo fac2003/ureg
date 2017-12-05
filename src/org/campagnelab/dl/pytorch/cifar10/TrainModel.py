@@ -798,7 +798,7 @@ class TrainModel:
 
                 print("Training ureg to convergence.")
                 ureg_training_perf = self.ureg.train_ureg_to_convergence(self.problem, train_dataset, unsup_dataset,
-                                                                         epsilon=epsilon, max_epochs=30,
+                                                                         epsilon=epsilon, max_epochs=epoch+1,
                                                                          max_examples=self.args.max_examples_per_epoch)
                 perfs += [ureg_training_perf]
 

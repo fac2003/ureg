@@ -837,7 +837,8 @@ class TrainModel:
     def grow_unsupervised_examples_per_epoch(self):
         if self.args.grow_unsupervised_each_epoch is not None:
             self.args.max_examples_per_epoch += self.args.grow_unsupervised_each_epoch
-            self.args.num_shaving += self.args.grow_unsupervised_each_epoch
+            if self.args.num_shaving < len(self.problem.unsup_set()):
+                self.args.num_shaving += self.args.grow_unsupervised_each_epoch
             self.max_examples_per_epoch += self.args.grow_unsupervised_each_epoch
             print("Increase unsupervised: --max-examples-per-epoch to {} and --num-shaving to {}."
                   .format(self.max_examples_per_epoch,

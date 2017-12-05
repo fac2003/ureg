@@ -445,6 +445,8 @@ class URegularizer:
         """
         if not self._enabled:
             return None
+        if len(self.yu_true) != len(xs):
+            return None
 
         self.create_which_one_model(xs)
 

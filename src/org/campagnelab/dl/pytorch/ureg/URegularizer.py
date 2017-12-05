@@ -3,11 +3,11 @@ import sys
 
 import torch
 from torch.autograd import Variable
-from torch.nn import Sequential
 
+from org.campagnelab.dl.pytorch.cifar10.FloatHelper import FloatHelper
 from org.campagnelab.dl.pytorch.cifar10.LossHelper import LossHelper
-from org.campagnelab.dl.pytorch.cifar10.Samplers import ProtectedIterator
-from org.campagnelab.dl.pytorch.cifar10.utils import init_params, progress_bar
+from org.campagnelab.dl.pytorch.cifar10.PerformanceList import PerformanceList
+from org.campagnelab.dl.pytorch.cifar10.utils import progress_bar
 from org.campagnelab.dl.pytorch.ureg.LRSchedules import construct_scheduler
 from org.campagnelab.dl.pytorch.ureg.ModelAssembler import ModelAssembler
 from org.campagnelab.dl.pytorch.ureg.MyFeatureExtractor import MyFeatureExtractor
@@ -106,7 +106,7 @@ class URegularizer:
         if self._n_total == 0:
             return float("nan")
         accuracy = self._n_correct / self._n_total
-        #print("ureg accuracy={0:.3f} correct: {1}/{2}".format(accuracy, self._n_correct, self._n_total))
+        # print("ureg accuracy={0:.3f} correct: {1}/{2}".format(accuracy, self._n_correct, self._n_total))
         self._last_epoch_accuracy = accuracy
         self._n_total = 0
         self._n_correct = 0
@@ -188,7 +188,6 @@ class URegularizer:
             uncertain_values.fill_(0.5)
             self.ys_uncertain = Variable(uncertain_values, requires_grad=False)
 
-
             if self._use_cuda:
                 self.ys_true = self.ys_true.cuda()
                 self.yu_true = self.yu_true.cuda()
@@ -232,10 +231,10 @@ class URegularizer:
         self.model_assembler.model.eval()
         supervised_output_list = self.extract_activation_list(xs)
         unsupervised_output_list = self.extract_activation_list(xu)
-
+        self._which_one_model.train()
         self._optimizer.zero_grad()
         # predict which dataset (s or u) the samples were from:
-        self._which_one_model.train()
+
         ys = self.model_assembler.evaluate(supervised_output_list)
         yu = self.model_assembler.evaluate(unsupervised_output_list)
         if (len(ys) != len(self.ys_true)):
@@ -244,7 +243,7 @@ class URegularizer:
         if (len(yu) != len(self.yu_true)):
             print("lengths yu differ: {} !={}".format(len(yu), len(self.yu_true)))
             return None
-        #print("ys: {} yu: {}".format(ys.data,yu.data))
+        # print("ys: {} yu: {}".format(ys.data,yu.data))
         # derive the loss of binary classifications:
 
         # step the whichOne model's parameters in the direction that
@@ -252,9 +251,8 @@ class URegularizer:
         weight_s, weight_u = self.loss_weights(weight_s, weight_u)
 
         loss_ys = self.loss_ys(ys, self.ys_true)
-        #loss_yu = self.loss_yu(yu, self.yu_true)
-        #total_which_model_loss = (weight_s * loss_ys + weight_u * loss_yu)
-        total_which_model_loss =  loss_ys
+        loss_yu = self.loss_yu(yu, self.yu_true)
+        total_which_model_loss = (weight_s * loss_ys + weight_u * loss_yu)
         # print("loss_ys: {} loss_yu: {} ".format(loss_ys.data[0],loss_yu.data[0]))
         # total_which_model_loss =torch.max(loss_ys,loss_yu)
         self._accumulator_total_which_model_loss += total_which_model_loss.data[0] / self._mini_batch_size
@@ -278,7 +276,7 @@ class URegularizer:
             return 0
 
     def train_ureg_to_convergence(self, problem, train_dataset, unsup_dataset,
-                                  performance_estimators=(LossHelper("ureg_loss"),),
+                                  performance_estimators=None,
                                   epsilon=0.01,
                                   max_epochs=30, max_examples=None):
         """Train the ureg model for a number of epochs until improvements in the loss
@@ -290,6 +288,9 @@ class URegularizer:
         :param max_examples maximum number of examples to scan per epoch.
         :return list of performance estimators
         """
+        if performance_estimators is None:
+            performance_estimators = PerformanceList()
+            performance_estimators += [LossHelper("ureg_loss"), FloatHelper("ureg_accuracy")]
         len_supervised = len(train_dataset)
         len_unsupervised = len(unsup_dataset)
         print("Training ureg to convergence with {} training and {} unsupervised samples,"
@@ -337,12 +338,12 @@ class URegularizer:
                 if loss is not None:
                     # print("ureg batch {} average loss={} ".format(batch_idx, loss.data[0]))
                     num_batches += 1
-                    for performance_estimator in performance_estimators:
-                        performance_estimator.observe_performance_metric(batch_idx, loss.data[0],
-                                                                         None,
-                                                                         None)
-                    epoch_ = "epoch " + str(ureg_epoch) + " "
-                    progress_bar(batch_idx * self._mini_batch_size, max_examples,
+
+                    performance_estimators.set_metric_with_outputs(batch_idx, "ureg_loss", loss.data[0], None, None)
+                    performance_estimators.set_metric(batch_idx, "ureg_accuracy", self.ureg_accuracy())
+
+                epoch_ = "epoch " + str(ureg_epoch) + " "
+                progress_bar(batch_idx * self._mini_batch_size, max_examples,
                                  epoch_ + " ".join(
                                      [performance_estimator.progress_message() for performance_estimator in
                                       performance_estimators]))
@@ -459,7 +460,6 @@ class URegularizer:
         # self.loss_yu(yu, self.ys_uncertain)) / 2
         # return the regularization loss:
         return rLoss
-
 
     def loss_weights(self, weight_s, weight_u):
         if weight_s is None:

@@ -505,6 +505,10 @@ class TrainModel:
                 performance_estimators[0].observe_performance_metric(batch_idx, optimized_loss,
                                                                      inputs, uinputs)
 
+                # keep training the ureg model while regularizing, this is needed to keep ureg relevant to the
+                # regularized weights:
+                self.ureg.train_ureg(inputs, uinputs)
+
                 progress_bar(batch_idx * self.mini_batch_size, max_loop_index,
                              " ".join([performance_estimator.progress_message() for performance_estimator in
                                        performance_estimators]))

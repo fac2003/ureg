@@ -333,7 +333,7 @@ class URegularizer:
                     xs = xs.cuda()
                     xu = xu.cuda()
 
-                weight_s, weight_u = self.loss_weights(1, 1)
+                weight_s, weight_u = self.loss_weights(None, None)
                 loss = self.train_ureg(xs, xu, weight_s, weight_u)
                 if loss is not None:
                     # print("ureg batch {} average loss={} ".format(batch_idx, loss.data[0]))
@@ -466,12 +466,13 @@ class URegularizer:
             weight_s = 1 / (self.num_training / (self.num_training + self.num_unsupervised_examples))
         if weight_u is None:
             weight_u = 1 / (self.num_unsupervised_examples / (self.num_training + self.num_unsupervised_examples))
-            # print("using weights: T={} U={} weight_s={} weight_u={}".format(
-            #     self.num_training,
-            #     self.num_unsupervised_examples,
-            #     weight_s, weight_u))
+
         normalized_weight_s = weight_s / (weight_s + weight_u)
         normalized_weight_u = weight_u / (weight_s + weight_u)
+        # print("using weights: T={} U={} weight_s={} weight_u={}".format(
+        #     self.num_training,
+        #     self.num_unsupervised_examples,
+        #     normalized_weight_s, normalized_weight_u))
         return normalized_weight_s, normalized_weight_u
 
     def combine_losses(self, supervised_loss, regularization_loss):

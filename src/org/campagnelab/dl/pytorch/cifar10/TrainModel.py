@@ -265,7 +265,7 @@ class TrainModel:
                 # then use it to calculate the unsupervised regularization contribution to the loss:
 
                 self.optimizer_training.zero_grad()
-                regularization_loss = self.estimate_regularization_loss(inputs, uinputs,1.,1.)
+                regularization_loss = self.estimate_regularization_loss(inputs, uinputs, 1., 1.)
                 if regularization_loss is not None:
                     # print_params(epoch, self.net)
 
@@ -299,6 +299,106 @@ class TrainModel:
 
                 supervised_loss = self.criterion(outputs, targets)
                 supervised_loss.backward()
+                self.optimizer_training.step()
+
+                performance_estimators.set_metric_with_outputs(batch_idx, "train_loss", supervised_loss.data[0],
+                                                               outputs, targets)
+                performance_estimators.set_metric_with_outputs(batch_idx, "train_accuracy", supervised_loss.data[0],
+                                                               outputs, targets)
+
+            progress_bar(batch_idx * self.mini_batch_size,
+                         min(self.max_regularization_examples, self.max_training_examples),
+                         " ".join([performance_estimator.progress_message() for performance_estimator in
+                                   performance_estimators]))
+
+            if (batch_idx + 1) * self.mini_batch_size > self.max_regularization_examples:
+                break
+
+            if (batch_idx + 1) * self.mini_batch_size > self.max_training_examples:
+                break
+
+            print("\n")
+
+        return performance_estimators
+
+    def train_linear_combination(self, epoch,
+                                 performance_estimators=None,
+                                 train_supervised_model=True,
+                                 train_ureg=True,
+                                 ):
+
+        if performance_estimators is None:
+            performance_estimators = PerformanceList()
+            performance_estimators += [LossHelper("train_loss"), AccuracyHelper("train_")]
+            performance_estimators += [LossHelper("reg_loss")]
+            if train_ureg:
+                performance_estimators += [LossHelper("ureg_loss"), FloatHelper("ureg_accuracy")]
+
+        print('\nTraining, epoch: %d' % epoch)
+        self.net.train()
+
+        for performance_estimator in performance_estimators:
+            performance_estimator.init_performance_metrics()
+
+        num_batches = 0
+        train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
+        unsuploader_shuffled = self.problem.reg_loader_subset_range(0, self.args.num_shaving)
+        unsupiter = iter(unsuploader_shuffled)
+        for batch_idx, (inputs, targets) in enumerate(train_loader_subset):
+            num_batches += 1
+
+            if self.use_cuda:
+                inputs, targets = inputs.cuda(), targets.cuda()
+
+            inputs, targets = Variable(inputs), Variable(targets, requires_grad=False)
+            # outputs used to calculate the loss of the supervised model
+            # must be done with the model prior to regularization:
+            self.net.train()
+            self.optimizer_training.zero_grad()
+            outputs = self.net(inputs)
+
+            if train_ureg:
+                # obtain an unsupervised sample, put it in uinputs autograd Variable:
+
+                try:
+                    # first, read a minibatch from the unsupervised dataset:
+                    ufeatures, ulabels = next(unsupiter)
+
+                except StopIteration:
+                    unsupiter = iter(unsuploader_shuffled)
+                    ufeatures, ulabels = next(unsupiter)
+                if self.use_cuda: ufeatures = ufeatures.cuda()
+                # then use it to calculate the unsupervised regularization contribution to the loss:
+                uinputs = Variable(ufeatures)
+
+                performance_estimators.set_metric(batch_idx, "ureg_alpha", self.ureg._alpha)
+
+            if train_ureg:
+
+                ureg_loss = self.ureg.train_ureg(inputs, uinputs)
+                if (ureg_loss is not None):
+                    performance_estimators.set_metric(batch_idx, "ureg_loss", ureg_loss.data[0])
+                    performance_estimators.set_metric(batch_idx, "ureg_accuracy", self.ureg.ureg_accuracy())
+
+                    # adjust ureg model learning rate as needed:
+                    self.ureg.schedule(ureg_loss.data[0], epoch)
+
+            if train_supervised_model:
+                alpha = self.args.ureg_alpha
+                # if self.ureg._which_one_model is not None:
+                #    self.ureg.estimate_example_weights(inputs)
+
+                supervised_loss = self.criterion(outputs, targets)
+
+                regularization_loss = self.estimate_regularization_loss(inputs, uinputs, 1., 1.)
+                if regularization_loss is not None:
+                    optimized_loss = supervised_loss * (1. - alpha) + regularization_loss * alpha
+                    performance_estimators.set_metric(batch_idx, "reg_loss", regularization_loss.data[0])
+
+                else:
+                    optimized_loss = supervised_loss
+
+                optimized_loss.backward()
                 self.optimizer_training.step()
 
                 performance_estimators.set_metric_with_outputs(batch_idx, "train_loss", supervised_loss.data[0],
@@ -584,12 +684,9 @@ class TrainModel:
             self.ureg.new_epoch(epoch)
             perfs = []
 
-            perfs += [self.train(epoch,
-                                 train_supervised_model=True,
-                                 train_ureg=True,
-                                 regularize=True,
-                                 previous_training_loss=previous_training_loss,
-                                 previous_ureg_loss=previous_ureg_loss)]
+            perfs += [self.train_linear_combination(epoch,
+                                                    train_supervised_model=True,
+                                                    train_ureg=True)]
 
             if previous_test_perfs is None or self.epoch_is_test_epoch(epoch):
                 previous_test_perfs = self.test(epoch)

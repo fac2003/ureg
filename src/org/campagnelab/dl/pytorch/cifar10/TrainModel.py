@@ -401,9 +401,9 @@ class TrainModel:
                 optimized_loss.backward()
                 self.optimizer_training.step()
 
-                performance_estimators.set_metric_with_outputs(batch_idx, "train_loss", supervised_loss.data[0],
+                performance_estimators.set_metric_with_outputs(batch_idx, "train_loss", optimized_loss.data[0],
                                                                outputs, targets)
-                performance_estimators.set_metric_with_outputs(batch_idx, "train_accuracy", supervised_loss.data[0],
+                performance_estimators.set_metric_with_outputs(batch_idx, "train_accuracy", optimized_loss.data[0],
                                                                outputs, targets)
 
             progress_bar(batch_idx * self.mini_batch_size,

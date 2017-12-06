@@ -9,7 +9,7 @@ from org.campagnelab.dl.pytorch.cifar10.FloatHelper import FloatHelper
 from org.campagnelab.dl.pytorch.cifar10.LRHelper import LearningRateHelper
 from org.campagnelab.dl.pytorch.cifar10.LossHelper import LossHelper
 from org.campagnelab.dl.pytorch.cifar10.PerformanceList import PerformanceList
-from org.campagnelab.dl.pytorch.cifar10.utils import progress_bar
+from org.campagnelab.dl.pytorch.cifar10.utils import progress_bar, grad_norm, scale_gradient
 from org.campagnelab.dl.pytorch.ureg.LRSchedules import construct_scheduler
 from org.campagnelab.dl.pytorch.ureg.URegularizer import URegularizer
 
@@ -162,9 +162,8 @@ class TrainModel:
 
         self.optimizer_training = torch.optim.SGD(self.net.parameters(), lr=args.lr, momentum=args.momentum,
                                                   weight_decay=args.L2)
-        self.optimizer_reg = self.optimizer_training if args.mode == "one_pass" else \
-            torch.optim.SGD(self.net.parameters(), lr=args.shave_lr, momentum=args.momentum,
-                            weight_decay=args.L2)
+        self.optimizer_reg = torch.optim.SGD(self.net.parameters(), lr=args.shave_lr, momentum=args.momentum,
+                                             weight_decay=args.L2)
         self.ureg = URegularizer(self.net, self.mini_batch_size, num_features=args.ureg_num_features,
                                  alpha=args.ureg_alpha,
                                  learning_rate=args.ureg_learning_rate,
@@ -221,10 +220,11 @@ class TrainModel:
                 performance_estimators += [LossHelper("reg_loss")]
             if train_ureg:
                 performance_estimators += [LossHelper("ureg_loss"), FloatHelper("ureg_accuracy")]
-
+        performance_estimators += [FloatHelper("train_grad_norm")]
+        performance_estimators += [FloatHelper("reg_grad_norm")]
         print('\nTraining, epoch: %d' % epoch)
         self.net.train()
-
+        supervised_grad_norm = 1.
         for performance_estimator in performance_estimators:
             performance_estimator.init_performance_metrics()
 
@@ -261,28 +261,6 @@ class TrainModel:
                 # then use it to calculate the unsupervised regularization contribution to the loss:
                 uinputs = Variable(ufeatures)
 
-            if regularize:
-                # then use it to calculate the unsupervised regularization contribution to the loss:
-
-                self.optimizer_reg.zero_grad() # not used
-                regularization_loss = self.estimate_regularization_loss(inputs, uinputs, 1., 1.)
-                if regularization_loss is not None:
-                    # print_params(epoch, self.net)
-
-                    regularization_loss = regularization_loss * mixing_coeficient
-                    # NB. we used ureg_alpha to adjust the learning rate for regularization
-                    reg_loss_float = regularization_loss.data[0]
-                    self.net.train()
-                    regularization_loss.backward()
-                    self.optimizer_training.step()
-                    # print_params(epoch, self.net)
-                    # print("\n")
-                else:
-                    reg_loss_float = 0
-
-                performance_estimators.set_metric(batch_idx, "reg_loss", reg_loss_float)
-                performance_estimators.set_metric(batch_idx, "ureg_alpha", self.ureg._alpha)
-
             if train_ureg:
 
                 ureg_loss = self.ureg.train_ureg(inputs, uinputs)
@@ -300,11 +278,43 @@ class TrainModel:
                 supervised_loss = self.criterion(outputs, targets)
                 supervised_loss.backward()
                 self.optimizer_training.step()
+                supervised_grad_norm = grad_norm(self.net.parameters())
+                performance_estimators.set_metric(batch_idx, "train_grad_norm", supervised_grad_norm)
 
                 performance_estimators.set_metric_with_outputs(batch_idx, "train_loss", supervised_loss.data[0],
                                                                outputs, targets)
                 performance_estimators.set_metric_with_outputs(batch_idx, "train_accuracy", supervised_loss.data[0],
                                                                outputs, targets)
+
+            if regularize:
+                # then use it to calculate the unsupervised regularization contribution to the loss:
+
+                self.optimizer_reg.zero_grad()  # not used
+                regularization_loss = self.estimate_regularization_loss(inputs, uinputs, 1., 1.)
+                if regularization_loss is not None:
+                    # print_params(epoch, self.net)
+
+                    #regularization_loss = regularization_loss * mixing_coeficient
+                    # NB. we used ureg_alpha to adjust the learning rate for regularization
+                    reg_loss_float = regularization_loss.data[0]
+                    self.net.train()
+                    regularization_loss.backward()
+                    self.optimizer_training.step()
+                    reg_grad_norm = grad_norm(self.net.parameters())
+                    alpha = self.args.ureg_alpha
+                    normalization_factor = supervised_grad_norm/reg_grad_norm*alpha
+
+                    scale_gradient(self.net.parameters(),
+                                   scaling_factor=normalization_factor )
+                    normalized_reg_grad_norm = grad_norm(self.net.parameters())
+                    performance_estimators.set_metric(batch_idx, "reg_grad_norm", normalized_reg_grad_norm)
+                    # print_params(epoch, self.net)
+                    # print("\n")
+                else:
+                    reg_loss_float = 0
+
+                performance_estimators.set_metric(batch_idx, "reg_loss", reg_loss_float)
+                performance_estimators.set_metric(batch_idx, "ureg_alpha", self.ureg._alpha)
 
             progress_bar(batch_idx * self.mini_batch_size,
                          min(self.max_regularization_examples, self.max_training_examples),
@@ -333,7 +343,7 @@ class TrainModel:
             performance_estimators += [LossHelper("reg_loss")]
             if train_ureg:
                 performance_estimators += [LossHelper("ureg_loss"), FloatHelper("ureg_accuracy")]
-
+            performance_estimators += [FloatHelper("train_grad_norm")]
         print('\nTraining, epoch: %d' % epoch)
         self.net.train()
 
@@ -399,6 +409,8 @@ class TrainModel:
                     optimized_loss = supervised_loss
 
                 optimized_loss.backward()
+                supervised_grad_norm = grad_norm(self.net.parameters())
+                performance_estimators.set_metric(batch_idx, "train_grad_norm", supervised_grad_norm)
                 self.optimizer_training.step()
 
                 performance_estimators.set_metric_with_outputs(batch_idx, "train_loss", optimized_loss.data[0],
@@ -688,9 +700,10 @@ class TrainModel:
             self.ureg.new_epoch(epoch)
             perfs = []
 
-            perfs += [self.train_linear_combination(epoch,
-                                                    train_supervised_model=True,
-                                                    train_ureg=True)]
+            perfs += [self.train(epoch,
+                                 train_supervised_model=True,
+                                 train_ureg=True,
+                                 regularize=True)]
 
             if previous_test_perfs is None or self.epoch_is_test_epoch(epoch):
                 previous_test_perfs = self.test(epoch)
@@ -802,7 +815,7 @@ class TrainModel:
 
                 print("Training ureg to convergence.")
                 ureg_training_perf = self.ureg.train_ureg_to_convergence(self.problem, train_dataset, unsup_dataset,
-                                                                         epsilon=epsilon, max_epochs=epoch+1,
+                                                                         epsilon=epsilon, max_epochs=epoch + 1,
                                                                          max_examples=self.args.max_examples_per_epoch)
                 perfs += [ureg_training_perf]
 

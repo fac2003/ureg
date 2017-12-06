@@ -147,3 +147,46 @@ def format_time(seconds):
     if f == '':
         f = '0ms'
     return f
+
+def grad_norm(parameters,  norm_type = 2):
+    """Returns the norm of the parameters' gradients.
+
+    Arguments:
+        parameters (Iterable[Variable]): an iterable of Variables that will have
+            gradients' norm measured.
+        norm_type (float or int): type of the used p-norm. Can be ``'inf'`` for
+            infinity norm.
+
+    Returns:
+        Total norm of the parameters (viewed as a single vector).
+    """
+    parameters = list(filter(lambda p: p.grad is not None, parameters))
+    norm_type = float(norm_type)
+    param_norm=0.
+    if norm_type == float('inf'):
+        total_norm = max(p.grad.data.abs().max() for p in parameters)
+    else:
+        total_norm = 0
+    for p in parameters:
+        param_norm = p.grad.data.norm(norm_type)
+    total_norm += param_norm ** norm_type
+    total_norm = total_norm ** (1. / norm_type)
+    return total_norm
+
+
+def scale_gradient(parameters,   scaling_factor=None, norm_type = 2):
+    """Scale the gradients by a constant factor.
+
+    Arguments:
+        parameters (Iterable[Variable]): an iterable of Variables that will have
+            gradients' norm measured.
+        scaling_factor: number to multiply the gradients with.
+
+    """
+    assert scaling_factor is not None,"Scaling factor must be specified/"
+    for param in parameters:
+        if param is not None:
+            param.data.mul_(scaling_factor)
+
+
+

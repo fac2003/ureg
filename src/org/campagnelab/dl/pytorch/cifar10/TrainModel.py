@@ -303,6 +303,8 @@ class TrainModel:
                     reg_grad_norm = grad_norm(self.net.parameters())
                     alpha = self.args.ureg_alpha
                     normalization_factor = supervised_grad_norm/reg_grad_norm*alpha
+                    normalization_factor = performance_estimators.get_metric("train_grad_norm")/\
+                                           reg_grad_norm*alpha
 
                     scale_gradient(self.net.parameters(),
                                    scaling_factor=normalization_factor )

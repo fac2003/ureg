@@ -293,7 +293,9 @@ class TrainModel:
                 regularization_loss = self.estimate_regularization_loss(inputs, uinputs, 1., 1.)
                 if regularization_loss is not None:
                     # print_params(epoch, self.net)
+                    alpha = self.args.ureg_alpha
 
+                    regularization_loss*=alpha
                     #regularization_loss = regularization_loss * mixing_coeficient
                     # NB. we used ureg_alpha to adjust the learning rate for regularization
                     reg_loss_float = regularization_loss.data[0]
@@ -301,14 +303,7 @@ class TrainModel:
                     regularization_loss.backward()
                     self.optimizer_reg.step()
                     reg_grad_norm = grad_norm(self.net.parameters())
-                    alpha = self.args.ureg_alpha
-                    normalization_factor = performance_estimators.get_metric("train_grad_norm")/\
-                                           reg_grad_norm*alpha
-
-                    scale_gradient(self.net.parameters(),
-                                   scaling_factor=normalization_factor )
-                    normalized_reg_grad_norm = grad_norm(self.net.parameters())
-                    performance_estimators.set_metric(batch_idx, "reg_grad_norm", normalized_reg_grad_norm)
+                    performance_estimators.set_metric(batch_idx, "reg_grad_norm", reg_grad_norm)
                     # print_params(epoch, self.net)
                     # print("\n")
                 else:

@@ -289,7 +289,7 @@ class TrainModel:
             if regularize:
                 # then use it to calculate the unsupervised regularization contribution to the loss:
 
-                self.optimizer_reg.zero_grad()  # not used
+                self.optimizer_reg.zero_grad()
                 regularization_loss = self.estimate_regularization_loss(inputs, uinputs, 1., 1.)
                 if regularization_loss is not None:
                     # print_params(epoch, self.net)
@@ -299,10 +299,9 @@ class TrainModel:
                     reg_loss_float = regularization_loss.data[0]
                     self.net.train()
                     regularization_loss.backward()
-                    self.optimizer_training.step()
+                    self.optimizer_reg.step()
                     reg_grad_norm = grad_norm(self.net.parameters())
                     alpha = self.args.ureg_alpha
-                    normalization_factor = supervised_grad_norm/reg_grad_norm*alpha
                     normalization_factor = performance_estimators.get_metric("train_grad_norm")/\
                                            reg_grad_norm*alpha
 

@@ -2,7 +2,8 @@ class DummyArgs:
     def __init__(self, ureg=True, ureg_alpha=1,
                  lr=0.001,
                  shave_lr=0.001,
-                 optimize="uncertainty") -> None:
+                 optimize="uncertainty",
+                 mode="one_pass") -> None:
         super().__init__()
         self.num_shaving = 30
         self.num_validation = 30
@@ -23,6 +24,6 @@ class DummyArgs:
         self.ureg_alpha = ureg_alpha
         self.constant_learning_rates = False
         self.lr_patience = 10
-        self.mode = "one_pass"
+        self.mode = mode,
         self.shaving_epochs = 1
         self.optimize=optimize

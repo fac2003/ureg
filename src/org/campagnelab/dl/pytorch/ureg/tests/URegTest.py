@@ -2,6 +2,8 @@ import random
 import unittest
 
 import sys
+
+import copy
 import torch
 from torch.autograd import Variable
 from torch.legacy.nn import MSECriterion, AbsCriterion
@@ -16,6 +18,13 @@ from org.campagnelab.dl.pytorch.ureg.tests.SimpleModel import SimpleModel
 import torch.nn.functional as F
 
 from org.campagnelab.dl.pytorch.ureg.tests.TestProblem import TestProblem
+
+def collect_params(net):
+    params = []
+    for param in net.parameters():
+        params += [p for p in param.view(-1).data]
+    return params
+
 
 
 def rmse(y, y_hat):
@@ -52,19 +61,45 @@ class URegTest(unittest.TestCase):
         """
         Checks that the gradient flowing from ureg is not zero.
         """
-        ureg = URegularizer(self.model, 1, num_features=2,
+        random.seed(12)
+        torch.manual_seed(12)
+        model = SimpleModel(2, 1)
+        ureg = URegularizer(model, 1, num_features=2,
                             alpha=1,  # gradient only from ureg.
                             learning_rate=0.1)
         ureg.set_num_examples(1000, 1000)
 
-        loss = self.criterion(self.y, self.y_true)
-        xs = self.x
-        xu = Variable(self.x.data + torch.ones(2))
+        xs = Variable(torch.rand(1, 2))
+        xu = Variable(torch.rand(1, 2))
+        ureg._which_one_model=None
         ureg.train_ureg(xs, xu)
         regularization_loss = ureg.regularization_loss(xs, xu)
         regularization_loss.backward()
 
-        for param in self.model.parameters():
+        for param in model.parameters():
+            print("parameter grad: {}".format(param.grad.data))
+            self.assertTrue(abs(param.grad.data.sum()) > self.epsilon, msg="gradient cannot be null")
+            param.data.add_(-0.1 * param.grad.data)
+
+    def test_grad_not_null_from_ureg_similarity(self):
+        """
+        Checks that the gradient flowing from ureg is not zero.
+        """
+        random.seed(12)
+        torch.manual_seed(12)
+        model = SimpleModel(2, 1)
+        ureg = URegularizer(model, 1, num_features=2,
+                            alpha=1,  # gradient only from ureg.
+                            learning_rate=0.1)
+        ureg.set_num_examples(1000, 1000)
+        torch.manual_seed(1212)
+        xs = Variable(torch.rand(1,2))
+        xu = Variable(torch.rand(1,2))
+        ureg.train_ureg(xs, xu)
+        regularization_loss = ureg.regularization_loss_unsup_similarity(xs)
+        regularization_loss.backward()
+
+        for param in model.parameters():
             print("parameter grad: {}".format(param.grad.data))
             self.assertTrue(abs(param.grad.data.sum()) > self.epsilon, msg="gradient cannot be null")
             param.data.add_(-0.1 * param.grad.data)
@@ -164,6 +199,31 @@ class URegTest(unittest.TestCase):
             print("test_inputs: ({:.3f}, {:.3f}) predicted target: {:.3f} true target: {:.1f} ".format(
                 inputs.data[0, 0], inputs.data[0, 1],
                 result.data[0, 0], true_target[0, 0]))
+
+
+    def test_regularize(self):
+        test_problem = TestProblem()
+
+        model_trainer = TrainModel(DummyArgs(ureg=True, mode="two_passes",
+                                             lr=0.001,
+                                             shave_lr=0.1,
+                                             optimize="similarity"),
+                                   problem=test_problem, use_cuda=False)
+        model_trainer.init_model(create_model_function=lambda name:
+
+        torch.nn.Sequential(torch.nn.Linear(2, 2), torch.nn.Linear(2, 1))
+                                 )
+
+        model_trainer.ureg.set_num_examples(100, 100)
+
+        first_params=copy.deepcopy(collect_params(model_trainer.net))
+
+        model_trainer.regularize(1)
+        regularized_params=collect_params(model_trainer.net)
+        self.assertNotEqual(first_params, second=regularized_params)
+
+
+
 
     def test_optimize_with_train_model(self):
         test_problem = TestProblem()

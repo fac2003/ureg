@@ -410,8 +410,7 @@ class URegularizer:
         self.create_which_one_model(xs)
 
         supervised_output = self.extract_activation_list(xs)  # print("length of output: "+str(len(supervised_output)))
-        unsupervised_output = self.extract_activation_list(
-            xu)  # print("length of output: "+str(len(supervised_output)))
+        unsupervised_output = self.extract_activation_list( xu)  # print("length of output: "+str(len(supervised_output)))
 
         # now we use the model:
         self._which_one_model.eval()
@@ -445,10 +444,10 @@ class URegularizer:
         """
         if not self._enabled:
             return None
-        if len(self.yu_true) != len(xs):
-            return None
 
         self.create_which_one_model(xs)
+        if len(self.yu_true) != len(xs):
+            return None
 
         supervised_output = self.extract_activation_list(xs)  # print("length of output: "+str(len(supervised_output)))
 

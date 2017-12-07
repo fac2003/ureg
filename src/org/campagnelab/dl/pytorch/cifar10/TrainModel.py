@@ -221,14 +221,14 @@ class TrainModel:
             if train_ureg:
                 performance_estimators += [LossHelper("ureg_loss"), FloatHelper("ureg_accuracy")]
         performance_estimators += [FloatHelper("train_grad_norm")]
-        performance_estimators += [FloatHelper("reg_grad_norm")]
+        if regularize:
+            performance_estimators += [FloatHelper("reg_grad_norm")]
         print('\nTraining, epoch: %d' % epoch)
         self.net.train()
         supervised_grad_norm = 1.
         for performance_estimator in performance_estimators:
             performance_estimator.init_performance_metrics()
 
-        mixing_coeficient = previous_ureg_loss / previous_training_loss * self.args.ureg_alpha
         unsupervised_loss_acc = 0
         num_batches = 0
         train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
@@ -296,8 +296,6 @@ class TrainModel:
                     alpha = self.args.ureg_alpha
 
                     regularization_loss*=alpha
-                    #regularization_loss = regularization_loss * mixing_coeficient
-                    # NB. we used ureg_alpha to adjust the learning rate for regularization
                     reg_loss_float = regularization_loss.data[0]
                     self.net.train()
                     regularization_loss.backward()
@@ -429,7 +427,7 @@ class TrainModel:
 
         return performance_estimators
 
-    def regularize(self, epoch, performance_estimators=(LossHelper("reg_loss"), FloatHelper("ureg_alpha")),
+    def regularize(self, epoch, performance_estimators=None,
                    previous_ureg_loss=1.0, previous_training_loss=1.0):
         """
         Performs training vs test regularization/shaving phase.
@@ -439,6 +437,11 @@ class TrainModel:
         """
         print('\nRegularizing, epoch: %d' % epoch)
         self.net.train()
+        if performance_estimators is None:
+            performance_estimators=PerformanceList()
+            performance_estimators.append(FloatHelper("reg_grad_norm"))
+            performance_estimators.append(LossHelper("reg_loss"))
+            performance_estimators.append(FloatHelper("ureg_alpha"))
 
         trainiter = iter(self.trainloader)
         train_examples_used = 0
@@ -450,8 +453,7 @@ class TrainModel:
         else:
             max_loop_index = self.args.num_training
 
-        for performance_estimator in performance_estimators:
-            performance_estimator.init_performance_metrics()
+        performance_estimators.init_performance_metrics()
         unsuper_records_to_be_seen = min(max_loop_index, use_max_shaving_records)
         # max_loop_index is the number of times training examples are seen,
         # use_max_shaving_records is the number of times unsupervised examples are seen,
@@ -462,15 +464,14 @@ class TrainModel:
         weight_u = 1 / (a + b)
         print("weight_s={} weight_u={} unsuper_records_to_be_seen={} max_loop_index={}".format(
             weight_s, weight_u, unsuper_records_to_be_seen, max_loop_index))
-        mixing_coeficient = previous_ureg_loss / previous_training_loss * self.args.ureg_alpha
 
         for shaving_index in range(self.num_shaving_epochs):
             print("Shaving step {}".format(shaving_index))
             # produce a random subset of the unsupervised samples, exactly matching the number of training examples:
             unsupsampler = self.problem.reg_loader_subset_range(0, use_max_shaving_records)
 
-            performance_estimators[0].init_performance_metrics()
-            performance_estimators[1].observe_performance_metric(1, self.ureg._alpha, None, None)
+            performance_estimators.init_performance_metrics()
+            performance_estimators.set_metric(1, "ureg_alpha",self.ureg._alpha)
 
             for batch_idx, (inputs, targets) in enumerate(unsupsampler):
 
@@ -502,8 +503,12 @@ class TrainModel:
                                                                         weight_s=weight_s,
                                                                         weight_u=weight_u)
                 if regularization_loss is not None:
-                    regularization_loss = regularization_loss * mixing_coeficient
+                    regularization_loss = regularization_loss * self.args.ureg_alpha
+                    reg_grad_norm = grad_norm(self.net.parameters())
+                    performance_estimators.set_metric(batch_idx, "reg_grad_norm", reg_grad_norm)
                     optimized_loss = regularization_loss.data[0]
+                    performance_estimators.set_metric(batch_idx, "reg_loss", optimized_loss)
+
                     regularization_loss.backward()
                     self.optimizer_reg.step()
                 else:

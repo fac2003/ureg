@@ -255,7 +255,7 @@ class URegularizer:
 
         loss_ys = loss(ys, self.ys_true)
         loss_yu = loss(yu, self.yu_true)
-        total_which_model_loss = (weight_s * loss_ys + weight_u * loss_yu)
+        total_which_model_loss = 0.5*(loss_ys +  loss_yu)
         # print("loss_ys: {} loss_yu: {} ".format(loss_ys.data[0],loss_yu.data[0]))
         # total_which_model_loss =torch.max(loss_ys,loss_yu)
         self._accumulator_total_which_model_loss += total_which_model_loss.data[0] / self._mini_batch_size
@@ -424,8 +424,8 @@ class URegularizer:
         # self.loss_ys.weight=torch.from_numpy(numpy.array([weight_s,weight_u]))
         # self.loss_yu.weight=torch.from_numpy(numpy.array([weight_u,weight_s]))
 
-        rLoss = weight_s * self.loss_ys(ys, self.ys_uncertain) + \
-                weight_u * self.loss_yu(yu, self.ys_uncertain)
+        rLoss =2.* self.loss_yu(ys,self.ys_uncertain) - self.loss_ys(ys, self.ys_uncertain) + \
+                self.loss_yu(yu, self.ys_uncertain)
         # self._alpha = 0.5 - (0.5 - self._last_epoch_accuracy)
         # rLoss = (self.loss_ys(ys, self.ys_uncertain))
         # self.loss_yu(yu, self.ys_uncertain)) / 2
@@ -461,7 +461,7 @@ class URegularizer:
         loss_yu = torch.nn.BCELoss()
         if self._use_cuda: loss_yu=loss_yu.cuda()
 
-        rLoss = loss_yu(ys, self.yu_true)
+        rLoss = loss_yu(ys, self.yu_true) -loss_yu(ys,self.ys_uncertain)
 
         # self._alpha = 0.5 - (0.5 - self._last_epoch_accuracy)
         # rLoss = (self.loss_ys(ys, self.ys_uncertain))

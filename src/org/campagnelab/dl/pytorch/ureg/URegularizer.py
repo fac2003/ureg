@@ -7,7 +7,7 @@ from torch.autograd import Variable
 from org.campagnelab.dl.pytorch.cifar10.FloatHelper import FloatHelper
 from org.campagnelab.dl.pytorch.cifar10.LossHelper import LossHelper
 from org.campagnelab.dl.pytorch.cifar10.PerformanceList import PerformanceList
-from org.campagnelab.dl.pytorch.cifar10.utils import progress_bar
+from org.campagnelab.dl.pytorch.cifar10.utils import progress_bar, grad_norm
 from org.campagnelab.dl.pytorch.ureg.LRSchedules import construct_scheduler
 from org.campagnelab.dl.pytorch.ureg.ModelAssembler import ModelAssembler
 from org.campagnelab.dl.pytorch.ureg.MyFeatureExtractor import MyFeatureExtractor
@@ -76,12 +76,12 @@ class URegularizer:
         # print("activations: " + str(self.num_activations))
 
     def _estimate_accuracy(self, ys, ys_true):
-        if (ys.size()[0] != self._mini_batch_size):
+        if (ys.size()[0] != ys_true.size()[0]):
             return
         _, predicted = torch.max(ys.data, 1)
         _, truth = torch.max(ys_true.data, 1)
         self._n_correct += predicted.eq(truth).cpu().sum()
-        self._n_total += self._mini_batch_size
+        self._n_total += len(truth)
 
     def _clear_accuracy(self):
         self._n_correct = 0
@@ -234,39 +234,34 @@ class URegularizer:
         self._which_one_model.train()
         self._optimizer.zero_grad()
         # predict which dataset (s or u) the samples were from:
+        y = self.model_assembler.evaluate_cat(supervised_output_list, unsupervised_output_list)
 
-        ys = self.model_assembler.evaluate(supervised_output_list)
-        yu = self.model_assembler.evaluate(unsupervised_output_list)
-        if (len(ys) != len(self.ys_true)):
-            print("lengths ys differ: {} !={}".format(len(ys), len(self.ys_true)))
+        if (len(y) != len(self.ys_true)*2):
+            print("lengths activations differ: {} !={}".format(len(y), len(self.ys_true)*2))
             return None
-        if (len(yu) != len(self.yu_true)):
-            print("lengths yu differ: {} !={}".format(len(yu), len(self.yu_true)))
-            return None
-        # print("ys: {} yu: {}".format(ys.data,yu.data))
+
         # derive the loss of binary classifications:
 
         # step the whichOne model's parameters in the direction that
         # reduces the loss:
 
-        weight_s, weight_u =(1.,1.)
         loss = torch.nn.BCELoss()
         if self._use_cuda: loss = loss.cuda()
-
-        loss_ys = loss(ys, self.ys_true)
-        loss_yu = loss(yu, self.yu_true)
-        total_which_model_loss = 0.5*(loss_ys +  loss_yu)
+        y_true = torch.cat((self.ys_true, self.yu_true))
+        loss_y = loss(y, y_true)
+        total_which_model_loss = loss_y
         # print("loss_ys: {} loss_yu: {} ".format(loss_ys.data[0],loss_yu.data[0]))
         # total_which_model_loss =torch.max(loss_ys,loss_yu)
         self._accumulator_total_which_model_loss += total_which_model_loss.data[0] / self._mini_batch_size
         self._num_accumulator_updates += 1
         total_which_model_loss.backward()
+        #print("ureg_grad_norm {}".format(grad_norm(self._which_one_model.parameters())))
         self._optimizer.step()
         # updates counts for estimation of accuracy in this minibatch:
 
         # Estimate accuracy on the unup set only (less likely to see these examples often then
         # those of the training set.
-        self._estimate_accuracy(yu, self.yu_true)
+        self._estimate_accuracy(y, y_true)
 
         return total_which_model_loss
 
@@ -348,9 +343,9 @@ class URegularizer:
 
                 epoch_ = "epoch " + str(ureg_epoch) + " "
                 progress_bar(batch_idx * self._mini_batch_size, max_examples,
-                                 epoch_ + " ".join(
-                                     [performance_estimator.progress_message() for performance_estimator in
-                                      performance_estimators]))
+                             epoch_ + " ".join(
+                                 [performance_estimator.progress_message() for performance_estimator in
+                                  performance_estimators]))
 
                 if ((batch_idx + 1) * self._mini_batch_size > max_examples):
                     break
@@ -410,7 +405,8 @@ class URegularizer:
         self.create_which_one_model(xs)
 
         supervised_output = self.extract_activation_list(xs)  # print("length of output: "+str(len(supervised_output)))
-        unsupervised_output = self.extract_activation_list( xu)  # print("length of output: "+str(len(supervised_output)))
+        unsupervised_output = self.extract_activation_list(
+            xu)  # print("length of output: "+str(len(supervised_output)))
 
         # now we use the model:
         self._which_one_model.eval()
@@ -424,7 +420,7 @@ class URegularizer:
         # self.loss_ys.weight=torch.from_numpy(numpy.array([weight_s,weight_u]))
         # self.loss_yu.weight=torch.from_numpy(numpy.array([weight_u,weight_s]))
 
-        rLoss =2.* self.loss_yu(ys,self.ys_uncertain) - self.loss_ys(ys, self.ys_uncertain) + \
+        rLoss = 2. * self.loss_yu(ys, self.ys_uncertain) - self.loss_ys(ys, self.ys_uncertain) + \
                 self.loss_yu(yu, self.ys_uncertain)
         # self._alpha = 0.5 - (0.5 - self._last_epoch_accuracy)
         # rLoss = (self.loss_ys(ys, self.ys_uncertain))
@@ -459,9 +455,9 @@ class URegularizer:
 
         # rLoss is zero when the ureg model predicts the training example is part of the unsupervised set
         loss_yu = torch.nn.BCELoss()
-        if self._use_cuda: loss_yu=loss_yu.cuda()
+        if self._use_cuda: loss_yu = loss_yu.cuda()
 
-        rLoss = loss_yu(ys, self.yu_true) -loss_yu(ys,self.ys_uncertain)
+        rLoss = loss_yu(ys, self.yu_true) - loss_yu(ys, self.ys_uncertain)
 
         # self._alpha = 0.5 - (0.5 - self._last_epoch_accuracy)
         # rLoss = (self.loss_ys(ys, self.ys_uncertain))

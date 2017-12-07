@@ -1,4 +1,5 @@
 import torch
+from torch.autograd import Variable
 from torch.nn import Sequential
 
 from org.campagnelab.dl.pytorch.cifar10.utils import init_params
@@ -64,6 +65,13 @@ class ModelAssembler:
         # print("reduced_activation_list size: {} ".format(len(reduced_activation_list)))
         flattened_activations = torch.cat(reduced_activation_list, dim=1)
         return self.model(flattened_activations)
+
+    def evaluate_cat(self, reduced_activation_list_supervised, reduced_activation_list_unsupervised):
+        # print("reduced_activation_list size: {} ".format(len(reduced_activation_list)))
+        flattened_activations_sup = torch.cat(reduced_activation_list_supervised, dim=1)
+        flattened_activations_unsup = torch.cat(reduced_activation_list_unsupervised, dim=1)
+        flattened_activations_combined=Variable(torch.cat([flattened_activations_sup.data,flattened_activations_unsup.data]))
+        return self.model(flattened_activations_combined)
 
     def init_params(self):
         init_params(self.model)

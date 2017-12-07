@@ -563,8 +563,7 @@ class TrainModel:
         assert test_accuracy is not None, "test_accuracy must be found among estimated performance metrics"
         if not self.args.constant_learning_rates:
             self.scheduler_train.step(test_accuracy, epoch)
-            if self.args.mode == "one_pass":
-                self.scheduler_reg.step(test_accuracy, epoch)
+            self.scheduler_reg.step(test_accuracy, epoch)
 
         return performance_estimators
 

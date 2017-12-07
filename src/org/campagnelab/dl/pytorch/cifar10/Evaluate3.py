@@ -222,9 +222,6 @@ def get_metric_value(all_perfs, query_metric_name):
 def train_once(args, problem, use_cuda):
     problem.describe()
 
-    if args.mode == "one_pass":
-        # use ureg_alpha to adjust regularization learning rate from main model learning rate:
-        args.shave_lr = args.lr * args.ureg_alpha
 
     if args.mode == "supervised":
         args.ureg = None

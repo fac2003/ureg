@@ -71,7 +71,6 @@ class TrainModelSplit:
         self.is_parallel = False
         self.failed_to_improve = 0
 
-
     def init_model(self, create_model_function):
         """Resume training if necessary (args.--resume flag is True), or call the
         create_model_function to initialize a new model. This function must be called
@@ -102,9 +101,10 @@ class TrainModelSplit:
         def rmse(y, y_hat):
             """Compute root mean squared error"""
             return torch.sqrt(torch.mean((y - y_hat).pow(2)))
-        self.agreement_loss=rmse
+
+        self.agreement_loss = rmse
         if self.use_cuda:
-            self.agreement_loss =self.agreement_loss
+            self.agreement_loss = self.agreement_loss
 
         if args.resume:
             # Load checkpoint.
@@ -153,7 +153,7 @@ class TrainModelSplit:
         if performance_estimators is None:
             performance_estimators = PerformanceList()
             performance_estimators += [LossHelper("train_loss")]
-            if  train_split:
+            if train_split:
                 performance_estimators += [LossHelper("split_loss")]
             performance_estimators += [AccuracyHelper("train_")]
             performance_estimators += [FloatHelper("train_grad_norm")]
@@ -182,11 +182,36 @@ class TrainModelSplit:
             self.optimizer_training.zero_grad()
             outputs = self.net(inputs)
 
+            self.optimizer_training.zero_grad()
+            if train_split:
+                count = 0
+                sum = 0
+                for _ in range(0, randint(1, self.args.extra_unsup)):
+                    # obtain an unsupervised sample, put it in uinputs autograd Variable:
+                    # first, read a minibatch from the unsupervised dataset:
+                    ufeatures, _ = next(unsupiter)
+
+                    if self.use_cuda: ufeatures = ufeatures.cuda()
+                    # then use it to calculate the unsupervised regularization contribution to the loss:
+
+
+                    unsup_train_loss = self.split_loss(ufeatures)
+                    if unsup_train_loss is not None:
+                        sum += unsup_train_loss
+                        count += 1
+
+                        reg_grad_norm = grad_norm(self.net.parameters())
+                        performance_estimators.set_metric(count, "reg_grad_norm", reg_grad_norm)
+                performance_estimators.set_metric(batch_idx, "split_loss", sum.data[0] / count)
+                average_unsupervised_loss = sum / count
+            else:
+                average_unsupervised_loss = 0
+
             if train_supervised_model:
                 # if self.ureg._which_one_model is not None:
                 #    self.ureg.estimate_example_weights(inputs)
 
-                supervised_loss = self.criterion(outputs, targets)
+                supervised_loss = self.criterion(outputs, targets) + self.args.factor * average_unsupervised_loss
                 supervised_loss.backward()
                 self.optimizer_training.step()
                 supervised_grad_norm = grad_norm(self.net.parameters())
@@ -196,25 +221,6 @@ class TrainModelSplit:
                                                                outputs, targets)
                 performance_estimators.set_metric_with_outputs(batch_idx, "train_accuracy", supervised_loss.data[0],
                                                                outputs, targets)
-
-            if train_split:
-                for _ in range(0,randint(1,self.args.extra_unsup)):
-                    # obtain an unsupervised sample, put it in uinputs autograd Variable:
-                    # first, read a minibatch from the unsupervised dataset:
-                    ufeatures, _ = next(unsupiter)
-
-                    if self.use_cuda: ufeatures = ufeatures.cuda()
-                    # then use it to calculate the unsupervised regularization contribution to the loss:
-
-                    self.optimizer_training.zero_grad()
-                    unsup_train_loss = self.split_loss(ufeatures)
-                    if unsup_train_loss is not None:
-                        unsup_train_loss*=self.args.factor
-                        unsup_train_loss.backward()
-                        self.optimizer_training.step()
-                        reg_grad_norm = grad_norm(self.net.parameters())
-                        performance_estimators.set_metric(batch_idx, "reg_grad_norm", reg_grad_norm)
-                        performance_estimators.set_metric(batch_idx, "split_loss", unsup_train_loss.data[0])
 
             progress_bar(batch_idx * self.mini_batch_size,
                          min(self.max_regularization_examples, self.max_training_examples),
@@ -347,7 +353,7 @@ class TrainModelSplit:
                                  )]
             perfs += [(lr_train_helper,)]
             if previous_test_perfs is None or self.epoch_is_test_epoch(epoch):
-                perfs += [ self.test(epoch)]
+                perfs += [self.test(epoch)]
 
             perfs = flatten(perfs)
             if (not header_written):
@@ -370,7 +376,6 @@ class TrainModelSplit:
         lr_train_helper = LearningRateHelper(scheduler=self.scheduler_train, learning_rate_name="train_lr")
         previous_test_perfs = None
 
-
         perfs = []
         for epoch in range(self.start_epoch, self.start_epoch + self.args.num_epochs):
 
@@ -381,7 +386,7 @@ class TrainModelSplit:
                                  train_split=True)]
 
             if previous_test_perfs is None or self.epoch_is_test_epoch(epoch):
-                perfs += [ self.test(epoch)]
+                perfs += [self.test(epoch)]
 
             perfs += [(lr_train_helper,)]
 
@@ -401,36 +406,45 @@ class TrainModelSplit:
         return (epoch % self.args.test_every_n_epochs + 1) == 1 or epoch_is_one_of_last_ten
 
     def split_loss(self, uinputs):
-        pi=math.atan(1)*4
-        angle=uniform(pi/2,-pi/2)
-        slope=math.tan(angle)
-        (image_1, image_2) =self.half_images(uinputs,slope)
-        answer_1=self.net(image_1)
-        answer_2=self.net(image_2)
-        result2=Variable(answer_2.data,requires_grad=False)
-        return self.agreement_loss(torch.exp(answer_1),torch.exp(result2))
+        pi = math.atan(1) * 4
+        angle = uniform(pi / 2, -pi / 2)
+        slope = math.tan(angle)
+        (image_1, image_2) = self.half_images(uinputs, slope)
+        answer_1 = self.net(image_1)
+        answer_2 = self.net(image_2)
+        result2 = Variable(answer_2.data, requires_grad=False)
+        return self.agreement_loss(torch.exp(answer_1), torch.exp(result2))
 
     def half_images(self, uinputs, slope):
-        def above_line(xp,yp,slope,b):
+        def above_line(xp, yp, slope, b):
             # remember that y coordinate increase downward in images
-            yl=slope*xp+b
-            return yp<yl
-        uinputs=Variable(uinputs,requires_grad=False)
+            yl = slope * xp + b
+            return yp < yl
 
-        mask1=torch.ByteTensor(uinputs.size()[1:])
-        mask2=torch.ByteTensor(uinputs.size()[1:])
-        channels=uinputs.size()[1]
-        width=uinputs.size()[2]
-        height=uinputs.size()[3]
+        uinputs = Variable(uinputs, requires_grad=False)
 
-        for c in range(0,channels):
-            for x in range(0,width):
-                for y in range(0,height):
-                    mask1[c,x,y]=1 if above_line(x,y, slope=slope,b=height/2.0) else 0
-                    mask2[c,x,y]=0 if above_line(x,y, slope=slope,b=height/2.0) else 1
+        mask_up = torch.ByteTensor(uinputs.size()[2:])  # index 2 drops minibatch size and channel dimension.
+        mask_down = torch.ByteTensor(uinputs.size()[2:])  # index 2 drops minibatch size and channel dimension.
+
+        channels = uinputs.size()[1]
+        width = uinputs.size()[2]
+        height = uinputs.size()[3]
+
+        # fill in the first channel:
+        for x in range(0, width):
+            for y in range(0, height):
+                mask_up[x, y] = 1 if above_line(x, y, slope=slope, b=height / 2.0) else 0
+                mask_down[x, y] = 0 if above_line(x, y, slope=slope, b=height / 2.0) else 1
+
+        mask1 = torch.ByteTensor(uinputs.size()[1:])
+        mask2 = torch.ByteTensor(uinputs.size()[1:])
+
         if self.use_cuda:
-            mask1=mask1.cuda()
-            mask2=mask2.cuda()
-        return uinputs.masked_fill(mask1,0.), uinputs.masked_fill(mask2,0.)
-
-
+            mask_up = mask_up.cuda()
+            mask_down = mask_down.cuda()
+            mask1 = mask1.cuda()
+            mask2 = mask2.cuda()
+        for c in range(0, channels):
+            mask1[c] = mask_up
+            mask2[c] = mask_down
+        return uinputs.masked_fill(mask1, 0.), uinputs.masked_fill(mask2, 0.)

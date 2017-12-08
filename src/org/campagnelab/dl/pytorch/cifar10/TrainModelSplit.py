@@ -427,7 +427,9 @@ class TrainModelSplit:
                 for y in range(0,height):
                     mask1[c,x,y]=1 if above_line(x,y, slope=slope,b=height/2.0) else 0
                     mask2[c,x,y]=0 if above_line(x,y, slope=slope,b=height/2.0) else 1
-
+        if self.use_cuda:
+            mask1=mask1.cuda()
+            mask2=mask2.cuda()
         return uinputs.masked_fill(mask1,0.), uinputs.masked_fill(mask2,0.)
 
 

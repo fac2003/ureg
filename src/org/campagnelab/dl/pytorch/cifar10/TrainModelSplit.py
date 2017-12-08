@@ -152,6 +152,7 @@ class TrainModelSplit:
 
         if performance_estimators is None:
             performance_estimators = PerformanceList()
+            performance_estimators += [LossHelper("optimized_loss")]
             performance_estimators += [LossHelper("train_loss")]
             if train_split:
                 performance_estimators += [LossHelper("split_loss")]
@@ -182,7 +183,6 @@ class TrainModelSplit:
             self.optimizer_training.zero_grad()
             outputs = self.net(inputs)
 
-            self.optimizer_training.zero_grad()
             if train_split:
                 count = 0
                 sum = 0
@@ -211,13 +211,16 @@ class TrainModelSplit:
                 # if self.ureg._which_one_model is not None:
                 #    self.ureg.estimate_example_weights(inputs)
 
-                supervised_loss = self.criterion(outputs, targets) + self.args.factor * average_unsupervised_loss
-                supervised_loss.backward()
+                supervised_loss = self.criterion(outputs, targets)
+                optimized_loss=supervised_loss+self.args.factor * average_unsupervised_loss
+                optimized_loss.backward()
                 self.optimizer_training.step()
                 supervised_grad_norm = grad_norm(self.net.parameters())
                 performance_estimators.set_metric(batch_idx, "train_grad_norm", supervised_grad_norm)
 
                 performance_estimators.set_metric_with_outputs(batch_idx, "train_loss", supervised_loss.data[0],
+                                                               outputs, targets)
+                performance_estimators.set_metric_with_outputs(batch_idx, "optimized_loss", optimized_loss.data[0],
                                                                outputs, targets)
                 performance_estimators.set_metric_with_outputs(batch_idx, "train_accuracy", supervised_loss.data[0],
                                                                outputs, targets)

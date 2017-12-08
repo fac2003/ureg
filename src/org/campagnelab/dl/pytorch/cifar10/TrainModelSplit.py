@@ -158,7 +158,6 @@ class TrainModelSplit:
                 performance_estimators += [LossHelper("split_loss")]
             performance_estimators += [AccuracyHelper("train_")]
             performance_estimators += [FloatHelper("train_grad_norm")]
-            performance_estimators += [FloatHelper("reg_grad_norm")]
             print('\nTraining, epoch: %d' % epoch)
         self.net.train()
         supervised_grad_norm = 1.
@@ -194,13 +193,11 @@ class TrainModelSplit:
                     if self.use_cuda: ufeatures = ufeatures.cuda()
                     # then use it to calculate the unsupervised regularization contribution to the loss:
 
-
                     unsup_train_loss = self.split_loss(ufeatures)
                     if unsup_train_loss is not None:
                         sum += unsup_train_loss
                         count += 1
-                        reg_grad_norm = grad_norm(self.net.parameters())
-                        performance_estimators.set_metric(count, "reg_grad_norm", reg_grad_norm)
+
                 performance_estimators.set_metric(batch_idx, "split_loss", sum.data[0] / count)
                 average_unsupervised_loss = sum / count
             else:

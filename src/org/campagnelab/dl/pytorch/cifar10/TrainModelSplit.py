@@ -428,6 +428,6 @@ class TrainModelSplit:
                     mask1[c,x,y]=1 if above_line(x,y, slope=slope,b=height/2.0) else 0
                     mask2[c,x,y]=0 if above_line(x,y, slope=slope,b=height/2.0) else 1
 
-        return uinputs.masked_fill(mask1,0), uinputs.masked_fill(mask2,0)
+        return uinputs.masked_fill(mask1,0.), uinputs.masked_fill(mask2,0.)
 
 

@@ -199,7 +199,6 @@ class TrainModelSplit:
                     if unsup_train_loss is not None:
                         sum += unsup_train_loss
                         count += 1
-
                         reg_grad_norm = grad_norm(self.net.parameters())
                         performance_estimators.set_metric(count, "reg_grad_norm", reg_grad_norm)
                 performance_estimators.set_metric(batch_idx, "split_loss", sum.data[0] / count)
@@ -410,13 +409,13 @@ class TrainModelSplit:
 
     def split_loss(self, uinputs):
         pi = math.atan(1) * 4
-        angle = uniform(pi / 2, -pi / 2)
+        angle = uniform(pi , -pi )
         slope = math.tan(angle)
         (image_1, image_2) = self.half_images(uinputs, slope)
         answer_1 = self.net(image_1)
         answer_2 = self.net(image_2)
         result2 = Variable(answer_2.data, requires_grad=False)
-        return self.agreement_loss(torch.exp(answer_1), torch.exp(result2))
+        return self.agreement_loss(answer_1, result2)
 
     def half_images(self, uinputs, slope):
         def above_line(xp, yp, slope, b):
@@ -432,13 +431,17 @@ class TrainModelSplit:
         channels = uinputs.size()[1]
         width = uinputs.size()[2]
         height = uinputs.size()[3]
-
+        #print("mask down-------------")
         # fill in the first channel:
         for x in range(0, width):
             for y in range(0, height):
-                mask_up[x, y] = 1 if above_line(x, y, slope=slope, b=height / 2.0) else 0
-                mask_down[x, y] = 0 if above_line(x, y, slope=slope, b=height / 2.0) else 1
+                above_the_line = above_line(x - width / 2, y, slope=slope, b=height / 2.0 )
+                mask_up[x, y] = 1 if above_the_line else 0
+                mask_down[x, y] = 0 if above_the_line else 1
+                #print("." if mask_down[x, y] else " ",end="")
+            #print("|")
 
+        #print("-----------mask down")
         mask1 = torch.ByteTensor(uinputs.size()[1:])
         mask2 = torch.ByteTensor(uinputs.size()[1:])
 

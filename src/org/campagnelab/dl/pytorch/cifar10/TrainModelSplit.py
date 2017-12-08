@@ -208,7 +208,7 @@ class TrainModelSplit:
                 self.optimizer_training.zero_grad()
                 unsup_train_loss = self.split_loss(ufeatures)
                 if unsup_train_loss is not None:
-
+                    unsup_train_loss*=self.args.factor
                     unsup_train_loss.backward()
                     self.optimizer_training.step()
                     reg_grad_norm = grad_norm(self.net.parameters())

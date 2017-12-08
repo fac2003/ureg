@@ -39,6 +39,8 @@ parser = argparse.ArgumentParser(description='Evaluate split training against CI
 parser.add_argument('--lr', default=0.005, type=float, help='Learning rate.')
 parser.add_argument('--resume', '-r', action='store_true', help='resume from checkpoint.')
 parser.add_argument('--split', action='store_true', help='Enable unsupervised training (split).')
+parser.add_argument('--factor', default=1, type=float, help='Multiply split training loss by this factor.')
+
 parser.add_argument('--constant-learning-rates', action='store_true',
                     help='Use constant learning rates, not schedules.')
 

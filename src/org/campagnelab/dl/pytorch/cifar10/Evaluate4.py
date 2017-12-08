@@ -43,6 +43,8 @@ parser.add_argument('--factor', default=1, type=float, help='Multiply split trai
 
 parser.add_argument('--constant-learning-rates', action='store_true',
                     help='Use constant learning rates, not schedules.')
+parser.add_argument('--extra-unsup', type=int,
+                    help='Look at up to n extra unsupervised examples per training example processed.', default=1)
 
 parser.add_argument('--mini-batch-size', type=int, help='Size of the mini-batch.', default=128)
 parser.add_argument('--num-epochs', '--max-epochs', type=int,

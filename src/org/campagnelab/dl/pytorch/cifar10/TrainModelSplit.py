@@ -1,7 +1,7 @@
 import itertools
 import math
 import os
-from random import uniform
+from random import uniform, randint
 
 import torch
 from torch.autograd import Variable
@@ -198,22 +198,23 @@ class TrainModelSplit:
                                                                outputs, targets)
 
             if train_split:
-                # obtain an unsupervised sample, put it in uinputs autograd Variable:
-                # first, read a minibatch from the unsupervised dataset:
-                ufeatures, _ = next(unsupiter)
+                for _ in range(0,randint(1,self.args.extra_unsup)):
+                    # obtain an unsupervised sample, put it in uinputs autograd Variable:
+                    # first, read a minibatch from the unsupervised dataset:
+                    ufeatures, _ = next(unsupiter)
 
-                if self.use_cuda: ufeatures = ufeatures.cuda()
-                # then use it to calculate the unsupervised regularization contribution to the loss:
+                    if self.use_cuda: ufeatures = ufeatures.cuda()
+                    # then use it to calculate the unsupervised regularization contribution to the loss:
 
-                self.optimizer_training.zero_grad()
-                unsup_train_loss = self.split_loss(ufeatures)
-                if unsup_train_loss is not None:
-                    unsup_train_loss*=self.args.factor
-                    unsup_train_loss.backward()
-                    self.optimizer_training.step()
-                    reg_grad_norm = grad_norm(self.net.parameters())
-                    performance_estimators.set_metric(batch_idx, "reg_grad_norm", reg_grad_norm)
-                    performance_estimators.set_metric(batch_idx, "split_loss", unsup_train_loss.data[0])
+                    self.optimizer_training.zero_grad()
+                    unsup_train_loss = self.split_loss(ufeatures)
+                    if unsup_train_loss is not None:
+                        unsup_train_loss*=self.args.factor
+                        unsup_train_loss.backward()
+                        self.optimizer_training.step()
+                        reg_grad_norm = grad_norm(self.net.parameters())
+                        performance_estimators.set_metric(batch_idx, "reg_grad_norm", reg_grad_norm)
+                        performance_estimators.set_metric(batch_idx, "split_loss", unsup_train_loss.data[0])
 
             progress_bar(batch_idx * self.mini_batch_size,
                          min(self.max_regularization_examples, self.max_training_examples),

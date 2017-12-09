@@ -202,7 +202,8 @@ class TrainModelSplit:
                 #    self.ureg.estimate_example_weights(inputs)
 
                 supervised_loss = self.criterion(outputs, targets)
-                optimized_loss=supervised_loss+self.args.factor * average_unsupervised_loss
+                alpha=self.args.factor
+                optimized_loss=supervised_loss*(1-alpha)+alpha * average_unsupervised_loss
                 optimized_loss.backward()
                 self.optimizer_training.step()
                 supervised_grad_norm = grad_norm(self.net.parameters())

@@ -28,6 +28,10 @@ def _format_nice(n):
     except:
         return str(n)
 
+def rmse_dim_1(y, y_hat):
+    """Compute root mean squared error"""
+    return torch.sqrt(torch.mean((y - y_hat).pow(2),1))
+
 
 flatten = lambda l: [item for sublist in l for item in sublist]
 
@@ -102,6 +106,7 @@ class TrainModelSplit:
             """Compute root mean squared error"""
             return torch.sqrt(torch.mean((y - y_hat).pow(2)))
 
+
         self.agreement_loss = rmse
         if self.use_cuda:
             self.agreement_loss = self.agreement_loss
@@ -158,6 +163,7 @@ class TrainModelSplit:
                 performance_estimators += [LossHelper("split_loss")]
             performance_estimators += [AccuracyHelper("train_")]
             performance_estimators += [FloatHelper("train_grad_norm")]
+            performance_estimators += [FloatHelper("factor")]
             print('\nTraining, epoch: %d' % epoch)
         self.net.train()
         supervised_grad_norm = 1.
@@ -169,6 +175,8 @@ class TrainModelSplit:
         train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
         unsuploader_shuffled = self.problem.reg_loader_subset_range(0, self.args.num_shaving)
         unsupiter = itertools.cycle(unsuploader_shuffled)
+        performance_estimators.set_metric(epoch, "factor", self.args.factor)
+
         for batch_idx, (inputs, targets) in enumerate(train_loader_subset):
             num_batches += 1
 
@@ -191,7 +199,7 @@ class TrainModelSplit:
                 if self.use_cuda: ufeatures = ufeatures.cuda()
                 # then use it to calculate the unsupervised regularization contribution to the loss:
 
-                unsup_train_loss = self.split_loss(ufeatures)
+                unsup_train_loss = self.split_loss(ufeatures,outputs)
                 if unsup_train_loss is not None:
                     performance_estimators.set_metric(batch_idx, "split_loss", unsup_train_loss.data[0])
                     average_unsupervised_loss=unsup_train_loss
@@ -226,6 +234,8 @@ class TrainModelSplit:
 
             print("\n")
 
+        # increase factor by 10% at the end of each epoch:
+        self.args.factor*=1.1
         return performance_estimators
 
     def test(self, epoch, performance_estimators=(LossHelper("test_loss"), AccuracyHelper("test_"))):
@@ -399,7 +409,7 @@ class TrainModelSplit:
         epoch_is_one_of_last_ten = epoch > (self.start_epoch + self.args.num_epochs - 10)
         return (epoch % self.args.test_every_n_epochs + 1) == 1 or epoch_is_one_of_last_ten
 
-    def split_loss(self, uinputs):
+    def split_loss(self, uinputs,training_outputs):
         pi = math.atan(1) * 4
         angle = uniform(pi , -pi )
         slope = math.tan(angle)
@@ -407,9 +417,9 @@ class TrainModelSplit:
         answer_1 = self.net(image_1)
         answer_2 = self.net(image_2)
         _, predicted_classes=torch.max(answer_2.data, 1)
-
         predicted_classes_var = Variable(predicted_classes, requires_grad=False)
-        return self.problem.loss_function()(answer_1, predicted_classes_var)
+        rmse_loss=self.agreement_loss(training_outputs,answer_2)
+        return self.problem.loss_function()(answer_1, predicted_classes_var)+rmse_loss
 
     def half_images(self, uinputs, slope):
         def above_line(xp, yp, slope, b):

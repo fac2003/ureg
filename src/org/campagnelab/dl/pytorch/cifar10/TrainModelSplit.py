@@ -235,7 +235,7 @@ class TrainModelSplit:
             print("\n")
 
         # increase factor by 10% at the end of each epoch:
-        self.args.factor*=1.1
+        self.args.factor*=self.args.increase_decrease
         return performance_estimators
 
     def test(self, epoch, performance_estimators=(LossHelper("test_loss"), AccuracyHelper("test_"))):

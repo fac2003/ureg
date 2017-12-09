@@ -41,6 +41,9 @@ parser.add_argument('--resume', '-r', action='store_true', help='resume from che
 parser.add_argument('--split', action='store_true', help='Enable unsupervised training (split).')
 parser.add_argument('--factor', default=1, type=float, help='Multiply split training loss by this factor.')
 
+parser.add_argument('--increase_decrease', default=1, type=float, help='Multiply the factor by this number at each epoch. Used to increase >1 or decrease <1 the '
+                                                                       'factor at each epoch.')
+
 parser.add_argument('--constant-learning-rates', action='store_true',
                     help='Use constant learning rates, not schedules.')
 parser.add_argument('--mini-batch-size', type=int, help='Size of the mini-batch.', default=128)

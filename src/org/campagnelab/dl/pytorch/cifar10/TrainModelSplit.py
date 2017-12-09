@@ -181,27 +181,21 @@ class TrainModelSplit:
             self.net.train()
             self.optimizer_training.zero_grad()
             outputs = self.net(inputs)
-
+            average_unsupervised_loss=0
             if train_split:
-                count = 0
-                sum = 0
-                for _ in range(0, randint(1, self.args.extra_unsup)):
-                    # obtain an unsupervised sample, put it in uinputs autograd Variable:
-                    # first, read a minibatch from the unsupervised dataset:
-                    ufeatures, _ = next(unsupiter)
 
-                    if self.use_cuda: ufeatures = ufeatures.cuda()
-                    # then use it to calculate the unsupervised regularization contribution to the loss:
+                # obtain an unsupervised sample, put it in uinputs autograd Variable:
+                # first, read a minibatch from the unsupervised dataset:
+                ufeatures, _ = next(unsupiter)
 
-                    unsup_train_loss = self.split_loss(ufeatures)
-                    if unsup_train_loss is not None:
-                        sum += unsup_train_loss
-                        count += 1
+                if self.use_cuda: ufeatures = ufeatures.cuda()
+                # then use it to calculate the unsupervised regularization contribution to the loss:
 
-                performance_estimators.set_metric(batch_idx, "split_loss", sum.data[0] / count)
-                average_unsupervised_loss = sum / count
-            else:
-                average_unsupervised_loss = 0
+                unsup_train_loss = self.split_loss(ufeatures)
+                if unsup_train_loss is not None:
+                    performance_estimators.set_metric(batch_idx, "split_loss", unsup_train_loss.data[0])
+                    average_unsupervised_loss=unsup_train_loss
+
 
             if train_supervised_model:
                 # if self.ureg._which_one_model is not None:
@@ -411,8 +405,10 @@ class TrainModelSplit:
         (image_1, image_2) = self.half_images(uinputs, slope)
         answer_1 = self.net(image_1)
         answer_2 = self.net(image_2)
-        result2 = Variable(answer_2.data, requires_grad=False)
-        return self.agreement_loss(answer_1, result2)
+        _, predicted_classes=torch.max(answer_2.data, 1)
+
+        predicted_classes_var = Variable(predicted_classes, requires_grad=False)
+        return self.problem.loss_function()(answer_1, predicted_classes_var)
 
     def half_images(self, uinputs, slope):
         def above_line(xp, yp, slope, b):

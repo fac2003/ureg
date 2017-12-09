@@ -108,7 +108,7 @@ class TrainModelSplit:
 
         self.agreement_loss = rmse
         if self.use_cuda:
-            self.agreement_loss = self.agreement_loss.cuda()
+            self.agreement_loss = self.agreement_loss
 
         if args.resume:
             # Load checkpoint.

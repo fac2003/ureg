@@ -106,10 +106,9 @@ class TrainModelSplit:
             """Compute root mean squared error"""
             return torch.sqrt(torch.mean((y - y_hat).pow(2)))
 
-
         self.agreement_loss = rmse
         if self.use_cuda:
-            self.agreement_loss = self.agreement_loss
+            self.agreement_loss = self.agreement_loss.cuda()
 
         if args.resume:
             # Load checkpoint.
@@ -416,10 +415,7 @@ class TrainModelSplit:
         (image_1, image_2) = self.half_images(uinputs, slope)
         answer_1 = self.net(image_1)
         answer_2 = self.net(image_2)
-        _, predicted_classes=torch.max(answer_2.data, 1)
-        predicted_classes_var = Variable(predicted_classes, requires_grad=False)
-        rmse_loss=self.agreement_loss(training_outputs,answer_2)
-        return self.problem.loss_function()(answer_1, predicted_classes_var)+rmse_loss
+        return self.agreement_loss(answer_1,answer_2)
 
     def half_images(self, uinputs, slope):
         def above_line(xp, yp, slope, b):

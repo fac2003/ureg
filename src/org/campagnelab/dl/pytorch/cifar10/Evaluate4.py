@@ -40,7 +40,7 @@ parser.add_argument('--lr', default=0.005, type=float, help='Learning rate.')
 parser.add_argument('--resume', '-r', action='store_true', help='resume from checkpoint.')
 parser.add_argument('--split', action='store_true', help='Enable unsupervised training (split).')
 parser.add_argument('--factor', default=1, type=float, help='Multiply split training loss by this factor.')
-parser.add_argument('--increase_decrease', default=1, type=float, help='Multiply the factor by this number at each epoch. Used to increase >1 or decrease <1 the '
+parser.add_argument('--increase-decrease', default=1, type=float, help='Multiply the factor by this number at each epoch. Used to increase >1 or decrease <1 the '
                                                                        'factor at each epoch.')
 parser.add_argument('--alpha', default=0.4, type=float, help='Alpha for mixup (default: 0.4).')
 parser.add_argument('--unsup-proportion', default=0, type=float, help='Amount of unsupervised samples to use'

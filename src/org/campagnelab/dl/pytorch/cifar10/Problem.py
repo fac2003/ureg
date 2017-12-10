@@ -1,9 +1,5 @@
-from tkinter import Variable
-
 import numpy
 import torch
-
-from org.campagnelab.dl.pytorch.cifar10.Samplers import ProtectedSubsetRandomSampler
 
 
 class Problem:

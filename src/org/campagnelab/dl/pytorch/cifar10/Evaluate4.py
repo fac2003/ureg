@@ -43,6 +43,8 @@ parser.add_argument('--factor', default=1, type=float, help='Multiply split trai
 parser.add_argument('--increase_decrease', default=1, type=float, help='Multiply the factor by this number at each epoch. Used to increase >1 or decrease <1 the '
                                                                        'factor at each epoch.')
 parser.add_argument('--alpha', default=0.4, type=float, help='Alpha for mixup (default: 0.4).')
+parser.add_argument('--unsup-proportion', default=0.1, type=float, help='Amount of unsupervised samples to use'
+                                                                        'instead of training samples (default: 0.1).')
 parser.add_argument('--constant-learning-rates', action='store_true',
                     help='Use constant learning rates, not schedules.')
 parser.add_argument('--mini-batch-size', type=int, help='Size of the mini-batch.', default=128)

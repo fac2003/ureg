@@ -31,9 +31,10 @@ def _format_nice(n):
     except:
         return str(n)
 
+
 def rmse_dim_1(y, y_hat):
     """Compute root mean squared error"""
-    return torch.sqrt(torch.mean((y - y_hat).pow(2),1))
+    return torch.sqrt(torch.mean((y - y_hat).pow(2), 1))
 
 
 flatten = lambda l: [item for sublist in l for item in sublist]
@@ -61,7 +62,7 @@ class TrainModelSplit:
         self.max_training_examples = args.num_training
         self.max_examples_per_epoch = args.max_examples_per_epoch if args.max_examples_per_epoch is not None else self.max_regularization_examples
         self.criterion = problem.loss_function()
-        self.criterion_multi_label = MultiLabelSoftMarginLoss()#problem.loss_function()
+        self.criterion_multi_label = MultiLabelSoftMarginLoss()  # problem.loss_function()
         self.split_enabled = args.split
         self.args = args
         self.problem = problem
@@ -192,7 +193,7 @@ class TrainModelSplit:
             self.net.train()
             self.optimizer_training.zero_grad()
             outputs = self.net(inputs)
-            average_unsupervised_loss=0
+            average_unsupervised_loss = 0
             if train_split:
 
                 # obtain an unsupervised sample, put it in uinputs autograd Variable:
@@ -202,19 +203,18 @@ class TrainModelSplit:
                 if self.use_cuda: ufeatures = ufeatures.cuda()
                 # then use it to calculate the unsupervised regularization contribution to the loss:
 
-                unsup_train_loss = self.split_loss(ufeatures,outputs)
+                unsup_train_loss = self.split_loss(ufeatures, outputs)
                 if unsup_train_loss is not None:
                     performance_estimators.set_metric(batch_idx, "split_loss", unsup_train_loss.data[0])
-                    average_unsupervised_loss=unsup_train_loss
-
+                    average_unsupervised_loss = unsup_train_loss
 
             if train_supervised_model:
                 # if self.ureg._which_one_model is not None:
                 #    self.ureg.estimate_example_weights(inputs)
 
                 supervised_loss = self.criterion(outputs, targets)
-                alpha=self.args.factor
-                optimized_loss=supervised_loss*(1-alpha)+alpha * average_unsupervised_loss
+                alpha = self.args.factor
+                optimized_loss = supervised_loss * (1 - alpha) + alpha * average_unsupervised_loss
                 optimized_loss.backward()
                 self.optimizer_training.step()
                 supervised_grad_norm = grad_norm(self.net.parameters())
@@ -238,21 +238,21 @@ class TrainModelSplit:
             print("\n")
 
         # increase factor by 10% at the end of each epoch:
-        self.args.factor*=self.args.increase_decrease
+        self.args.factor *= self.args.increase_decrease
         return performance_estimators
 
     def train_mixup(self, epoch,
-              performance_estimators=None,
-              train_supervised_model=True,
-              alpha=0.5,
-              ratio_unsup=0,
-              ):
+                    performance_estimators=None,
+                    train_supervised_model=True,
+                    alpha=0.5,
+                    ratio_unsup=0,
+                    ):
 
         if performance_estimators is None:
             performance_estimators = PerformanceList()
             performance_estimators += [LossHelper("optimized_loss")]
             performance_estimators += [LossHelper("train_loss")]
-            #performance_estimators += [AccuracyHelper("train_")]
+            # performance_estimators += [AccuracyHelper("train_")]
             performance_estimators += [FloatHelper("train_grad_norm")]
             performance_estimators += [FloatHelper("factor")]
             print('\nTraining, epoch: %d' % epoch)
@@ -265,25 +265,40 @@ class TrainModelSplit:
         num_batches = 0
         train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
         sec_train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
+        unsuploader_shuffled = self.problem.reg_loader_subset_range(0, self.args.num_shaving)
+        unsupiter = itertools.cycle(unsuploader_shuffled)
+
         performance_estimators.set_metric(epoch, "factor", self.args.factor)
 
-        for batch_idx, ((inputs1, targets1), (inputs2, targets2)) in enumerate(zip(train_loader_subset,
-                                                                                   sec_train_loader_subset)):
+        for batch_idx, ((inputs1, targets1),
+                        (inputs2, targets2),
+                        (uinputs1, _)) in enumerate(zip(train_loader_subset,
+                                                        sec_train_loader_subset,
+                                                        unsupiter)):
             num_batches += 1
 
-            if self.use_cuda:
-                inputs1= inputs1.cuda()
-                inputs2= inputs2.cuda()
+            use_unsup =random()<ratio_unsup
 
-            lam=numpy.random.beta(alpha,alpha)
-            inputs=inputs1*lam+inputs2*(1.-lam)
+            if use_unsup:
+                # use an example from the unsupervised set to mixup with inputs1:
+                inputs2 = uinputs1
+
+            if self.use_cuda:
+                inputs1 = inputs1.cuda()
+                inputs2 = inputs2.cuda()
+
+            lam = numpy.random.beta(alpha, alpha)
+            inputs = inputs1 * lam + inputs2 * (1. - lam)
             targets1 = self.problem.one_hot(targets1)
-            targets2 = self.problem.one_hot(targets2)
+            if use_unsup:
+                targets2 = torch.ones(self.mini_batch_size, self.problem.num_classes())/self.problem.num_classes()
+            else:
+                targets2 = self.problem.one_hot(targets2)
             if self.use_cuda:
                 targets1 = targets1.cuda()
                 targets2 = targets2.cuda()
 
-            targets= targets1 * lam + targets2 * (1. - lam)
+            targets = targets1 * lam + targets2 * (1. - lam)
             inputs, targets = Variable(inputs), Variable(targets, requires_grad=False)
 
             # outputs used to calculate the loss of the supervised model
@@ -293,9 +308,8 @@ class TrainModelSplit:
             outputs = self.net(inputs)
 
             if train_supervised_model:
-
                 supervised_loss = self.criterion_multi_label(outputs, targets)
-                optimized_loss=supervised_loss
+                optimized_loss = supervised_loss
                 optimized_loss.backward()
                 self.optimizer_training.step()
                 supervised_grad_norm = grad_norm(self.net.parameters())
@@ -303,7 +317,7 @@ class TrainModelSplit:
 
                 performance_estimators.set_metric_with_outputs(batch_idx, "train_loss", supervised_loss.data[0],
                                                                outputs, targets)
-                #performance_estimators.set_metric_with_outputs(batch_idx, "train_accuracy", supervised_loss.data[0],
+                # performance_estimators.set_metric_with_outputs(batch_idx, "train_accuracy", supervised_loss.data[0],
                 #                                               outputs, targets)
 
             progress_bar(batch_idx * self.mini_batch_size,
@@ -317,7 +331,7 @@ class TrainModelSplit:
             print("\n")
 
         # increase factor by 10% at the end of each epoch:
-        self.args.factor*=self.args.increase_decrease
+        self.args.factor *= self.args.increase_decrease
         return performance_estimators
 
     def test(self, epoch, performance_estimators=(LossHelper("test_loss"), AccuracyHelper("test_"))):
@@ -419,6 +433,7 @@ class TrainModelSplit:
                 os.mkdir('checkpoint')
             torch.save(state, './checkpoint/ckpt_{}.t7'.format(self.args.checkpoint_key))
             self.best_acc = acc
+
     def training_mixup(self):
         """Train the model in a completely supervised manner. Returns the performance obtained
            at the end of the configured training run.
@@ -433,9 +448,10 @@ class TrainModelSplit:
 
             perfs = []
             perfs += [self.train_mixup(epoch,
-                                 train_supervised_model=True,
-                                       alpha=self.args.alpha
-                                 )]
+                                       train_supervised_model=True,
+                                       alpha=self.args.alpha,
+                                       ratio_unsup=self.args.unsup_proportion
+                                       )]
             perfs += [(lr_train_helper,)]
             if previous_test_perfs is None or self.epoch_is_test_epoch(epoch):
                 perfs += [self.test(epoch)]
@@ -522,14 +538,14 @@ class TrainModelSplit:
         epoch_is_one_of_last_ten = epoch > (self.start_epoch + self.args.num_epochs - 10)
         return (epoch % self.args.test_every_n_epochs + 1) == 1 or epoch_is_one_of_last_ten
 
-    def split_loss(self, uinputs,training_outputs):
+    def split_loss(self, uinputs, training_outputs):
         pi = math.atan(1) * 4
-        angle = uniform(pi , -pi )
+        angle = uniform(pi, -pi)
         slope = math.tan(angle)
         (image_1, image_2) = self.half_images(uinputs, slope)
         answer_1 = self.net(image_1)
         answer_2 = self.net(image_2)
-        return self.agreement_loss(answer_1,answer_2)
+        return self.agreement_loss(answer_1, answer_2)
 
     def half_images(self, uinputs, slope):
         def above_line(xp, yp, slope, b):
@@ -545,17 +561,17 @@ class TrainModelSplit:
         channels = uinputs.size()[1]
         width = uinputs.size()[2]
         height = uinputs.size()[3]
-        #print("mask down-------------")
+        # print("mask down-------------")
         # fill in the first channel:
         for x in range(0, width):
             for y in range(0, height):
-                above_the_line = above_line(x - width / 2, y, slope=slope, b=height / 2.0 )
+                above_the_line = above_line(x - width / 2, y, slope=slope, b=height / 2.0)
                 mask_up[x, y] = 1 if above_the_line else 0
                 mask_down[x, y] = 0 if above_the_line else 1
-                #print("." if mask_down[x, y] else " ",end="")
-            #print("|")
+                # print("." if mask_down[x, y] else " ",end="")
+                # print("|")
 
-        #print("-----------mask down")
+        # print("-----------mask down")
         mask1 = torch.ByteTensor(uinputs.size()[1:])
         mask2 = torch.ByteTensor(uinputs.size()[1:])
 

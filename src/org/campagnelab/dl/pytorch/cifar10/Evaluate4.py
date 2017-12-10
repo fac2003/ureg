@@ -237,19 +237,18 @@ else:
 
         all_perfs += [fold_perfs]
 
-        if get_metric_value(fold_perfs, "test_accuracy") < args.cv_fold_min_perf:
+        if get_metric_value(fold_perfs,"test_accuracy") < args.cv_fold_min_perf:
             break
 
-    metrics = ["train_loss", "train_accuracy", "test_loss", "test_accuracy"]
+    metrics = ["train_loss", "test_loss", "test_accuracy"]
     accumulators = [0] * len(metrics)
     count = [0] * len(metrics)
     # aggregate statistics:
     for fold_perfs in all_perfs:
-        for perf in fold_perfs:
             for metric_index, metric_name in enumerate(metrics):
-                metric = perf.get_metric(metric_name)
+                metric = get_metric_value(fold_perfs,metric_name)
                 if metric is not None:
-                    # print("found value for "+metric_name+" "+str(metric))
+                    print("found value for "+metric_name+" "+str(metric))
                     accumulators[metric_index] += metric
                     count[metric_index] += 1
 

@@ -445,10 +445,10 @@ class TrainModelSplit:
 
         lr_train_helper = LearningRateHelper(scheduler=self.scheduler_train, learning_rate_name="train_lr")
         previous_test_perfs = None
-        perfs = []
+        perfs = PerformanceList()
         for epoch in range(self.start_epoch, self.start_epoch + self.args.num_epochs):
 
-            perfs = []
+            perfs = PerformanceList()
             perfs += [self.train_mixup(epoch,
                                        train_supervised_model=True,
                                        alpha=self.args.alpha,
@@ -456,6 +456,11 @@ class TrainModelSplit:
                                        )]
             # increase ratio_unsup by 10% at the end of each epoch:
             self.args.unsup_proportion *= self.args.increase_decrease
+            if self.args.unsup_proportion>1:
+                self.args.unsup_proportion=1
+            if self.args.unsup_proportion < 0:
+                self.args.unsup_proportion = 0
+
             perfs += [(lr_train_helper,)]
             if previous_test_perfs is None or self.epoch_is_test_epoch(epoch):
                 perfs += [self.test(epoch)]
@@ -480,10 +485,10 @@ class TrainModelSplit:
 
         lr_train_helper = LearningRateHelper(scheduler=self.scheduler_train, learning_rate_name="train_lr")
         previous_test_perfs = None
-        perfs = []
+        perfs = PerformanceList()
         for epoch in range(self.start_epoch, self.start_epoch + self.args.num_epochs):
 
-            perfs = []
+            perfs = PerformanceList()
             perfs += [self.train(epoch,
                                  train_supervised_model=True,
                                  train_split=False

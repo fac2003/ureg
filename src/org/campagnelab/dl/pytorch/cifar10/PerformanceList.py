@@ -26,3 +26,7 @@ class PerformanceList(list):
     def init_performance_metrics(self):
         for pe in self:
             pe.init_performance_metrics()
+
+    def metric_names(self):
+        names=[perf.metric_names() for perf in self]
+        return names

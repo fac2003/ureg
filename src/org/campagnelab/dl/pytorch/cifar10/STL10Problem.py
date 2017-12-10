@@ -150,5 +150,8 @@ class STL10Problem(Problem):
                                        collate_fn=stl10_collate,
                                        num_workers=self.num_workers)
 
+    def num_classes(self):
+        return 10
+
     def loss_function(self):
         return torch.nn.CrossEntropyLoss()

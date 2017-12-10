@@ -1,11 +1,14 @@
 import itertools
 import math
 import os
-from random import uniform, randint
+from random import uniform, randint, random
 
+import numpy
 import torch
+from numpy.random.mtrand import beta
 from torch.autograd import Variable
 from torch.backends import cudnn
+from torch.nn import MSELoss, MultiLabelSoftMarginLoss
 
 from org.campagnelab.dl.pytorch.cifar10.AccuracyHelper import AccuracyHelper
 from org.campagnelab.dl.pytorch.cifar10.FloatHelper import FloatHelper
@@ -58,6 +61,7 @@ class TrainModelSplit:
         self.max_training_examples = args.num_training
         self.max_examples_per_epoch = args.max_examples_per_epoch if args.max_examples_per_epoch is not None else self.max_regularization_examples
         self.criterion = problem.loss_function()
+        self.criterion_multi_label = MultiLabelSoftMarginLoss()#problem.loss_function()
         self.split_enabled = args.split
         self.args = args
         self.problem = problem
@@ -237,6 +241,81 @@ class TrainModelSplit:
         self.args.factor*=self.args.increase_decrease
         return performance_estimators
 
+    def train_mixup(self, epoch,
+              performance_estimators=None,
+              train_supervised_model=True,
+              alpha=0.5,
+              ratio_unsup=0,
+              ):
+
+        if performance_estimators is None:
+            performance_estimators = PerformanceList()
+            performance_estimators += [LossHelper("optimized_loss")]
+            performance_estimators += [LossHelper("train_loss")]
+            #performance_estimators += [AccuracyHelper("train_")]
+            performance_estimators += [FloatHelper("train_grad_norm")]
+            performance_estimators += [FloatHelper("factor")]
+            print('\nTraining, epoch: %d' % epoch)
+        self.net.train()
+        supervised_grad_norm = 1.
+        for performance_estimator in performance_estimators:
+            performance_estimator.init_performance_metrics()
+
+        unsupervised_loss_acc = 0
+        num_batches = 0
+        train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
+        sec_train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
+        performance_estimators.set_metric(epoch, "factor", self.args.factor)
+
+        for batch_idx, ((inputs1, targets1), (inputs2, targets2)) in enumerate(zip(train_loader_subset,
+                                                                                   sec_train_loader_subset)):
+            num_batches += 1
+
+            if self.use_cuda:
+                inputs1, targets1 = inputs1.cuda(), targets1.cuda()
+                inputs2, targets2 = inputs2.cuda(), targets2.cuda()
+
+            lam=numpy.random.beta(alpha,alpha)
+            inputs=inputs1*lam+inputs2*(1.-lam)
+            targets1 = self.problem.one_hot(targets1)
+            targets2 = self.problem.one_hot(targets2)
+            targets= targets1 * lam + targets2 * (1. - lam)
+            inputs, targets = Variable(inputs), Variable(targets, requires_grad=False)
+
+            # outputs used to calculate the loss of the supervised model
+            # must be done with the model prior to regularization:
+            self.net.train()
+            self.optimizer_training.zero_grad()
+            outputs = self.net(inputs)
+
+            if train_supervised_model:
+
+                supervised_loss = self.criterion_multi_label(outputs, targets)
+                optimized_loss=supervised_loss
+                optimized_loss.backward()
+                self.optimizer_training.step()
+                supervised_grad_norm = grad_norm(self.net.parameters())
+                performance_estimators.set_metric(batch_idx, "train_grad_norm", supervised_grad_norm)
+
+                performance_estimators.set_metric_with_outputs(batch_idx, "train_loss", supervised_loss.data[0],
+                                                               outputs, targets)
+                #performance_estimators.set_metric_with_outputs(batch_idx, "train_accuracy", supervised_loss.data[0],
+                #                                               outputs, targets)
+
+            progress_bar(batch_idx * self.mini_batch_size,
+                         min(self.max_regularization_examples, self.max_training_examples),
+                         " ".join([performance_estimator.progress_message() for performance_estimator in
+                                   performance_estimators]))
+
+            if (batch_idx + 1) * self.mini_batch_size > self.max_training_examples:
+                break
+
+            print("\n")
+
+        # increase factor by 10% at the end of each epoch:
+        self.args.factor*=self.args.increase_decrease
+        return performance_estimators
+
     def test(self, epoch, performance_estimators=(LossHelper("test_loss"), AccuracyHelper("test_"))):
         print('\nTesting, epoch: %d' % epoch)
 
@@ -336,6 +415,36 @@ class TrainModelSplit:
                 os.mkdir('checkpoint')
             torch.save(state, './checkpoint/ckpt_{}.t7'.format(self.args.checkpoint_key))
             self.best_acc = acc
+    def training_mixup(self):
+        """Train the model in a completely supervised manner. Returns the performance obtained
+           at the end of the configured training run.
+        :return list of performance estimators that observed performance on the last epoch run.
+        """
+        header_written = False
+
+        lr_train_helper = LearningRateHelper(scheduler=self.scheduler_train, learning_rate_name="train_lr")
+        previous_test_perfs = None
+        perfs = []
+        for epoch in range(self.start_epoch, self.start_epoch + self.args.num_epochs):
+
+            perfs = []
+            perfs += [self.train_mixup(epoch,
+                                 train_supervised_model=True,
+                                 )]
+            perfs += [(lr_train_helper,)]
+            if previous_test_perfs is None or self.epoch_is_test_epoch(epoch):
+                perfs += [self.test(epoch)]
+
+            perfs = flatten(perfs)
+            if (not header_written):
+                header_written = True
+                self.log_performance_header(perfs)
+
+            if self.log_performance_metrics(epoch, perfs):
+                # early stopping requested.
+                return perfs
+
+        return perfs
 
     def training_supervised(self):
         """Train the model in a completely supervised manner. Returns the performance obtained

@@ -9,6 +9,7 @@ class CrossValidatedProblem(Problem):
         The unsupervised set is returned unchanged from the delegate problem.
     """
 
+
     def __init__(self, delegate, training_indices, validation_indices=None):
         """
         Construct a cross-validated problem.
@@ -77,3 +78,7 @@ class CrossValidatedProblem(Problem):
 
     def loss_function(self):
         return self.delegate.loss_function()
+
+    def num_classes(self):
+        return self.delegate.num_classes()
+

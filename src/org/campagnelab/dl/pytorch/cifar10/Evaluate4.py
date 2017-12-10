@@ -211,6 +211,8 @@ def train_once(args, problem, use_cuda):
         return model_trainer.training_supervised()
     if args.mode == "split":
         return model_trainer.training_split()
+    if args.mode == "mixup":
+        return model_trainer.training_mixup()
     else:
         print("unknown mode specified: " + args.mode)
         exit(1)

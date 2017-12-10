@@ -1,3 +1,6 @@
+from tkinter import Variable
+
+import numpy
 import torch
 
 from org.campagnelab.dl.pytorch.cifar10.Samplers import ProtectedSubsetRandomSampler
@@ -86,3 +89,13 @@ class Problem:
     def loss_function(self):
         """Return the loss function for this problem."""
         pass
+
+    def num_classes(self):
+        return 0;
+
+    def one_hot(self, class_indices):
+        y_onehot = class_indices.numpy()
+        y_onehot = (numpy.arange(self.num_classes()) == y_onehot[:, None]).astype(numpy.float32)
+        y_onehot = torch.from_numpy(y_onehot)
+
+        return y_onehot

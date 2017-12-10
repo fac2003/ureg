@@ -45,6 +45,9 @@ class Cifar10Problem(Problem):
         self.unsupset = torchvision.datasets.CIFAR10(root='./data', train=False, download=False,
                                                      transform=self.transform_train)
 
+    def num_classes(self):
+        return 10
+
     def loader_for_dataset(self, dataset):
         mini_batch_size = self.mini_batch_size()
 

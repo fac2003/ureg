@@ -434,6 +434,7 @@ class TrainModelSplit:
             perfs = []
             perfs += [self.train_mixup(epoch,
                                  train_supervised_model=True,
+                                       alpha=self.args.alpha
                                  )]
             perfs += [(lr_train_helper,)]
             if previous_test_perfs is None or self.epoch_is_test_epoch(epoch):

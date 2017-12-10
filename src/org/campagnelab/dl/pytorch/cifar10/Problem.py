@@ -92,6 +92,5 @@ class Problem:
     def one_hot(self, class_indices):
         y_onehot = class_indices.numpy()
         y_onehot = (numpy.arange(self.num_classes()) == y_onehot[:, None]).astype(numpy.float32)
-        y_onehot = torch.from_numpy(y_onehot)
+        return torch.from_numpy(y_onehot)
 
-        return y_onehot

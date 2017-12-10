@@ -272,13 +272,17 @@ class TrainModelSplit:
             num_batches += 1
 
             if self.use_cuda:
-                inputs1, targets1 = inputs1.cuda(), targets1.cuda()
-                inputs2, targets2 = inputs2.cuda(), targets2.cuda()
+                inputs1= inputs1.cuda()
+                inputs2= inputs2.cuda()
 
             lam=numpy.random.beta(alpha,alpha)
             inputs=inputs1*lam+inputs2*(1.-lam)
             targets1 = self.problem.one_hot(targets1)
             targets2 = self.problem.one_hot(targets2)
+            if self.use_cuda:
+                targets1 = targets1.cuda()
+                targets2 = targets2.cuda()
+
             targets= targets1 * lam + targets2 * (1. - lam)
             inputs, targets = Variable(inputs), Variable(targets, requires_grad=False)
 

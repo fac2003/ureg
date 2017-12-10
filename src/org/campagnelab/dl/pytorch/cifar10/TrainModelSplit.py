@@ -254,7 +254,8 @@ class TrainModelSplit:
             performance_estimators += [LossHelper("train_loss")]
             # performance_estimators += [AccuracyHelper("train_")]
             performance_estimators += [FloatHelper("train_grad_norm")]
-            performance_estimators += [FloatHelper("factor")]
+            performance_estimators += [FloatHelper("alpha")]
+            performance_estimators += [FloatHelper("unsup_proportion")]
             print('\nTraining, epoch: %d' % epoch)
         self.net.train()
         supervised_grad_norm = 1.
@@ -268,7 +269,8 @@ class TrainModelSplit:
         unsuploader_shuffled = self.problem.reg_loader_subset_range(0, self.args.num_shaving)
         unsupiter = itertools.cycle(unsuploader_shuffled)
 
-        performance_estimators.set_metric(epoch, "factor", self.args.factor)
+        performance_estimators.set_metric(epoch, "alpha", alpha)
+        performance_estimators.set_metric(epoch, "unsup_proportion", ratio_unsup)
 
         for batch_idx, ((inputs1, targets1),
                         (inputs2, targets2),
@@ -332,8 +334,6 @@ class TrainModelSplit:
 
             print("\n")
 
-        # increase ratio_unsup by 10% at the end of each epoch:
-        self.args.ratio_unsup *= self.args.increase_decrease
         return performance_estimators
 
     def test(self, epoch, performance_estimators=(LossHelper("test_loss"), AccuracyHelper("test_"))):
@@ -454,6 +454,8 @@ class TrainModelSplit:
                                        alpha=self.args.alpha,
                                        ratio_unsup=self.args.unsup_proportion
                                        )]
+            # increase ratio_unsup by 10% at the end of each epoch:
+            self.args.unsup_proportion *= self.args.increase_decrease
             perfs += [(lr_train_helper,)]
             if previous_test_perfs is None or self.epoch_is_test_epoch(epoch):
                 perfs += [self.test(epoch)]

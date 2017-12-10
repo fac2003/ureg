@@ -290,10 +290,12 @@ class TrainModelSplit:
             lam = numpy.random.beta(alpha, alpha)
             inputs = inputs1 * lam + inputs2 * (1. - lam)
             targets1 = self.problem.one_hot(targets1)
-            if use_unsup:
-                targets2 = torch.ones(self.mini_batch_size, self.problem.num_classes())/self.problem.num_classes()
-            else:
-                targets2 = self.problem.one_hot(targets2)
+           # if use_unsup:
+           #     targets2 = torch.ones(self.mini_batch_size, self.problem.num_classes())/self.problem.num_classes()
+           # else:
+            # we don't know the target on the unsup set, so we just let the training set make it up (this guess is correct
+            # with probability 1/num_classes times):
+            targets2 = self.problem.one_hot(targets2)
             if self.use_cuda:
                 targets1 = targets1.cuda()
                 targets2 = targets2.cuda()
@@ -330,8 +332,8 @@ class TrainModelSplit:
 
             print("\n")
 
-        # increase factor by 10% at the end of each epoch:
-        self.args.factor *= self.args.increase_decrease
+        # increase ratio_unsup by 10% at the end of each epoch:
+        self.args.ratio_unsup *= self.args.increase_decrease
         return performance_estimators
 
     def test(self, epoch, performance_estimators=(LossHelper("test_loss"), AccuracyHelper("test_"))):

@@ -12,8 +12,8 @@ class TestModel:
         self.problem=problem
         self.criterion=problem.loss_function()
         self.mini_batch_size=problem.mini_batch_size()
-        self.max_validation_examples=len(problem.test_loader())
-        self.num_validation=len(problem.test_loader())
+        self.max_validation_examples=len(problem.test_set())
+        self.num_validation=len(problem.test_set())
 
     def test(self, performance_estimators=(LossHelper("test_loss"), AccuracyHelper("test_"))):
 

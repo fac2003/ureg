@@ -107,6 +107,7 @@ class TrainModelSplit:
         self.max_training_examples = args.num_training
         self.unsuploader = self.problem.reg_loader()
         model_built = False
+        self.best_performance_metrics = None
 
         def rmse(y, y_hat):
             """Compute root mean squared error"""
@@ -415,15 +416,13 @@ class TrainModelSplit:
                 perf_file.write("\t".join(map(_format_nice, metrics)))
                 perf_file.write("\n")
 
-        result = self.best_performance_metrics
-
         if metric is not None and metric <= self.best_acc:
             self.failed_to_improve += 1
             if self.failed_to_improve > self.args.abort_when_failed_to_improve:
                 print("We failed to improve for {} epochs. Stopping here as requested.")
                 early_stop = True  # request early stopping
 
-        return early_stop, result
+        return early_stop, self.best_performance_metrics
 
     def get_metric(self, performance_estimators, metric_name):
         for pe in performance_estimators:

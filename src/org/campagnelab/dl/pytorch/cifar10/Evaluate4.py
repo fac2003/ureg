@@ -7,10 +7,12 @@ import random
 import string
 import sys
 
+import numpy
+
 from org.campagnelab.dl.pytorch.cifar10.Cifar10Problem import Cifar10Problem
 from org.campagnelab.dl.pytorch.cifar10.CrossValidatedProblem import CrossValidatedProblem
 from org.campagnelab.dl.pytorch.cifar10.STL10Problem import STL10Problem
-from org.campagnelab.dl.pytorch.cifar10.TrainModelSplit import TrainModelSplit
+from org.campagnelab.dl.pytorch.cifar10.TrainModelSplit import TrainModelSplit, flatten
 from org.campagnelab.dl.pytorch.cifar10.models import *
 
 # MIT License
@@ -235,7 +237,7 @@ else:
         args.checkpoint_key = initial_checkpoint_key + "-" + str(fold_index)
         fold_perfs = train_once(copy.deepcopy(args), reduced_problem, use_cuda)
 
-        all_perfs += [fold_perfs]
+        all_perfs += [copy.deepcopy(fold_perfs)]
 
         if get_metric_value(fold_perfs,"test_accuracy") < args.cv_fold_min_perf:
             break
@@ -243,6 +245,7 @@ else:
     metrics = ["train_loss", "test_loss", "test_accuracy"]
     accumulators = [0] * len(metrics)
     count = [0] * len(metrics)
+    accuracies=[]
     # aggregate statistics:
     for fold_perfs in all_perfs:
             for metric_index, metric_name in enumerate(metrics):
@@ -251,15 +254,20 @@ else:
                     print("found value for "+metric_name+" "+str(metric))
                     accumulators[metric_index] += metric
                     count[metric_index] += 1
+                if metric_name == "test_accuracy":
+                    accuracies.append(metric)
 
     for metric_index, metric_name in enumerate(metrics):
         accumulators[metric_index] /= count[metric_index]
-
+    test_accuracy_stdev=numpy.array(accuracies).std()
     with open("cv-summary-{}.tsv".format(initial_checkpoint_key), "w") as perf_file:
         perf_file.write("completed-folds\t")
         perf_file.write("\t".join(map(str, metrics)))
+        perf_file.write("\ttest_accuracy_std")
         perf_file.write("\n")
         perf_file.write(str(len(all_perfs)))
         perf_file.write("\t")
         perf_file.write("\t".join(map(str, accumulators)))
+        perf_file.write("\t")
+        perf_file.write(str(test_accuracy_stdev))
         perf_file.write("\n")

@@ -75,6 +75,8 @@ parser.add_argument('--problem', default="CIFAR10", type=str,
                     help='The problem, either CIFAR10 or STL10')
 parser.add_argument('--mode', help='Training mode: supervised or split',
                     default="split")
+parser.add_argument('--label-strategy', help='Strategy to dream up labels for the unsupervised set. One of CERTAIN, UNIFORM, MODEL.',
+                    default="CERTAIN")
 parser.add_argument('--abort-when-failed-to-improve', default=sys.maxsize, type=int,
                     help='Abort training if performance fails to improve for more than the specified number of epochs.')
 

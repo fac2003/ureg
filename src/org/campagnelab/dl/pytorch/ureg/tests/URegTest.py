@@ -206,8 +206,8 @@ class URegTest(unittest.TestCase):
 
         model_trainer = TrainModel(DummyArgs(ureg=True, mode="two_passes",
                                              lr=0.001,
-                                             shave_lr=1E5,
-                                             optimize="similarity"),
+                                             shave_lr=0.001,
+                                             optimize="similarity",ureg_alpha=1E5),
                                    problem=test_problem, use_cuda=False)
         model_trainer.init_model(create_model_function=lambda name:
 
@@ -217,10 +217,16 @@ class URegTest(unittest.TestCase):
         model_trainer.ureg.set_num_examples(100, 100)
 
         first_params=copy.deepcopy(collect_params(model_trainer.net))
+        print_params(0, net=model_trainer.net)
+        print()
 
         model_trainer.regularize(1)
         regularized_params=collect_params(model_trainer.net)
+        print_params(0, net=model_trainer.net)
+        print()
+
         self.assertNotEqual(first_params, second=regularized_params)
+
 
 
 

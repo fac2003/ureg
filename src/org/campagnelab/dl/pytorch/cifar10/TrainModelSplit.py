@@ -78,7 +78,7 @@ class TrainModelSplit:
         self.testloader = self.problem.test_loader()
         self.split = None
         self.is_parallel = False
-        self.best_performance_metrics=None
+        self.best_performance_metrics = None
         self.failed_to_improve = 0
 
     def init_model(self, create_model_function):
@@ -108,6 +108,7 @@ class TrainModelSplit:
         self.unsuploader = self.problem.reg_loader()
         model_built = False
         self.best_performance_metrics = None
+        self.best_model = None
 
         def rmse(y, y_hat):
             """Compute root mean squared error"""
@@ -294,12 +295,22 @@ class TrainModelSplit:
             lam = numpy.random.beta(alpha, alpha)
             inputs = inputs1 * lam + inputs2 * (1. - lam)
             targets1 = self.problem.one_hot(targets1)
-            # if use_unsup:
-            #     targets2 = torch.ones(self.mini_batch_size, self.problem.num_classes())/self.problem.num_classes()
-            # else:
-            # we don't know the target on the unsup set, so we just let the training set make it up (this guess is correct
-            # with probability 1/num_classes times):
-            targets2 = self.problem.one_hot(targets2)
+            if self.args.label_strategy == "CERTAIN" or self.best_model is None:
+                # we don't know the target on the unsup set, so we just let the training set make it up (this guess is correct
+                # with probability 1/num_classes times):
+                targets2 = self.problem.one_hot(targets2)
+            elif self.args.label_strategy == "UNIFORM":
+                # we use uniform labels that represent the expectation of the correct answer if classes where equally represented:
+                targets2 = torch.ones(self.mini_batch_size, self.problem.num_classes()) / self.problem.num_classes()
+            elif self.args.label_strategy == "MODEL":
+                # we use the best model we trained so far to predict the outputs. These labels will overfit to the
+                # training set as training progresses:
+                best_model_output = self.best_model(Variable(inputs2,requires_grad=False))
+                _, predicted = torch.max(best_model_output.data, 1)
+                targets2 =best_model_output.data
+            else:
+                print("Incorrect label strategy name: " + self.args.label_strategy)
+                exit(1)
             if self.use_cuda:
                 targets1 = targets1.cuda()
                 targets2 = targets2.cuda()
@@ -412,6 +423,10 @@ class TrainModelSplit:
             self.save_checkpoint(epoch, metric)
             self.failed_to_improve = 0
             self.best_performance_metrics = performance_estimators
+            if self.args.mode=="mixup" and self.args.label_strategy=="MODEL":
+                self.best_model = self.load_checkpoint()
+                if self.use_cuda: self.best_model.cuda()
+
             with open("best-perfs-{}.tsv".format(self.args.checkpoint_key), "a") as perf_file:
                 perf_file.write("\t".join(map(_format_nice, metrics)))
                 perf_file.write("\n")
@@ -436,8 +451,10 @@ class TrainModelSplit:
 
         if acc > self.best_acc:
             print('Saving..')
+            model=self.net
+            model.eval()
             state = {
-                'net': self.net.module if self.is_parallel else self.net,
+                'net': model.module if self.is_parallel else model,
                 'acc': acc,
                 'epoch': epoch,
                 'split': self.split_enabled,
@@ -446,6 +463,15 @@ class TrainModelSplit:
                 os.mkdir('checkpoint')
             torch.save(state, './checkpoint/ckpt_{}.t7'.format(self.args.checkpoint_key))
             self.best_acc = acc
+
+    def load_checkpoint(self):
+
+        if not os.path.isdir('checkpoint'):
+            os.mkdir('checkpoint')
+        state = torch.load('./checkpoint/ckpt_{}.t7'.format(self.args.checkpoint_key))
+        model= state['net']
+        model.eval()
+        return model
 
     def training_mixup(self):
         """Train the model in a completely supervised manner. Returns the performance obtained

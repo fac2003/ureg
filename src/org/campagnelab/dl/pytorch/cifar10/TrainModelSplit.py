@@ -5,7 +5,6 @@ from random import uniform, randint, random
 
 import numpy
 import torch
-from numpy.random.mtrand import beta
 from torch.autograd import Variable
 from torch.backends import cudnn
 from torch.nn import MSELoss, MultiLabelSoftMarginLoss
@@ -310,13 +309,14 @@ class TrainModelSplit:
                 # we use the best model we trained so far to predict the outputs. These labels will overfit to the
                 # training set as training progresses:
                 best_model_output = self.best_model(Variable(inputs2,requires_grad=False))
-                _, predicted = torch.max(best_model_output.data, 1)
+                _, predicted = torch.max(best_model_output.data)
                 targets2 =best_model_output.data
             elif self.args.label_strategy == "VAL_CONFUSION":
                 # we use the best model we trained so far to predict the outputs. These labels will overfit to the
                 # training set as training progresses:
                 best_model_output = self.best_model(Variable(inputs2,requires_grad=False))
-                _, predicted = torch.max(best_model_output.data, 1)
+                _, predicted = torch.max(input=best_model_output.data, dim=1)
+                predicted=predicted.type(torch.LongTensor)
                 targets2 =torch.index_select(self.best_model_confusion_matrix,dim=0,index=predicted)
             else:
                 print("Incorrect label strategy name: " + self.args.label_strategy)

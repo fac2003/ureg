@@ -80,9 +80,8 @@ class TrainModelSplit:
         self.is_parallel = False
         self.best_performance_metrics = None
         self.failed_to_improve = 0
-        self.confusion_matrix=None
-        self.best_model_confusion_matrix=None
-
+        self.confusion_matrix = None
+        self.best_model_confusion_matrix = None
 
     def init_model(self, create_model_function):
         """Resume training if necessary (args.--resume flag is True), or call the
@@ -296,8 +295,8 @@ class TrainModelSplit:
                 inputs2 = inputs2.cuda()
 
             lam = numpy.random.beta(alpha, alpha)
-            inputs = inputs1 * lam + inputs2 * (1. - lam)
             targets1 = self.problem.one_hot(targets1)
+            inputs_gpu = inputs2.cuda(1) if self.use_cuda else inputs2
             if self.args.label_strategy == "CERTAIN" or self.best_model is None:
                 # we don't know the target on the unsup set, so we just let the training set make it up (this guess is correct
                 # with probability 1/num_classes times):
@@ -308,23 +307,29 @@ class TrainModelSplit:
             elif self.args.label_strategy == "MODEL":
                 # we use the best model we trained so far to predict the outputs. These labels will overfit to the
                 # training set as training progresses:
-                best_model_output = self.best_model(Variable(inputs2,requires_grad=False))
+                best_model_output = self.best_model(Variable(inputs_gpu, requires_grad=False))
                 _, predicted = torch.max(best_model_output.data)
-                targets2 =best_model_output.data
+                targets2 = best_model_output.data
             elif self.args.label_strategy == "VAL_CONFUSION":
                 # we use the best model we trained so far to predict the outputs. These labels will overfit to the
                 # training set as training progresses:
-                best_model_output = self.best_model(Variable(inputs2,requires_grad=False))
+                best_model_output = self.best_model(Variable(inputs_gpu, requires_grad=False))
                 _, predicted = torch.max(best_model_output.data, 1)
-                predicted=predicted.type(torch.LongTensor)
-                targets2 =torch.index_select(self.best_model_confusion_matrix,dim=0,index=predicted)
+                predicted = predicted.type(torch.LongTensor)
+                if self.use_cuda:
+                    predicted=predicted.cuda(1)
+                select = torch.index_select(self.best_model_confusion_matrix, dim=0, index=predicted).type(torch.FloatTensor)
+                targets2 =torch.renorm(select, p=1, dim=0, maxnorm=1)
+                #print("normalized: "+str(targets2))
             else:
                 print("Incorrect label strategy name: " + self.args.label_strategy)
                 exit(1)
+
             if self.use_cuda:
                 targets1 = targets1.cuda()
                 targets2 = targets2.cuda()
 
+            inputs = inputs1 * lam + inputs2 * (1. - lam)
             targets = targets1 * lam + targets2 * (1. - lam)
             inputs, targets = Variable(inputs), Variable(targets, requires_grad=False)
 
@@ -365,7 +370,7 @@ class TrainModelSplit:
         self.net.eval()
         for performance_estimator in performance_estimators:
             performance_estimator.init_performance_metrics()
-        cm=ConfusionMeter(self.problem.num_classes(), normalized=True)
+        cm = ConfusionMeter(self.problem.num_classes(), normalized=False)
 
         for batch_idx, (inputs, targets) in enumerate(self.problem.test_loader_range(0, self.args.num_validation)):
 
@@ -394,7 +399,7 @@ class TrainModelSplit:
         assert test_accuracy is not None, "test_accuracy must be found among estimated performance metrics"
         if not self.args.constant_learning_rates:
             self.scheduler_train.step(test_accuracy, epoch)
-        self.confusion_matrix=cm.value().transpose()
+        self.confusion_matrix = cm.value().transpose()
         return performance_estimators
 
     def log_performance_header(self, performance_estimators):
@@ -438,11 +443,14 @@ class TrainModelSplit:
             self.save_checkpoint(epoch, metric)
             self.failed_to_improve = 0
             self.best_performance_metrics = performance_estimators
-            if self.args.mode=="mixup":
+            if self.args.mode == "mixup":
                 self.best_model = self.load_checkpoint()
-                self.best_model=self.best_model.cpu()
-                self.best_model_confusion_matrix=torch.from_numpy(self.confusion_matrix)
-                #print(str(self.confusion_matrix))
+                if self.use_cuda:
+                    self.best_model = self.best_model.cuda(1)
+                self.best_model_confusion_matrix = torch.from_numpy(self.confusion_matrix)
+                if self.use_cuda:
+                    self.best_model_confusion_matrix = self.best_model_confusion_matrix.cuda(1)
+
             with open("best-perfs-{}.tsv".format(self.args.checkpoint_key), "a") as perf_file:
                 perf_file.write("\t".join(map(_format_nice, metrics)))
                 perf_file.write("\n")
@@ -467,8 +475,9 @@ class TrainModelSplit:
 
         if acc > self.best_acc:
             print('Saving..')
-            model=self.net
+            model = self.net
             model.eval()
+
             state = {
                 'net': model.module if self.is_parallel else model,
                 'acc': acc,
@@ -485,7 +494,8 @@ class TrainModelSplit:
         if not os.path.isdir('checkpoint'):
             os.mkdir('checkpoint')
         state = torch.load('./checkpoint/ckpt_{}.t7'.format(self.args.checkpoint_key))
-        model= state['net']
+        model = state['net']
+        model.cpu()
         model.eval()
         return model
 

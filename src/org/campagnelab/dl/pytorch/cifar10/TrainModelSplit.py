@@ -78,6 +78,7 @@ class TrainModelSplit:
         self.testloader = self.problem.test_loader()
         self.split = None
         self.is_parallel = False
+        self.best_performance_metrics=None
         self.failed_to_improve = 0
 
     def init_model(self, create_model_function):
@@ -279,7 +280,7 @@ class TrainModelSplit:
                                                         unsupiter)):
             num_batches += 1
 
-            use_unsup =random()<ratio_unsup
+            use_unsup = random() < ratio_unsup
 
             if use_unsup:
                 # use an example from the unsupervised set to mixup with inputs1:
@@ -292,9 +293,9 @@ class TrainModelSplit:
             lam = numpy.random.beta(alpha, alpha)
             inputs = inputs1 * lam + inputs2 * (1. - lam)
             targets1 = self.problem.one_hot(targets1)
-           # if use_unsup:
-           #     targets2 = torch.ones(self.mini_batch_size, self.problem.num_classes())/self.problem.num_classes()
-           # else:
+            # if use_unsup:
+            #     targets2 = torch.ones(self.mini_batch_size, self.problem.num_classes())/self.problem.num_classes()
+            # else:
             # we don't know the target on the unsup set, so we just let the training set make it up (this guess is correct
             # with probability 1/num_classes times):
             targets2 = self.problem.one_hot(targets2)
@@ -389,29 +390,40 @@ class TrainModelSplit:
                 perf_file.write("\n")
 
     def log_performance_metrics(self, epoch, performance_estimators):
-
+        """
+        Log metrics and returns the best performance metrics seen so far.
+        :param epoch:
+        :param performance_estimators:
+        :return: a list of performance metrics corresponding to the epoch where test accuracy was maximum.
+        """
         metrics = [epoch, self.args.checkpoint_key]
         for performance_estimator in performance_estimators:
             metrics = metrics + performance_estimator.estimates_of_metric()
-
+        early_stop = False
         with open("all-perfs-{}.tsv".format(self.args.checkpoint_key), "a") as perf_file:
             perf_file.write("\t".join(map(_format_nice, metrics)))
             perf_file.write("\n")
+        if self.best_performance_metrics is None:
+            self.best_performance_metrics = performance_estimators
 
         metric = self.get_metric(performance_estimators, "test_accuracy")
         if metric is not None and metric > self.best_acc:
             self.save_checkpoint(epoch, metric)
             self.failed_to_improve = 0
+            self.best_performance_metrics = performance_estimators
             with open("best-perfs-{}.tsv".format(self.args.checkpoint_key), "a") as perf_file:
                 perf_file.write("\t".join(map(_format_nice, metrics)))
                 perf_file.write("\n")
+
+        result = self.best_performance_metrics
+
         if metric is not None and metric <= self.best_acc:
             self.failed_to_improve += 1
             if self.failed_to_improve > self.args.abort_when_failed_to_improve:
                 print("We failed to improve for {} epochs. Stopping here as requested.")
-                return True  # request early stopping
+                early_stop = True  # request early stopping
 
-        return False
+        return early_stop, result
 
     def get_metric(self, performance_estimators, metric_name):
         for pe in performance_estimators:
@@ -456,8 +468,8 @@ class TrainModelSplit:
                                        )]
             # increase ratio_unsup by 10% at the end of each epoch:
             self.args.unsup_proportion *= self.args.increase_decrease
-            if self.args.unsup_proportion>1:
-                self.args.unsup_proportion=1
+            if self.args.unsup_proportion > 1:
+                self.args.unsup_proportion = 1
             if self.args.unsup_proportion < 0:
                 self.args.unsup_proportion = 0
 
@@ -470,7 +482,8 @@ class TrainModelSplit:
                 header_written = True
                 self.log_performance_header(perfs)
 
-            if self.log_performance_metrics(epoch, perfs):
+            early_stop, perfs = self.log_performance_metrics(epoch, perfs)
+            if early_stop:
                 # early stopping requested.
                 return perfs
 
@@ -502,7 +515,8 @@ class TrainModelSplit:
                 header_written = True
                 self.log_performance_header(perfs)
 
-            if self.log_performance_metrics(epoch, perfs):
+            early_stop, perfs = self.log_performance_metrics(epoch, perfs)
+            if early_stop:
                 # early stopping requested.
                 return perfs
 
@@ -537,7 +551,8 @@ class TrainModelSplit:
                 header_written = True
                 self.log_performance_header(perfs)
 
-            if self.log_performance_metrics(epoch, perfs):
+            early_stop, perfs = self.log_performance_metrics(epoch, perfs)
+            if early_stop:
                 # early stopping requested.
                 return perfs
 

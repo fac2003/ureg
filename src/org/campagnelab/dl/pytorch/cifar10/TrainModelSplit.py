@@ -9,6 +9,7 @@ from numpy.random.mtrand import beta
 from torch.autograd import Variable
 from torch.backends import cudnn
 from torch.nn import MSELoss, MultiLabelSoftMarginLoss
+from torchnet.meter import ConfusionMeter
 
 from org.campagnelab.dl.pytorch.cifar10.AccuracyHelper import AccuracyHelper
 from org.campagnelab.dl.pytorch.cifar10.FloatHelper import FloatHelper
@@ -80,6 +81,9 @@ class TrainModelSplit:
         self.is_parallel = False
         self.best_performance_metrics = None
         self.failed_to_improve = 0
+        self.confusion_matrix=None
+        self.best_model_confusion_matrix=None
+
 
     def init_model(self, create_model_function):
         """Resume training if necessary (args.--resume flag is True), or call the
@@ -308,6 +312,12 @@ class TrainModelSplit:
                 best_model_output = self.best_model(Variable(inputs2,requires_grad=False))
                 _, predicted = torch.max(best_model_output.data, 1)
                 targets2 =best_model_output.data
+            elif self.args.label_strategy == "VAL_CONFUSION":
+                # we use the best model we trained so far to predict the outputs. These labels will overfit to the
+                # training set as training progresses:
+                best_model_output = self.best_model(Variable(inputs2,requires_grad=False))
+                _, predicted = torch.max(best_model_output.data, 1)
+                targets2 =torch.index_select(self.best_model_confusion_matrix,dim=0,index=predicted)
             else:
                 print("Incorrect label strategy name: " + self.args.label_strategy)
                 exit(1)
@@ -355,6 +365,8 @@ class TrainModelSplit:
         self.net.eval()
         for performance_estimator in performance_estimators:
             performance_estimator.init_performance_metrics()
+        cm=ConfusionMeter(self.problem.num_classes(), normalized=True)
+
         for batch_idx, (inputs, targets) in enumerate(self.problem.test_loader_range(0, self.args.num_validation)):
 
             if self.use_cuda:
@@ -362,7 +374,10 @@ class TrainModelSplit:
             inputs, targets = Variable(inputs, volatile=True), Variable(targets)
             outputs = self.net(inputs)
             loss = self.criterion(outputs, targets)
+            # accumulate the confusion matrix:
+            _, predicted = torch.max(outputs.data, 1)
 
+            cm.add(predicted=predicted, target=targets.data)
             for performance_estimator in performance_estimators:
                 performance_estimator.observe_performance_metric(batch_idx, loss.data[0], outputs, targets)
 
@@ -379,7 +394,7 @@ class TrainModelSplit:
         assert test_accuracy is not None, "test_accuracy must be found among estimated performance metrics"
         if not self.args.constant_learning_rates:
             self.scheduler_train.step(test_accuracy, epoch)
-
+        self.confusion_matrix=cm.value().transpose()
         return performance_estimators
 
     def log_performance_header(self, performance_estimators):
@@ -423,10 +438,11 @@ class TrainModelSplit:
             self.save_checkpoint(epoch, metric)
             self.failed_to_improve = 0
             self.best_performance_metrics = performance_estimators
-            if self.args.mode=="mixup" and self.args.label_strategy=="MODEL":
+            if self.args.mode=="mixup":
                 self.best_model = self.load_checkpoint()
                 if self.use_cuda: self.best_model.cuda()
-
+                self.best_model_confusion_matrix=torch.from_numpy(self.confusion_matrix)
+                #print(str(self.confusion_matrix))
             with open("best-perfs-{}.tsv".format(self.args.checkpoint_key), "a") as perf_file:
                 perf_file.write("\t".join(map(_format_nice, metrics)))
                 perf_file.write("\n")

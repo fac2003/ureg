@@ -97,7 +97,8 @@ parser.add_argument('--cross-validations-folds', type=str,
                          'at the completion of cross-validation. ', default=None)
 parser.add_argument('--cv-fold-min-perf', default=0, type=float, help='Stop cross-validation early if a fold does not'
                                                                       ' meet this minimum performance level (test accuracy).')
-
+parser.add_argument('--cross-validation-indices', type=str, help='coma separated list of fold indices to evaluate. If the option '
+                                                                 'is not speficied, all folds are evaluated ', default=None)
 args = parser.parse_args()
 
 if args.max_examples_per_epoch is None:
@@ -231,18 +232,22 @@ else:
     fold_definitions = open(args.cross_validations_folds).readlines()
     initial_checkpoint_key = args.checkpoint_key
     all_perfs = []
+    fold_indices=args.cross_validation_indices if args.cross_validation_indices is not None else \
+        range(0,len(fold_definitions))
+
     for fold_index, fold in enumerate(fold_definitions):
-        splitted = fold.split(sep=" ")
-        splitted.remove("\n")
-        train_indices = [int(index) for index in splitted]
-        reduced_problem = CrossValidatedProblem(problem, train_indices)
-        args.checkpoint_key = initial_checkpoint_key + "-" + str(fold_index)
-        fold_perfs = train_once(copy.deepcopy(args), reduced_problem, use_cuda)
+        if fold_index in fold_indices:
+            splitted = fold.split(sep=" ")
+            splitted.remove("\n")
+            train_indices = [int(index) for index in splitted]
+            reduced_problem = CrossValidatedProblem(problem, train_indices)
+            args.checkpoint_key = initial_checkpoint_key + "-" + str(fold_index)
+            fold_perfs = train_once(copy.deepcopy(args), reduced_problem, use_cuda)
 
-        all_perfs += [copy.deepcopy(fold_perfs)]
+            all_perfs += [copy.deepcopy(fold_perfs)]
 
-        if get_metric_value(fold_perfs,"test_accuracy") < args.cv_fold_min_perf:
-            break
+            if get_metric_value(fold_perfs,"test_accuracy") < args.cv_fold_min_perf:
+                break
 
     metrics = ["train_loss", "test_loss", "test_accuracy"]
     accumulators = [0] * len(metrics)

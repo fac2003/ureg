@@ -440,7 +440,7 @@ class TrainModelSplit:
             self.best_performance_metrics = performance_estimators
             if self.args.mode=="mixup":
                 self.best_model = self.load_checkpoint()
-                if self.use_cuda: self.best_model.cuda()
+                self.best_model=self.best_model.cpu()
                 self.best_model_confusion_matrix=torch.from_numpy(self.confusion_matrix)
                 #print(str(self.confusion_matrix))
             with open("best-perfs-{}.tsv".format(self.args.checkpoint_key), "a") as perf_file:

@@ -232,8 +232,8 @@ else:
     fold_definitions = open(args.cross_validations_folds).readlines()
     initial_checkpoint_key = args.checkpoint_key
     all_perfs = []
-    fold_indices=args.cross_validation_indices if args.cross_validation_indices is not None else \
-        range(0,len(fold_definitions))
+    fold_indices=[int(index) for index in args.cross_validation_indices.split(",")] if \
+        args.cross_validation_indices is not None else range(0,len(fold_definitions))
 
     for fold_index, fold in enumerate(fold_definitions):
         if fold_index in fold_indices:

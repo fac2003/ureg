@@ -385,7 +385,7 @@ class TrainModelSplit:
             if random()>(1-self.args.exploration_rate):
                 # remove the class with the most correct answers from consideration (set its probability to zero):
                 max_value, max_index=select.max(dim=1)
-                select.scatter_( dim=1, index=max_index.view(self.problem.num_classes(),1),value=0.)
+                select.scatter_( dim=1, index=max_index.view(self.mini_batch_size,1),value=0.)
 
             normalized_confusion_matrix = torch.renorm(select, p=1, dim=0, maxnorm=1)
             confusion_cumulative = torch.cumsum(normalized_confusion_matrix, dim=1)
@@ -481,8 +481,15 @@ class TrainModelSplit:
 
         metric = self.get_metric(performance_estimators, "test_accuracy")
         if metric is not None and metric > self.best_acc:
-            self.save_checkpoint(epoch, metric)
             self.failed_to_improve = 0
+
+            with open("best-perfs-{}.tsv".format(self.args.checkpoint_key), "a") as perf_file:
+                perf_file.write("\t".join(map(_format_nice, metrics)))
+                perf_file.write("\n")
+
+        if metric is not None and metric >= self.best_acc:
+
+            self.save_checkpoint(epoch, metric)
             self.best_performance_metrics = performance_estimators
             if self.args.mode == "mixup":
                 if self.args.two_models:
@@ -496,10 +503,6 @@ class TrainModelSplit:
                 self.best_model_confusion_matrix = torch.from_numpy(self.confusion_matrix)
                 if self.use_cuda:
                     self.best_model_confusion_matrix = self.best_model_confusion_matrix.cuda(self.args.second_gpu_index)
-
-            with open("best-perfs-{}.tsv".format(self.args.checkpoint_key), "a") as perf_file:
-                perf_file.write("\t".join(map(_format_nice, metrics)))
-                perf_file.write("\n")
 
         if metric is not None and metric <= self.best_acc:
             self.failed_to_improve += 1

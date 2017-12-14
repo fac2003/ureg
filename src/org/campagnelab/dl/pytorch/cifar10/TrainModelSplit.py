@@ -320,9 +320,32 @@ class TrainModelSplit:
                 predicted = predicted.type(torch.LongTensor)
                 if self.use_cuda:
                     predicted=predicted.cuda(1)
+                # we use the confusion matrix to set the target on the unsupervised example. We simply normalize the
+                # row of the confusion matrix corresponding to the  label predicted by the best model:
                 select = torch.index_select(self.best_model_confusion_matrix, dim=0, index=predicted).type(torch.FloatTensor)
                 targets2 =torch.renorm(select, p=1, dim=0, maxnorm=1)
                 #print("normalized: "+str(targets2))
+            elif self.args.label_strategy == "VAL_CONFUSION_SAMPLING":
+                # we use the best model we trained so far to predict the outputs. These labels will overfit to the
+                # training set as training progresses:
+                best_model_output = self.best_model(Variable(inputs_gpu, requires_grad=False))
+                _, predicted = torch.max(best_model_output.data, 1)
+                predicted = predicted.type(torch.LongTensor)
+                if self.use_cuda:
+                    predicted=predicted.cuda(1)
+                # we lookup the confusion matrix, but instead of using it directly as output, we sample from it to
+                # create a one-hot encoded unsupervised output label:
+                select = torch.index_select(self.best_model_confusion_matrix, dim=0, index=predicted).type(torch.FloatTensor)
+
+                normalized_confusion_matrix =torch.renorm(select, p=1, dim=0, maxnorm=1)
+                confusion_cumulative = torch.cumsum(normalized_confusion_matrix, dim=1)
+                class_indices=[]
+                for example in confusion_cumulative:
+                    random_choice = random()
+                    class_indices+= [example.gt(random_choice).nonzero().min()]
+
+                targets2=self.problem.one_hot(torch.from_numpy(numpy.array(class_indices)))
+                #print("targets2: "+str(targets2))
             else:
                 print("Incorrect label strategy name: " + self.args.label_strategy)
                 exit(1)

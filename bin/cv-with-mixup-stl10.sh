@@ -6,7 +6,8 @@ python ${UREG}/src/org/campagnelab/dl/pytorch/cifar10/Evaluate4.py \
 --max-epochs 1000 \
 --checkpoint-key ${CHECKPOINT} \
 --problem STL10  \
---model VGG16  \
+--model PreActResNet18  \
 --cv-fold-min-perf 60 \
---cross-validations-folds ${UREG}/data/stl10_binary/fold_indices.txt \
+--cross-validation-fold-indices 1 \
+--cross-validation-folds ${UREG}/data/stl10_binary/fold_indices.txt \
   "$@" 2>&1 |tee ${CHECKPOINT}.log

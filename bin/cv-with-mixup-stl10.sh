@@ -8,6 +8,6 @@ python ${UREG}/src/org/campagnelab/dl/pytorch/cifar10/Evaluate4.py \
 --problem STL10  \
 --model PreActResNet18  \
 --cv-fold-min-perf 60 \
---cross-validation-fold-indices 1 \
+--cross-validation-indices 1 \
 --cross-validation-folds ${UREG}/data/stl10_binary/fold_indices.txt \
   "$@" 2>&1 |tee ${CHECKPOINT}.log

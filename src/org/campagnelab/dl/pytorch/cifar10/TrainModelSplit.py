@@ -298,57 +298,8 @@ class TrainModelSplit:
 
             lam = numpy.random.beta(alpha, alpha)
             targets1 = self.problem.one_hot(targets1)
-            inputs_gpu = inputs2.cuda(1) if self.use_cuda else inputs2
-            if self.args.label_strategy == "CERTAIN" or self.best_model is None:
-                # we don't know the target on the unsup set, so we just let the training set make it up (this guess is correct
-                # with probability 1/num_classes times):
-                targets2 = self.problem.one_hot(targets2)
-            elif self.args.label_strategy == "UNIFORM":
-                # we use uniform labels that represent the expectation of the correct answer if classes where equally represented:
-                targets2 = torch.ones(self.mini_batch_size, self.problem.num_classes()) / self.problem.num_classes()
-            elif self.args.label_strategy == "MODEL":
-                # we use the best model we trained so far to predict the outputs. These labels will overfit to the
-                # training set as training progresses:
-                best_model_output = self.best_model(Variable(inputs_gpu, requires_grad=False))
-                _, predicted = torch.max(best_model_output.data)
-                targets2 = best_model_output.data
-            elif self.args.label_strategy == "VAL_CONFUSION":
-                # we use the best model we trained so far to predict the outputs. These labels will overfit to the
-                # training set as training progresses:
-                best_model_output = self.best_model(Variable(inputs_gpu, requires_grad=False))
-                _, predicted = torch.max(best_model_output.data, 1)
-                predicted = predicted.type(torch.LongTensor)
-                if self.use_cuda:
-                    predicted=predicted.cuda(1)
-                # we use the confusion matrix to set the target on the unsupervised example. We simply normalize the
-                # row of the confusion matrix corresponding to the  label predicted by the best model:
-                select = torch.index_select(self.best_model_confusion_matrix, dim=0, index=predicted).type(torch.FloatTensor)
-                targets2 =torch.renorm(select, p=1, dim=0, maxnorm=1)
-                #print("normalized: "+str(targets2))
-            elif self.args.label_strategy == "VAL_CONFUSION_SAMPLING":
-                # we use the best model we trained so far to predict the outputs. These labels will overfit to the
-                # training set as training progresses:
-                best_model_output = self.best_model(Variable(inputs_gpu, requires_grad=False))
-                _, predicted = torch.max(best_model_output.data, 1)
-                predicted = predicted.type(torch.LongTensor)
-                if self.use_cuda:
-                    predicted=predicted.cuda(1)
-                # we lookup the confusion matrix, but instead of using it directly as output, we sample from it to
-                # create a one-hot encoded unsupervised output label:
-                select = torch.index_select(self.best_model_confusion_matrix, dim=0, index=predicted).type(torch.FloatTensor)
-
-                normalized_confusion_matrix =torch.renorm(select, p=1, dim=0, maxnorm=1)
-                confusion_cumulative = torch.cumsum(normalized_confusion_matrix, dim=1)
-                class_indices=[]
-                for example in confusion_cumulative:
-                    random_choice = random()
-                    class_indices+= [example.gt(random_choice).nonzero().min()]
-
-                targets2=self.problem.one_hot(torch.from_numpy(numpy.array(class_indices)))
-                #print("targets2: "+str(targets2))
-            else:
-                print("Incorrect label strategy name: " + self.args.label_strategy)
-                exit(1)
+            inputs_gpu = inputs2.cuda(self.args.second_gpu_index) if self.use_cuda else inputs2
+            targets2 = self.dream_up_target2(inputs_gpu, targets2)
 
             if self.use_cuda:
                 targets1 = targets1.cuda()
@@ -388,6 +339,66 @@ class TrainModelSplit:
             print("\n")
 
         return performance_estimators
+
+    def dream_up_target2(self, inputs_gpu, targets2):
+        if self.args.label_strategy == "CERTAIN" or self.best_model is None:
+            # we don't know the target on the unsup set, so we just let the training set make it up (this guess is correct
+            # with probability 1/num_classes times):
+            targets2 = self.problem.one_hot(targets2)
+        elif self.args.label_strategy == "UNIFORM":
+            # we use uniform labels that represent the expectation of the correct answer if classes where equally represented:
+            targets2 = torch.ones(self.mini_batch_size, self.problem.num_classes()) / self.problem.num_classes()
+        elif self.args.label_strategy == "MODEL":
+            # we use the best model we trained so far to predict the outputs. These labels will overfit to the
+            # training set as training progresses:
+            best_model_output = self.best_model(Variable(inputs_gpu, requires_grad=False))
+            _, predicted = torch.max(best_model_output.data)
+            targets2 = best_model_output.data
+        elif self.args.label_strategy == "VAL_CONFUSION":
+            # we use the best model we trained so far to predict the outputs. These labels will overfit to the
+            # training set as training progresses:
+            best_model_output = self.best_model(Variable(inputs_gpu, requires_grad=False))
+            _, predicted = torch.max(best_model_output.data, 1)
+            predicted = predicted.type(torch.LongTensor)
+            if self.use_cuda:
+                predicted = predicted.cuda(self.args.second_gpu_index)
+            # we use the confusion matrix to set the target on the unsupervised example. We simply normalize the
+            # row of the confusion matrix corresponding to the  label predicted by the best model:
+            select = torch.index_select(self.best_model_confusion_matrix, dim=0, index=predicted).type(
+                torch.FloatTensor)
+            targets2 = torch.renorm(select, p=1, dim=0, maxnorm=1)
+            # print("normalized: "+str(targets2))
+        elif self.args.label_strategy == "VAL_CONFUSION_SAMPLING":
+            # we use the best model we trained so far to predict the outputs. These labels will overfit to the
+            # training set as training progresses:
+            self.best_model.eval()
+            best_model_output = self.best_model(Variable(inputs_gpu, requires_grad=False))
+            _, predicted = torch.max(best_model_output.data, 1)
+            predicted = predicted.type(torch.LongTensor)
+            if self.use_cuda:
+                predicted = predicted.cuda(self.args.second_gpu_index)
+            # we lookup the confusion matrix, but instead of using it directly as output, we sample from it to
+            # create a one-hot encoded unsupervised output label:
+            select = torch.index_select(self.best_model_confusion_matrix, dim=0, index=predicted).type(
+                torch.FloatTensor)
+
+            normalized_confusion_matrix = torch.renorm(select, p=1, dim=0, maxnorm=1)
+            confusion_cumulative = torch.cumsum(normalized_confusion_matrix, dim=1)
+            class_indices = []
+            random_choice = torch.rand(self.mini_batch_size)
+            for index, example in enumerate(confusion_cumulative):
+                nonzero = example.ge(random_choice[index]).nonzero()
+                if len(nonzero) > 0:
+                    class_indices += [nonzero.min()]
+                else:
+                    class_indices += [self.problem.num_classes() - 1]
+
+            targets2 = self.problem.one_hot(torch.from_numpy(numpy.array(class_indices)))
+            # print("targets2: "+str(targets2))
+        else:
+            print("Incorrect label strategy name: " + self.args.label_strategy)
+            exit(1)
+        return targets2
 
     def test(self, epoch, performance_estimators=(LossHelper("test_loss"), AccuracyHelper("test_"))):
         print('\nTesting, epoch: %d' % epoch)
@@ -469,12 +480,17 @@ class TrainModelSplit:
             self.failed_to_improve = 0
             self.best_performance_metrics = performance_estimators
             if self.args.mode == "mixup":
-                self.best_model = self.load_checkpoint()
-                if self.use_cuda:
-                    self.best_model = self.best_model.cuda(1)
+                if self.args.two_models:
+                    # we load the best model we saved previously as a second model:
+                    self.best_model = self.load_checkpoint()
+                    if self.use_cuda:
+                        self.best_model = self.best_model.cuda(self.args.second_gpu_index)
+                else:
+                    self.best_model=self.net
+
                 self.best_model_confusion_matrix = torch.from_numpy(self.confusion_matrix)
                 if self.use_cuda:
-                    self.best_model_confusion_matrix = self.best_model_confusion_matrix.cuda(1)
+                    self.best_model_confusion_matrix = self.best_model_confusion_matrix.cuda(self.args.second_gpu_index)
 
             with open("best-perfs-{}.tsv".format(self.args.checkpoint_key), "a") as perf_file:
                 perf_file.write("\t".join(map(_format_nice, metrics)))

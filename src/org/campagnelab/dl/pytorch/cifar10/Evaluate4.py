@@ -42,11 +42,12 @@ parser.add_argument('--lr', default=0.005, type=float, help='Learning rate.')
 parser.add_argument('--resume', '-r', action='store_true', help='resume from checkpoint.')
 parser.add_argument('--split', action='store_true', help='Enable unsupervised training (split).')
 parser.add_argument('--factor', default=1, type=float, help='Multiply split training loss by this factor.')
-parser.add_argument('--increase-decrease', default=1, type=float, help='Multiply the factor by this number at each epoch. Used to increase >1 or decrease <1 the '
-                                                                       'factor at each epoch.')
+parser.add_argument('--increase-decrease', default=1, type=float,
+                    help='Multiply the factor by this number at each epoch. Used to increase >1 or decrease <1 the '
+                         'factor at each epoch.')
 parser.add_argument('--alpha', default=0.4, type=float, help='Alpha for mixup (default: 0.4).')
 parser.add_argument('--unsup-proportion', default=0, type=float, help='Amount of unsupervised samples to use'
-                                                                        'instead of training samples (default: 0.1).')
+                                                                      'instead of training samples (default: 0.1).')
 parser.add_argument('--constant-learning-rates', action='store_true',
                     help='Use constant learning rates, not schedules.')
 parser.add_argument('--mini-batch-size', type=int, help='Size of the mini-batch.', default=128)
@@ -75,11 +76,16 @@ parser.add_argument('--problem', default="CIFAR10", type=str,
                     help='The problem, either CIFAR10 or STL10')
 parser.add_argument('--mode', help='Training mode: supervised or split',
                     default="split")
-parser.add_argument('--label-strategy', help='Strategy to dream up labels for the unsupervised set. One of CERTAIN, UNIFORM, MODEL.',
+parser.add_argument('--label-strategy',
+                    help='Strategy to dream up labels for the unsupervised set. One of CERTAIN, UNIFORM, MODEL.',
                     default="CERTAIN")
 parser.add_argument('--abort-when-failed-to-improve', default=sys.maxsize, type=int,
                     help='Abort training if performance fails to improve for more than the specified number of epochs.')
-
+parser.add_argument('--two-models', action='store_true',
+                    help='Keep two models in memory, one if the model with the best performance seen so far.')
+parser.add_argument('--second-gpu-index', default=0, type=int,
+                    help='Index of the second gpu, if working with two models. Use 0 if the first GPU has enough memory'
+                         'to hold both models, use another index to put models on different GPUs.')
 parser.add_argument('--test-every-n-epochs', type=int,
                     help='Estimate performance on the test set every n epochs. '
                          'Note that when test is skipped, the previous test '
@@ -97,8 +103,9 @@ parser.add_argument('--cross-validation-folds', type=str,
                          'at the completion of cross-validation. ', default=None)
 parser.add_argument('--cv-fold-min-perf', default=0, type=float, help='Stop cross-validation early if a fold does not'
                                                                       ' meet this minimum performance level (test accuracy).')
-parser.add_argument('--cross-validation-indices', type=str, help='coma separated list of fold indices to evaluate. If the option '
-                                                                 'is not speficied, all folds are evaluated ', default=None)
+parser.add_argument('--cross-validation-indices', type=str,
+                    help='coma separated list of fold indices to evaluate. If the option '
+                         'is not speficied, all folds are evaluated ', default=None)
 args = parser.parse_args()
 
 if args.max_examples_per_epoch is None:
@@ -206,7 +213,6 @@ def get_metric_value(all_perfs, query_metric_name):
 def train_once(args, problem, use_cuda):
     problem.describe()
 
-
     if args.mode == "supervised":
         args.split = None
 
@@ -232,8 +238,8 @@ else:
     fold_definitions = open(args.cross_validation_folds).readlines()
     initial_checkpoint_key = args.checkpoint_key
     all_perfs = []
-    fold_indices=[int(index) for index in args.cross_validation_indices.split(",")] if \
-        args.cross_validation_indices is not None else range(0,len(fold_definitions))
+    fold_indices = [int(index) for index in args.cross_validation_indices.split(",")] if \
+        args.cross_validation_indices is not None else range(0, len(fold_definitions))
 
     for fold_index, fold in enumerate(fold_definitions):
         if fold_index in fold_indices:
@@ -246,27 +252,27 @@ else:
 
             all_perfs += [copy.deepcopy(fold_perfs)]
 
-            if get_metric_value(fold_perfs,"test_accuracy") < args.cv_fold_min_perf:
+            if get_metric_value(fold_perfs, "test_accuracy") < args.cv_fold_min_perf:
                 break
 
     metrics = ["train_loss", "test_loss", "test_accuracy"]
     accumulators = [0] * len(metrics)
     count = [0] * len(metrics)
-    accuracies=[]
+    accuracies = []
     # aggregate statistics:
     for fold_perfs in all_perfs:
-            for metric_index, metric_name in enumerate(metrics):
-                metric = get_metric_value(fold_perfs,metric_name)
-                if metric is not None:
-                    print("found value for "+metric_name+" "+str(metric))
-                    accumulators[metric_index] += metric
-                    count[metric_index] += 1
-                if metric_name == "test_accuracy":
-                    accuracies.append(metric)
+        for metric_index, metric_name in enumerate(metrics):
+            metric = get_metric_value(fold_perfs, metric_name)
+            if metric is not None:
+                print("found value for " + metric_name + " " + str(metric))
+                accumulators[metric_index] += metric
+                count[metric_index] += 1
+            if metric_name == "test_accuracy":
+                accuracies.append(metric)
 
     for metric_index, metric_name in enumerate(metrics):
         accumulators[metric_index] /= count[metric_index]
-    test_accuracy_stdev=numpy.array(accuracies).std()
+    test_accuracy_stdev = numpy.array(accuracies).std()
     with open("cv-summary-{}.tsv".format(initial_checkpoint_key), "w") as perf_file:
         perf_file.write("completed-folds\t")
         perf_file.write("\t".join(map(str, metrics)))

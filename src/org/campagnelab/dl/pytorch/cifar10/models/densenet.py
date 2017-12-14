@@ -7,6 +7,8 @@ import torch.nn.functional as F
 
 from torch.autograd import Variable
 
+from org.campagnelab.dl.pytorch.cifar10.models import EstimateFeatureSize
+
 
 class Bottleneck(nn.Module):
     def __init__(self, in_planes, growth_rate):
@@ -35,8 +37,8 @@ class Transition(nn.Module):
         return out
 
 
-class DenseNet(nn.Module):
-    def __init__(self, block, nblocks, growth_rate=12, reduction=0.5, num_classes=10):
+class DenseNet(EstimateFeatureSize):
+    def __init__(self, block, nblocks, growth_rate=12, reduction=0.5, num_classes=10,input_shape=None):
         super(DenseNet, self).__init__()
         self.growth_rate = growth_rate
 
@@ -65,7 +67,8 @@ class DenseNet(nn.Module):
         num_planes += nblocks[3]*growth_rate
 
         self.bn = nn.BatchNorm2d(num_planes)
-        self.linear = nn.Linear(num_planes, num_classes)
+        num_out = self.estimate_output_size(input_shape, self.features_forward)
+        self.linear = nn.Linear(num_out, num_classes)
 
     def _make_dense_layers(self, block, in_planes, nblock):
         layers = []
@@ -85,17 +88,27 @@ class DenseNet(nn.Module):
         out = self.linear(out)
         return out
 
-def DenseNet121():
-    return DenseNet(Bottleneck, [6,12,24,16], growth_rate=32)
+    def features_forward(self, x):
+        out = self.conv1(x)
+        out = self.trans1(self.dense1(out))
+        out = self.trans2(self.dense2(out))
+        out = self.trans3(self.dense3(out))
+        out = self.dense4(out)
+        out = F.avg_pool2d(F.relu(self.bn(out)), 4)
+        out = out.view(out.size(0), -1)
+        return out
 
-def DenseNet169():
-    return DenseNet(Bottleneck, [6,12,32,32], growth_rate=32)
+def DenseNet121(input_shape):
+    return DenseNet(Bottleneck, [6,12,24,16], growth_rate=32,input_shape=input_shape)
 
-def DenseNet201():
-    return DenseNet(Bottleneck, [6,12,48,32], growth_rate=32)
+def DenseNet169(input_shape):
+    return DenseNet(Bottleneck, [6,12,32,32], growth_rate=32,input_shape=input_shape)
 
-def DenseNet161():
-    return DenseNet(Bottleneck, [6,12,36,24], growth_rate=48)
+def DenseNet201(input_shape):
+    return DenseNet(Bottleneck, [6,12,48,32], growth_rate=32,input_shape=input_shape)
+
+def DenseNet161(input_shape):
+    return DenseNet(Bottleneck, [6,12,36,24], growth_rate=48,input_shape=input_shape)
 
 def densenet_cifar():
     return DenseNet(Bottleneck, [6,12,24,16], growth_rate=12)

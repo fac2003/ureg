@@ -151,31 +151,30 @@ def preactresnet18():
 
 
 def googlenet():
-    return GoogLeNet()
+    return GoogLeNet(problem.example_size())
 
 
 def densenet121():
-    return DenseNet121()
+    return DenseNet121(problem.example_size())
 
 
 def resnetx29():
-    return ResNeXt29_2x64d()
+    return ResNeXt29_2x64d(problem.example_size())
 
 
 def mobilenet():
-    return MobileNet()
+    return MobileNet(input_shape=problem.example_size())
 
 
 def dpn92():
     return DPN92(problem.example_size())
 
-
+# not converted to STL10, only works with CIFAR10:
 def shufflenetg2():
     return ShuffleNetG2()
 
-
 def senet18():
-    return SENet18()
+    return SENet18(problem.example_size())
 
 
 models = {

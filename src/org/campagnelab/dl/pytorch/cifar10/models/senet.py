@@ -8,6 +8,8 @@ import torch.nn.functional as F
 
 from torch.autograd import Variable
 
+from org.campagnelab.dl.pytorch.cifar10.models import EstimateFeatureSize
+
 
 class BasicBlock(nn.Module):
     def __init__(self, in_planes, planes, stride=1):
@@ -78,8 +80,8 @@ class PreActBlock(nn.Module):
         return out
 
 
-class SENet(nn.Module):
-    def __init__(self, block, num_blocks, num_classes=10):
+class SENet(EstimateFeatureSize):
+    def __init__(self, block, num_blocks, num_classes=10, input_shape=None):
         super(SENet, self).__init__()
         self.in_planes = 64
 
@@ -89,7 +91,9 @@ class SENet(nn.Module):
         self.layer2 = self._make_layer(block, 128, num_blocks[1], stride=2)
         self.layer3 = self._make_layer(block, 256, num_blocks[2], stride=2)
         self.layer4 = self._make_layer(block, 512, num_blocks[3], stride=2)
-        self.linear = nn.Linear(512, num_classes)
+        num_out = self.estimate_output_size(input_shape, self.features_forward)
+
+        self.linear = nn.Linear(num_out, num_classes)
 
     def _make_layer(self, block, planes, num_blocks, stride):
         strides = [stride] + [1]*(num_blocks-1)
@@ -110,9 +114,19 @@ class SENet(nn.Module):
         out = self.linear(out)
         return out
 
+    def features_forward(self, x):
+        out = F.relu(self.bn1(self.conv1(x)))
+        out = self.layer1(out)
+        out = self.layer2(out)
+        out = self.layer3(out)
+        out = self.layer4(out)
+        out = F.avg_pool2d(out, 4)
+        out = out.view(out.size(0), -1)
+        return out
 
-def SENet18():
-    return SENet(PreActBlock, [2,2,2,2])
+
+def SENet18(input_shape):
+    return SENet(PreActBlock, [2,2,2,2],input_shape=input_shape)
 
 
 def test():

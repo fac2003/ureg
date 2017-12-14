@@ -5,6 +5,8 @@ import torch.nn.functional as F
 
 from torch.autograd import Variable
 
+from org.campagnelab.dl.pytorch.cifar10.models import EstimateFeatureSize
+
 
 class Inception(nn.Module):
     def __init__(self, in_planes, n1x1, n3x3red, n3x3, n5x5red, n5x5, pool_planes):
@@ -55,8 +57,8 @@ class Inception(nn.Module):
         return torch.cat([y1,y2,y3,y4], 1)
 
 
-class GoogLeNet(nn.Module):
-    def __init__(self):
+class GoogLeNet(EstimateFeatureSize):
+    def __init__(self, input_shape):
         super(GoogLeNet, self).__init__()
         self.pre_layers = nn.Sequential(
             nn.Conv2d(3, 192, kernel_size=3, padding=1),
@@ -79,7 +81,8 @@ class GoogLeNet(nn.Module):
         self.b5 = Inception(832, 384, 192, 384, 48, 128, 128)
 
         self.avgpool = nn.AvgPool2d(8, stride=1)
-        self.linear = nn.Linear(1024, 10)
+        num_out = self.estimate_output_size(input_shape, self.features_forward)
+        self.linear = nn.Linear(num_out, 10)
 
     def forward(self, x):
         out = self.pre_layers(x)
@@ -97,6 +100,23 @@ class GoogLeNet(nn.Module):
         out = self.avgpool(out)
         out = out.view(out.size(0), -1)
         out = self.linear(out)
+        return out
+
+    def features_forward(self, x):
+        out = self.pre_layers(x)
+        out = self.a3(out)
+        out = self.b3(out)
+        out = self.maxpool(out)
+        out = self.a4(out)
+        out = self.b4(out)
+        out = self.c4(out)
+        out = self.d4(out)
+        out = self.e4(out)
+        out = self.maxpool(out)
+        out = self.a5(out)
+        out = self.b5(out)
+        out = self.avgpool(out)
+        out = out.view(out.size(0), -1)
         return out
 
 # net = GoogLeNet()

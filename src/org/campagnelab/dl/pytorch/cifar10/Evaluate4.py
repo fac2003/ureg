@@ -93,6 +93,7 @@ parser.add_argument('--test-every-n-epochs', type=int,
                          'This parameter does not affect testing for the last 10 epochs of a run, each test is '
                          'performed for these epochs.', default=1)
 
+parser.add_argument('--exploration-rate', type=float, help='Rate of exploration (used for VAL_CONFUSION_SAMPLING).', default=0.1)
 parser.add_argument('--cross-validation-folds', type=str,
                     help='Use cross-validation with folds defined in the argument file.'
                          ' The file follows the format of the STL-10 fold indices:'

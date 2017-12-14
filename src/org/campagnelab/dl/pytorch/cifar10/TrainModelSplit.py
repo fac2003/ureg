@@ -375,12 +375,17 @@ class TrainModelSplit:
             best_model_output = self.best_model(Variable(inputs_gpu, requires_grad=False))
             _, predicted = torch.max(best_model_output.data, 1)
             predicted = predicted.type(torch.LongTensor)
+
             if self.use_cuda:
                 predicted = predicted.cuda(self.args.second_gpu_index)
             # we lookup the confusion matrix, but instead of using it directly as output, we sample from it to
             # create a one-hot encoded unsupervised output label:
             select = torch.index_select(self.best_model_confusion_matrix, dim=0, index=predicted).type(
                 torch.FloatTensor)
+            if random()>(1-self.args.exploration_rate):
+                # remove the class with the most correct answers from consideration (set its probability to zero):
+                max_value, max_index=select.max(dim=1)
+                select.scatter_( dim=1, index=max_index.view(self.problem.num_classes(),1),value=0.)
 
             normalized_confusion_matrix = torch.renorm(select, p=1, dim=0, maxnorm=1)
             confusion_cumulative = torch.cumsum(normalized_confusion_matrix, dim=1)

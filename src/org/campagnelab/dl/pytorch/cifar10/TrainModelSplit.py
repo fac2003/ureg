@@ -137,6 +137,8 @@ class TrainModelSplit:
                 self.best_acc = checkpoint['acc']
                 self.start_epoch = checkpoint['epoch']
                 self.split_enabled = checkpoint['split']
+                self.best_model = checkpoint['best-model']
+                self.best_model_confusion_matrix = checkpoint['confusion-matrix']
                 model_built = True
             else:
                 print("Could not load model checkpoint, unable to --resume.")
@@ -480,6 +482,8 @@ class TrainModelSplit:
 
             state = {
                 'net': model.module if self.is_parallel else model,
+                'best-model': self.best_model,
+                'confusion-matrix': self.best_model_confusion_matrix,
                 'acc': acc,
                 'epoch': epoch,
                 'split': self.split_enabled,

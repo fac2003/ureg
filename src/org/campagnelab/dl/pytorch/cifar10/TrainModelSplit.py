@@ -305,8 +305,10 @@ class TrainModelSplit:
             targets2 = self.dream_up_target2(inputs_gpu, targets2)
 
             if self.use_cuda:
+                lam=lam.cuda()
                 targets1 = targets1.cuda()
                 targets2 = targets2.cuda()
+
             inputs=torch.zeros(inputs1.size())
             targets=torch.zeros(targets1.size())
 

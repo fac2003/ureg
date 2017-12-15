@@ -304,13 +304,15 @@ class TrainModelSplit:
             inputs_gpu = inputs2.cuda(self.args.second_gpu_index) if self.use_cuda else inputs2
             targets2 = self.dream_up_target2(inputs_gpu, targets2)
 
+            inputs = torch.zeros(inputs1.size())
+            targets = torch.zeros(targets1.size())
+
             if self.use_cuda:
                 lam=lam.cuda()
                 targets1 = targets1.cuda()
                 targets2 = targets2.cuda()
-
-            inputs=torch.zeros(inputs1.size())
-            targets=torch.zeros(targets1.size())
+                inputs=inputs.cuda()
+                targets=targets.cuda()
 
             for example_index in range(0,self.mini_batch_size):
                 inputs[example_index] = inputs1[example_index] * lam[example_index] + inputs2[example_index] * (1. - lam[example_index])

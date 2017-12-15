@@ -383,10 +383,10 @@ class TrainModelSplit:
             # create a one-hot encoded unsupervised output label:
             select = torch.index_select(self.best_model_confusion_matrix, dim=0, index=predicted).type(
                 torch.FloatTensor)
-            if random()>(1-self.args.exploration_rate):
+            if random() > (1 - self.args.exploration_rate):
                 # remove the class with the most correct answers from consideration (set its probability to zero):
-                max_value, max_index=select.max(dim=1)
-                select.scatter_( dim=1, index=max_index.view(self.mini_batch_size,1),value=0.)
+                max_value, max_index = select.max(dim=1)
+                select.scatter_(dim=1, index=max_index.view(self.mini_batch_size, 1), value=0.)
 
             normalized_confusion_matrix = torch.renorm(select, p=1, dim=0, maxnorm=1)
             confusion_cumulative = torch.cumsum(normalized_confusion_matrix, dim=1)
@@ -499,7 +499,7 @@ class TrainModelSplit:
                     if self.use_cuda:
                         self.best_model = self.best_model.cuda(self.args.second_gpu_index)
                 else:
-                    self.best_model=self.net
+                    self.best_model = self.net
 
                 self.best_model_confusion_matrix = torch.from_numpy(self.confusion_matrix)
                 if self.use_cuda:
@@ -573,8 +573,14 @@ class TrainModelSplit:
             self.args.unsup_proportion *= self.args.increase_decrease
             if self.args.unsup_proportion > 1:
                 self.args.unsup_proportion = 1
-            if self.args.unsup_proportion < 0:
+                self.args.alpha *= 1. / self.args.increase_decrease
+            if self.args.unsup_proportion < 1E-5:
                 self.args.unsup_proportion = 0
+                self.args.alpha *= 1. / self.args.increase_decrease
+            if self.args.alpha < 0:
+                self.args.alpha = 0
+            if self.args.alpha > 1:
+                self.args.alpha = 1
 
             perfs += [(lr_train_helper,)]
             if previous_test_perfs is None or self.epoch_is_test_epoch(epoch):

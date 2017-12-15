@@ -46,6 +46,7 @@ parser.add_argument('--increase-decrease', default=1, type=float,
                     help='Multiply the factor by this number at each epoch. Used to increase >1 or decrease <1 the '
                          'factor at each epoch.')
 parser.add_argument('--alpha', default=0.4, type=float, help='Alpha for mixup (default: 0.4).')
+parser.add_argument('--one-mixup-per-batch', default=True,  action='store_true', help='Use one value of mixup parameter per minibatch.')
 parser.add_argument('--unsup-proportion', default=0, type=float, help='Amount of unsupervised samples to use'
                                                                       'instead of training samples (default: 0.1).')
 parser.add_argument('--constant-learning-rates', action='store_true',
@@ -65,7 +66,8 @@ parser.add_argument('--max-examples-per-epoch', type=int, help='Maximum number o
 
 parser.add_argument('--momentum', type=float, help='Momentum for SGD.', default=0.9)
 parser.add_argument('--L2', type=float, help='L2 regularization.', default=1E-4)
-
+parser.add_argument('--seed', type=int,
+                    help='Random seed', default=random.randint())
 parser.add_argument('--checkpoint-key', help='random key to save/load checkpoint',
                     default=''.join(random.choices(string.ascii_uppercase, k=5)))
 parser.add_argument('--lr-patience', default=10, type=int,
@@ -108,6 +110,7 @@ parser.add_argument('--cv-fold-min-perf', default=0, type=float, help='Stop cros
 parser.add_argument('--cross-validation-indices', type=str,
                     help='coma separated list of fold indices to evaluate. If the option '
                          'is not speficied, all folds are evaluated ', default=None)
+
 args = parser.parse_args()
 
 if args.max_examples_per_epoch is None:
@@ -218,6 +221,10 @@ def train_once(args, problem, use_cuda):
         args.split = None
 
     model_trainer = TrainModelSplit(args=args, problem=problem, use_cuda=use_cuda)
+    torch.manual_seed(args.seed)
+    if use_cuda:
+        torch.cuda.manual_seed(args.seed)
+
     model_trainer.init_model(create_model_function=create_model)
 
     if args.mode == "supervised":

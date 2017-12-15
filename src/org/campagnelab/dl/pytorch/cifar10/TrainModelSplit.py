@@ -116,9 +116,7 @@ class TrainModelSplit:
             """Compute root mean squared error"""
             return torch.sqrt(torch.mean((y - y_hat).pow(2)))
 
-        self.agreement_loss = rmse
-        if self.use_cuda:
-            self.agreement_loss = self.agreement_loss
+        self.agreement_loss = MSELoss()
 
         if args.resume:
             # Load checkpoint.
@@ -211,7 +209,7 @@ class TrainModelSplit:
                 if self.use_cuda: ufeatures = ufeatures.cuda()
                 # then use it to calculate the unsupervised regularization contribution to the loss:
 
-                unsup_train_loss = self.split_loss(ufeatures, outputs)
+                unsup_train_loss = self.split_loss(ufeatures)
                 if unsup_train_loss is not None:
                     performance_estimators.set_metric(batch_idx, "split_loss", unsup_train_loss.data[0])
                     average_unsupervised_loss = unsup_train_loss
@@ -297,28 +295,7 @@ class TrainModelSplit:
                 inputs1 = inputs1.cuda()
                 inputs2 = inputs2.cuda()
 
-            # one distinct lam scalar per example:
-            lam = torch.from_numpy(numpy.random.beta(alpha, alpha,self.mini_batch_size)).type(torch.FloatTensor)
-
-            targets1 = self.problem.one_hot(targets1)
-            inputs_gpu = inputs2.cuda(self.args.second_gpu_index) if self.use_cuda else inputs2
-            targets2 = self.dream_up_target2(inputs_gpu, targets2)
-
-            inputs = torch.zeros(inputs1.size())
-            targets = torch.zeros(targets1.size())
-
-            if self.use_cuda:
-                lam=lam.cuda()
-                targets1 = targets1.cuda()
-                targets2 = targets2.cuda()
-                inputs=inputs.cuda()
-                targets=targets.cuda()
-
-            for example_index in range(0,self.mini_batch_size):
-                inputs[example_index] = inputs1[example_index] * lam[example_index] + inputs2[example_index] * (1. - lam[example_index])
-                targets[example_index] = targets1[example_index] * lam[example_index] + targets2[example_index] * (1. - lam[example_index])
-
-            inputs, targets = Variable(inputs), Variable(targets, requires_grad=False)
+            inputs, targets = self.mixup_inputs_targets(alpha, inputs1, inputs2, targets1, targets2)
 
             # outputs used to calculate the loss of the supervised model
             # must be done with the model prior to regularization:
@@ -328,11 +305,12 @@ class TrainModelSplit:
 
             if train_supervised_model:
                 supervised_loss = self.criterion_multi_label(outputs, targets)
-                optimized_loss = supervised_loss
+                optimized_loss = supervised_loss+ (self.split_loss(uinputs1) if self.args.split else 0)
                 optimized_loss.backward()
                 self.optimizer_training.step()
                 supervised_grad_norm = grad_norm(self.net.parameters())
                 performance_estimators.set_metric(batch_idx, "train_grad_norm", supervised_grad_norm)
+                performance_estimators.set_metric(batch_idx, "optimized_loss", optimized_loss.data[0])
 
                 performance_estimators.set_metric_with_outputs(batch_idx, "train_loss", supervised_loss.data[0],
                                                                outputs, targets)
@@ -350,6 +328,44 @@ class TrainModelSplit:
             print("\n")
 
         return performance_estimators
+
+    def mixup_inputs_targets(self, alpha, inputs1, inputs2, targets1, targets2):
+        """" Implement mixup: combine inputs and targets in alpha amounts. """
+        if self.args.one_mixup_per_batch:
+
+            # one distinct lam scalar per example:
+            lam = torch.from_numpy(numpy.random.beta(alpha, alpha, self.mini_batch_size)).type(torch.FloatTensor)
+            targets1 = self.problem.one_hot(targets1)
+            inputs_gpu = inputs2.cuda(self.args.second_gpu_index) if self.use_cuda else inputs2
+            targets2 = self.dream_up_target2(inputs_gpu, targets2)
+            inputs = torch.zeros(inputs1.size())
+            targets = torch.zeros(targets1.size())
+            if self.use_cuda:
+                lam = lam.cuda()
+                targets1 = targets1.cuda()
+                targets2 = targets2.cuda()
+                inputs = inputs.cuda()
+                targets = targets.cuda()
+            for example_index in range(0, self.mini_batch_size):
+                inputs[example_index] = inputs1[example_index] * lam[example_index] + inputs2[example_index] * (
+                    1. - lam[example_index])
+                targets[example_index] = targets1[example_index] * lam[example_index] + targets2[example_index] * (
+                    1. - lam[example_index])
+        else:
+            lam = numpy.random.beta(alpha, alpha)
+            targets1 = self.problem.one_hot(targets1)
+            inputs_gpu = inputs2.cuda(self.args.second_gpu_index) if self.use_cuda else inputs2
+            targets2 = self.dream_up_target2(inputs_gpu, targets2)
+
+            if self.use_cuda:
+                targets1 = targets1.cuda()
+                targets2 = targets2.cuda()
+
+            inputs = inputs1 * lam + inputs2 * (1. - lam)
+            targets = targets1 * lam + targets2 * (1. - lam)
+
+        inputs, targets = Variable(inputs), Variable(targets, requires_grad=False)
+        return inputs, targets
 
     def dream_up_target2(self, inputs_gpu, targets2):
         if self.args.label_strategy == "CERTAIN" or self.best_model is None:
@@ -681,13 +697,14 @@ class TrainModelSplit:
         epoch_is_one_of_last_ten = epoch > (self.start_epoch + self.args.num_epochs - 10)
         return (epoch % self.args.test_every_n_epochs + 1) == 1 or epoch_is_one_of_last_ten
 
-    def split_loss(self, uinputs, training_outputs):
+    def split_loss(self, uinputs):
         pi = math.atan(1) * 4
         angle = uniform(pi, -pi)
         slope = math.tan(angle)
         (image_1, image_2) = self.half_images(uinputs, slope)
         answer_1 = self.net(image_1)
         answer_2 = self.net(image_2)
+        answer_2=Variable(answer_2.data, requires_grad=False)
         return self.agreement_loss(answer_1, answer_2)
 
     def half_images(self, uinputs, slope):

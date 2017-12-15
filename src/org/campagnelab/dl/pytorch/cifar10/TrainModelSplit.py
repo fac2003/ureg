@@ -157,8 +157,9 @@ class TrainModelSplit:
                                                   weight_decay=args.L2)
 
         self.scheduler_train = \
-            construct_scheduler(self.optimizer_training, 'max', factor=0.9,
-                                lr_patience=self.args.lr_patience)
+            construct_scheduler(self.optimizer_training, 'max', factor=0.5,
+                                lr_patience=self.args.lr_patience,
+                                ureg_reset_every_n_epoch=self.args.reset_lr_every_n_epochs)
 
     def train(self, epoch,
               performance_estimators=None,

@@ -76,6 +76,7 @@ parser.add_argument('--problem', default="CIFAR10", type=str,
                     help='The problem, either CIFAR10 or STL10')
 parser.add_argument('--mode', help='Training mode: supervised or split',
                     default="split")
+parser.add_argument("--reset-lr-every-n-epochs", type=int, help='Reset learning rate to initial value every n epochs.')
 parser.add_argument('--label-strategy',
                     help='Strategy to dream up labels for the unsupervised set. One of CERTAIN, UNIFORM, MODEL.',
                     default="CERTAIN")

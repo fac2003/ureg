@@ -206,6 +206,7 @@ class TrainModelSplit:
                 # first, read a minibatch from the unsupervised dataset:
                 ufeatures, _ = next(unsupiter)
 
+                if self.use_cuda: ufeatures = ufeatures.cuda()
                 # then use it to calculate the unsupervised regularization contribution to the loss:
 
                 unsup_train_loss = self.split_loss(ufeatures)
@@ -271,21 +272,17 @@ class TrainModelSplit:
         num_batches = 0
         train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
         sec_train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
-        unsuploader_shuffled1 = self.problem.reg_loader_subset_range(0, self.args.num_shaving)
-        unsuploader_shuffled2 = self.problem.reg_loader_subset_range(0, self.args.num_shaving)
-        unsupiter1 = itertools.cycle(unsuploader_shuffled1)
-        unsupiter2 = itertools.cycle(unsuploader_shuffled2)
+        unsuploader_shuffled = self.problem.reg_loader_subset_range(0, self.args.num_shaving)
+        unsupiter = itertools.cycle(unsuploader_shuffled)
 
         performance_estimators.set_metric(epoch, "alpha", alpha)
         performance_estimators.set_metric(epoch, "unsup_proportion", ratio_unsup)
 
         for batch_idx, ((inputs1, targets1),
                         (inputs2, targets2),
-                        (uinputs1, _),
-                        (uinputs2, _),
-                        ) in enumerate(zip(train_loader_subset,
-                                           sec_train_loader_subset,
-                                           unsupiter1, unsupiter2)):
+                        (uinputs1, _)) in enumerate(zip(train_loader_subset,
+                                                        sec_train_loader_subset,
+                                                        unsupiter)):
             num_batches += 1
 
             use_unsup = random() < ratio_unsup
@@ -297,7 +294,6 @@ class TrainModelSplit:
             if self.use_cuda:
                 inputs1 = inputs1.cuda()
                 inputs2 = inputs2.cuda()
-                uinputs2 = uinputs2.cuda()
 
             inputs, targets = self.mixup_inputs_targets(alpha, inputs1, inputs2, targets1, targets2)
 
@@ -309,7 +305,7 @@ class TrainModelSplit:
 
             if train_supervised_model:
                 supervised_loss = self.criterion_multi_label(outputs, targets)
-                optimized_loss = supervised_loss + (self.split_loss(uinputs2) if self.args.split else 0)
+                optimized_loss = supervised_loss
                 optimized_loss.backward()
                 self.optimizer_training.step()
                 supervised_grad_norm = grad_norm(self.net.parameters())
@@ -710,7 +706,7 @@ class TrainModelSplit:
         (image_1, image_2) = self.half_images(uinputs, slope)
         answer_1 = self.net(image_1)
         answer_2 = self.net(image_2)
-        targets = Variable(answer_2.data, volatile=True)
+        targets = Variable(answer_2.data, requires_grad=False)
         return self.agreement_loss(answer_1, targets)
 
     def half_images(self, uinputs, slope):

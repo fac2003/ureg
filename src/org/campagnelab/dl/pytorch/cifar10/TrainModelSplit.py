@@ -297,7 +297,9 @@ class TrainModelSplit:
                 inputs1 = inputs1.cuda()
                 inputs2 = inputs2.cuda()
 
-            lam = numpy.random.beta(alpha, alpha)
+            # one distinct lam scalar per example:
+            lam = torch.from_numpy(numpy.random.beta(alpha, alpha,self.mini_batch_size)).type(torch.FloatTensor)
+
             targets1 = self.problem.one_hot(targets1)
             inputs_gpu = inputs2.cuda(self.args.second_gpu_index) if self.use_cuda else inputs2
             targets2 = self.dream_up_target2(inputs_gpu, targets2)
@@ -305,9 +307,13 @@ class TrainModelSplit:
             if self.use_cuda:
                 targets1 = targets1.cuda()
                 targets2 = targets2.cuda()
+            inputs=torch.zeros(inputs1.size())
+            targets=torch.zeros(targets1.size())
 
-            inputs = inputs1 * lam + inputs2 * (1. - lam)
-            targets = targets1 * lam + targets2 * (1. - lam)
+            for example_index in range(0,self.mini_batch_size):
+                inputs[example_index] = inputs1[example_index] * lam[example_index] + inputs2[example_index] * (1. - lam[example_index])
+                targets[example_index] = targets1[example_index] * lam[example_index] + targets2[example_index] * (1. - lam[example_index])
+
             inputs, targets = Variable(inputs), Variable(targets, requires_grad=False)
 
             # outputs used to calculate the loss of the supervised model

@@ -67,7 +67,7 @@ parser.add_argument('--max-examples-per-epoch', type=int, help='Maximum number o
 parser.add_argument('--momentum', type=float, help='Momentum for SGD.', default=0.9)
 parser.add_argument('--L2', type=float, help='L2 regularization.', default=1E-4)
 parser.add_argument('--seed', type=int,
-                    help='Random seed', default=random.randint())
+                    help='Random seed', default=random.randint(0, sys.maxsize))
 parser.add_argument('--checkpoint-key', help='random key to save/load checkpoint',
                     default=''.join(random.choices(string.ascii_uppercase, k=5)))
 parser.add_argument('--lr-patience', default=10, type=int,

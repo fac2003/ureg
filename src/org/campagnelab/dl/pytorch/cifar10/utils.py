@@ -33,6 +33,7 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.init as init
+from itertools import islice, chain
 
 
 def get_mean_and_std(dataset):
@@ -188,5 +189,11 @@ def scale_gradient(parameters,   scaling_factor=None, norm_type = 2):
         if param is not None:
             param.data.mul_(scaling_factor)
 
-
+def batch(iterable, size):
+    source = iter(iterable)
+    while True:
+        chunk = [val for _, val in zip(range(size), source)]
+        if not chunk:
+            raise StopIteration
+        yield chunk
 

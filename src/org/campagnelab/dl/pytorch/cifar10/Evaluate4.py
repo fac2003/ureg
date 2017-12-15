@@ -233,6 +233,9 @@ def train_once(args, problem, use_cuda):
         return model_trainer.training_split()
     if args.mode == "mixup":
         return model_trainer.training_mixup()
+    if args.mode == "pretrain_mixup":
+        model_trainer.pre_train_with_half_images()
+        return model_trainer.training_mixup()
     else:
         print("unknown mode specified: " + args.mode)
         exit(1)

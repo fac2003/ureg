@@ -1,7 +1,7 @@
 import itertools
 import math
 import os
-from random import uniform, randint, random
+from random import uniform, randint, random, shuffle
 
 import numpy
 import torch
@@ -15,7 +15,7 @@ from org.campagnelab.dl.pytorch.cifar10.FloatHelper import FloatHelper
 from org.campagnelab.dl.pytorch.cifar10.LRHelper import LearningRateHelper
 from org.campagnelab.dl.pytorch.cifar10.LossHelper import LossHelper
 from org.campagnelab.dl.pytorch.cifar10.PerformanceList import PerformanceList
-from org.campagnelab.dl.pytorch.cifar10.utils import progress_bar, grad_norm
+from org.campagnelab.dl.pytorch.cifar10.utils import progress_bar, grad_norm, batch
 from org.campagnelab.dl.pytorch.ureg.LRSchedules import construct_scheduler
 
 
@@ -159,6 +159,7 @@ class TrainModelSplit:
                                 lr_patience=self.args.lr_patience,
                                 ureg_reset_every_n_epoch=self.args.reset_lr_every_n_epochs)
 
+
     def train(self, epoch,
               performance_estimators=None,
               train_supervised_model=True,
@@ -246,6 +247,53 @@ class TrainModelSplit:
         # increase factor by 10% at the end of each epoch:
         self.args.factor *= self.args.increase_decrease
         return performance_estimators
+
+    def pre_train_with_half_images(self, num_cycles=10, epochs_per_cycle=10,
+                                   performance_estimators=None,
+                                   num_classes=100):
+        """
+        This method pretrains a network: - Try a new spin on split: Select a subset of unsup images.
+         Assign a random class to each image. Split each image in two and give each half the same class.
+         Randomize the set of half images. Train the network to predict the class of the image from the
+         half image in competition with all the other images in the random subset. Train to convergence
+         or for some set number of epoch, pick a different subset and repeat. Use this as pre-training
+         before going into the supervised task (which can use mixup).
+         Strategy inspired by exemplar convolutional neural net (Dosovitskiy et al 2015).
+        :param num_cycles: number of pre-training cycles.
+        :param performance_estimators:
+        :param num_classes: number of classes to put in competition.
+        :return:
+        """
+        self.net.train()
+        for cycle in range(0, num_cycles):
+            unsuploader_shuffled = self.problem.reg_loader_subset_range(0, self.args.num_shaving)
+            # construct the training set:
+            pre_training_set=[]
+            offset=0
+            for class_index, (unsup_inputs,_) in enumerate(unsuploader_shuffled):
+
+                (image1, image2)= self.half_images(unsup_inputs,slope=self.get_random_slope())
+                class_indices=torch.from_numpy(numpy.array(range(offset,offset+self.mini_batch_size)))
+                pre_training_set+=[(image1.data, class_indices)]
+                pre_training_set+=[(image2.data, class_indices)]
+                offset += self.mini_batch_size
+                if class_index>num_classes:
+                    break
+
+            # shuffle the pre-training set:
+            shuffle(pre_training_set)
+
+            for epoch in range(0,epochs_per_cycle):
+                for (half_images, class_indices) in pre_training_set:
+                    class_index=torch.from_numpy(numpy.array(class_indices),type=torch.LongTensor)
+                    inputs, targets = Variable(half_images), Variable(class_index, requires_grad=False)
+                    self.optimizer_training.zero_grad()
+
+                    outputs = self.net(inputs)
+                    pre_training_loss = self.criterion(outputs, targets)
+                    pre_training_loss.backward()
+                    self.optimizer_training.step()
+
 
     def train_mixup(self, epoch,
                     performance_estimators=None,
@@ -700,14 +748,18 @@ class TrainModelSplit:
     def split_loss(self, uinputs):
         if self.use_cuda:
             uinputs = uinputs.cuda()
-        pi = math.atan(1) * 4
-        angle = uniform(pi, -pi)
-        slope = math.tan(angle)
+        slope = self.get_random_slope()
         (image_1, image_2) = self.half_images(uinputs, slope)
         answer_1 = self.net(image_1)
         answer_2 = self.net(image_2)
         targets = Variable(answer_2.data, requires_grad=False)
         return self.agreement_loss(answer_1, targets)
+
+    def get_random_slope(self):
+        pi = math.atan(1) * 4
+        angle = uniform(pi, -pi)
+        slope = math.tan(angle)
+        return slope
 
     def half_images(self, uinputs, slope):
         def above_line(xp, yp, slope, b):

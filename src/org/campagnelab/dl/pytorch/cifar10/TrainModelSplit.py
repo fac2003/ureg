@@ -250,7 +250,7 @@ class TrainModelSplit:
 
     def pre_train_with_half_images(self, num_cycles=10, epochs_per_cycle=10,
                                    performance_estimators=None,
-                                   num_classes=100):
+                                   num_classes=10):
         """
         This method pretrains a network: - Try a new spin on split: Select a subset of unsup images.
          Assign a random class to each image. Split each image in two and give each half the same class.
@@ -265,6 +265,7 @@ class TrainModelSplit:
         :return:
         """
         self.net.train()
+        pretraining_criterion=torch.nn.CrossEntropyLoss()
         for cycle in range(0, num_cycles):
             unsuploader_shuffled = self.problem.reg_loader_subset_range(0, self.args.num_shaving)
             # construct the training set:
@@ -285,8 +286,8 @@ class TrainModelSplit:
 
             for epoch in range(0,epochs_per_cycle):
                 for (half_images, class_indices) in pre_training_set:
-                    class_index=torch.from_numpy(numpy.array(class_indices),type=torch.LongTensor)
-                    inputs, targets = Variable(half_images), Variable(class_index, requires_grad=False)
+
+                    inputs, targets = Variable(half_images), Variable(class_indices, requires_grad=False)
                     self.optimizer_training.zero_grad()
 
                     outputs = self.net(inputs)

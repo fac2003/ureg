@@ -271,11 +271,12 @@ class TrainModelSplit:
         """
         if num_classes is None:
             num_classes=self.problem.num_classes()
-
+        print("Pretraining with num classes={} ".format(num_classes))
         self.net.train()
         if performance_estimators is None:
             performance_estimators = PerformanceList()
             performance_estimators += [FloatHelper("pretrain_loss")]
+            performance_estimators += [AccuracyHelper("pretrain_")]
 
         for cycle in range(0, num_cycles):
             unsuploader_shuffled = self.problem.reg_loader_subset_range(0, self.args.num_shaving)
@@ -283,9 +284,12 @@ class TrainModelSplit:
             pre_training_set=[]
             offset=0
             for class_index, (unsup_inputs,_) in enumerate(unsuploader_shuffled):
-
+                #if self.use_cuda:
+                #    unsup_inputs=unsup_inputs.cuda()
                 (image1, image2)= self.half_images(unsup_inputs,slope=self.get_random_slope())
+
                 class_indices=torch.from_numpy(numpy.array(range(offset,offset+self.mini_batch_size)))
+
                 pre_training_set+=[(image1.data, class_indices)]
                 pre_training_set+=[(image2.data, class_indices)]
                 offset += self.mini_batch_size
@@ -299,17 +303,24 @@ class TrainModelSplit:
                 for performance_estimator in performance_estimators:
                     performance_estimator.init_performance_metrics()
 
-                init_params(self.net.classifier)
+                #init_params(self.net.classifier)
                 for (batch_idx, (half_images, class_indices)) in enumerate(pre_training_set):
+
+                    if self.use_cuda:
+                        half_images = half_images.cuda()
+                        class_indices = class_indices.cuda()
 
                     inputs, targets = Variable(half_images), Variable(class_indices, requires_grad=False)
                     self.optimizer_training.zero_grad()
 
                     outputs = self.net(inputs)
                     pre_training_loss = self.criterion(outputs, targets)
-                    performance_estimators.set_metric(batch_idx, "pretrain_loss", pre_training_loss.data[0])
                     pre_training_loss.backward()
                     self.optimizer_training.step()
+                    performance_estimators.set_metric(batch_idx, "pretrain_loss", pre_training_loss.data[0])
+                    performance_estimators.set_metric_with_outputs(batch_idx, "pretrain_accuracy", pre_training_loss.data[0],
+                                                                   outputs,targets)
+
                     #progress_bar(batch_idx,
                     #             (len(pre_training_set)),
                     #             " ".join([performance_estimator.progress_message() for performance_estimator in
@@ -317,7 +328,10 @@ class TrainModelSplit:
                     #print()
                 #print("epoch {} pretrainin-loss={}".format(epoch, performance_estimators.get_metric("pretrain_loss")))
 
-            print("cycle {} pretraining-loss={}".format(cycle, performance_estimators.get_metric("pretrain_loss")))
+            print("cycle {} pretraining-loss={} accuracy={}".format(cycle,
+                                                                    performance_estimators.get_metric("pretrain_loss"),
+                                                                    performance_estimators.get_metric(
+                                                                        "pretrain_accuracy")))
 
     def train_mixup(self, epoch,
                     performance_estimators=None,
@@ -813,11 +827,11 @@ class TrainModelSplit:
         mask1 = torch.ByteTensor(uinputs.size()[1:])
         mask2 = torch.ByteTensor(uinputs.size()[1:])
 
-        if self.use_cuda:
-            mask_up = mask_up.cuda()
-            mask_down = mask_down.cuda()
-            mask1 = mask1.cuda()
-            mask2 = mask2.cuda()
+        # if self.use_cuda:
+        #     mask_up = mask_up.cuda()
+        #     mask_down = mask_down.cuda()
+        #     mask1 = mask1.cuda()
+        #     mask2 = mask2.cuda()
         for c in range(0, channels):
             mask1[c] = mask_up
             mask2[c] = mask_down

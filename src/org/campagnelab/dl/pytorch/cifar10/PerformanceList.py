@@ -30,3 +30,11 @@ class PerformanceList(list):
     def metric_names(self):
         names=[perf.metric_names() for perf in self]
         return names
+
+    def progress_message(self, metrics):
+        estimators=[]
+        for pe in self:
+            for name in pe.metric_names():
+                if name in metrics:
+                    estimators+=[pe]
+        return " ".join([pe.progress_message() for pe in estimators])

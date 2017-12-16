@@ -15,6 +15,7 @@ class AccuracyHelper(PerformanceEstimator):
         self.accuracy = 0
 
     def estimates_of_metric(self):
+        if self.total==0: return [float('nan'),self.correct,self.total]
         accuracy = 100. * self.correct / self.total
         return [accuracy, self.correct, self.total]
 

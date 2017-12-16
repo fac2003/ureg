@@ -25,6 +25,9 @@ class VGG(EstimateFeatureSize):
         self.classifier = nn.Linear(self.num_out, num_classes)
         if use_cuda: self.classifier = self.classifier.cuda()
 
+    def get_classifier(self):
+        return self.classifier
+
     def forward(self, x):
         out = self.features(x)
         out = out.view(out.size(0), -1)

@@ -145,7 +145,7 @@ class TrainModelSplit:
                 print("Could not load model checkpoint, unable to --resume.")
                 model_built = False
         else:
-            if self.args.load_pre_trained_model:
+            if hasattr(self.args, 'load_pre_trained_model') and self.args.load_pre_trained_model:
                 self.net=self.load_pretrained_model()
                 model_built=self.net is not None
 
@@ -281,17 +281,22 @@ class TrainModelSplit:
         if performance_estimators is None:
             performance_estimators = PerformanceList()
             performance_estimators += [FloatHelper("pretrain_loss")]
+            performance_estimators += [FloatHelper("pretrain_start_accuracy")]
             performance_estimators += [AccuracyHelper("pretrain_")]
+        # we create an optimizer that changes only the classifier part of the model:
 
         for cycle in range(0, num_cycles):
             self.net.remake_classifier(num_classes, self.use_cuda)
+            optimizer_classifier = torch.optim.SGD(self.net.get_classifier().parameters(),
+                                                   lr=self.args.lr, momentum=self.args.momentum,
+                                                   weight_decay=self.args.L2)
+
             unsuploader_shuffled = self.problem.reg_loader_subset_range(0, self.args.num_shaving)
             # construct the training set:
             pre_training_set = []
             offset = 0
             for class_index, (unsup_inputs, _) in enumerate(unsuploader_shuffled):
-                # if self.use_cuda:
-                #    unsup_inputs=unsup_inputs.cuda()
+
                 (image1, image2) = self.half_images(unsup_inputs, slope=self.get_random_slope())
 
                 class_indices = torch.from_numpy(numpy.array(range(offset, offset + self.mini_batch_size)))
@@ -304,12 +309,15 @@ class TrainModelSplit:
 
             # shuffle the pre-training set:
             shuffle(pre_training_set)
-
+            # we train the classifier part only when the cycle is not the first one:
+            train_classifier = cycle > 0
+            best_acc = 0
             for epoch in range(0, epochs_per_cycle):
                 for performance_estimator in performance_estimators:
                     performance_estimator.init_performance_metrics()
-
+                optimizer = optimizer_classifier if train_classifier else self.optimizer_training
                 # init_params(self.net.classifier)
+
                 for (batch_idx, (half_images, class_indices)) in enumerate(pre_training_set):
                     class_indices = class_indices.type(torch.LongTensor)
                     if self.use_cuda:
@@ -317,29 +325,41 @@ class TrainModelSplit:
                         class_indices = class_indices.cuda()
 
                     inputs, targets = Variable(half_images), Variable(class_indices, requires_grad=False)
-                    self.optimizer_training.zero_grad()
+                    optimizer.zero_grad()
 
                     outputs = self.net(inputs)
                     pre_training_loss = self.criterion(outputs, targets)
                     pre_training_loss.backward()
-                    self.optimizer_training.step()
+                    optimizer.step()
                     performance_estimators.set_metric(batch_idx, "pretrain_loss", pre_training_loss.data[0])
                     performance_estimators.set_metric_with_outputs(batch_idx, "pretrain_accuracy",
-                                                                   pre_training_loss.data[0],
+                                                                   pre_training_loss,
                                                                    outputs, targets)
-                if performance_estimators.get_metric("pretrain_accuracy") >= 100.0:
-                    break
 
+                pretrain_acc = performance_estimators.get_metric("pretrain_accuracy")
+
+                if train_classifier:
+                    if epoch > 0 and abs(pretrain_acc - best_acc) < 1E-3 and pretrain_acc <= best_acc:
+                        # the classifier has converged. Now enable training the model:
+                        train_classifier = False
+                        print("Finished training the classifier with start_acc=" + str(pretrain_acc))
+                        best_acc =0
+                    else:
+                        best_acc = pretrain_acc
+                        performance_estimators.set_metric(epoch, "pretrain_start_accuracy", pretrain_acc)
+                if pretrain_acc >= 100.0:
+                    break
                 progress_bar(epoch, (epochs_per_cycle),
-                             msg=" ".join([performance_estimator.progress_message() for performance_estimator in
-                                           performance_estimators]))
+                             msg=performance_estimators.progress_message(["pretrain_accuracy", "pretrain_loss"]))
                 # print()
                 # print("epoch {} pretrainin-loss={}".format(epoch, performance_estimators.get_metric("pretrain_loss")))
 
-            print("cycle {} pretraining-loss={} accuracy={}".format(cycle,
-                                                                    performance_estimators.get_metric("pretrain_loss"),
-                                                                    performance_estimators.get_metric(
-                                                                        "pretrain_accuracy")))
+            print("cycle {} pretraining-loss={} start_accuracy={} accuracy={}".format(cycle,
+                                                                                      performance_estimators.get_metric(
+                                                                                          "pretrain_loss"),
+                                                                                      performance_estimators.get_metric(
+                                                                                          "pretrain_start_accuracy"),
+                                                                                      pretrain_acc))
             self.net.remake_classifier(self.problem.num_classes(), self.use_cuda)
 
     def train_mixup(self, epoch,

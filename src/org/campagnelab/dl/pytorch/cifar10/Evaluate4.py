@@ -11,6 +11,7 @@ import numpy
 
 from org.campagnelab.dl.pytorch.cifar10.Cifar10Problem import Cifar10Problem
 from org.campagnelab.dl.pytorch.cifar10.CrossValidatedProblem import CrossValidatedProblem
+from org.campagnelab.dl.pytorch.cifar10.Problems import create_model
 from org.campagnelab.dl.pytorch.cifar10.STL10Problem import STL10Problem
 from org.campagnelab.dl.pytorch.cifar10.TrainModelSplit import TrainModelSplit, flatten
 from org.campagnelab.dl.pytorch.cifar10.models import *
@@ -137,74 +138,6 @@ else:
 
 # print some info about this dataset:
 
-
-
-def vgg16():
-    return VGG('VGG16', problem.example_size())
-
-
-def vgg19():
-    return VGG('VGG19', problem.example_size())
-
-
-def resnet18():
-    return ResNet18(problem.example_size())
-
-
-def preactresnet18():
-    return PreActResNet18(problem.example_size())
-
-
-def googlenet():
-    return GoogLeNet(problem.example_size())
-
-
-def densenet121():
-    return DenseNet121(problem.example_size())
-
-
-def resnetx29():
-    return ResNeXt29_2x64d(problem.example_size())
-
-
-def mobilenet():
-    return MobileNet(input_shape=problem.example_size())
-
-
-def dpn92():
-    return DPN92(problem.example_size())
-
-# not converted to STL10, only works with CIFAR10:
-def shufflenetg2():
-    return ShuffleNetG2()
-
-def senet18():
-    return SENet18(problem.example_size())
-
-
-models = {
-    "VGG16": vgg16,
-    "VGG19": vgg19,
-    "ResNet18": resnet18,
-    "PreActResNet18": preactresnet18,
-    "GoogLeNet": googlenet,
-    "DenseNet121": densenet121,
-    "ResNeXt29": resnetx29,
-    "MobileNet": mobilenet,
-    "DPN92": dpn92,
-    "ShuffleNetG2": shufflenetg2,
-    "SENet18": senet18
-}
-
-
-def create_model(name):
-    function = models[args.model]
-    if function is None:
-        print("Wrong model name: " + args.model)
-        exit(1)
-    # construct the model specified on the command line:
-    net = function()
-    return net
 
 
 def get_metric_value(all_perfs, query_metric_name):

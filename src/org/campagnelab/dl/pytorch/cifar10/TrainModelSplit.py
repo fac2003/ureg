@@ -15,7 +15,7 @@ from org.campagnelab.dl.pytorch.cifar10.FloatHelper import FloatHelper
 from org.campagnelab.dl.pytorch.cifar10.LRHelper import LearningRateHelper
 from org.campagnelab.dl.pytorch.cifar10.LossHelper import LossHelper
 from org.campagnelab.dl.pytorch.cifar10.PerformanceList import PerformanceList
-from org.campagnelab.dl.pytorch.cifar10.utils import progress_bar, grad_norm, batch
+from org.campagnelab.dl.pytorch.cifar10.utils import progress_bar, grad_norm, batch, init_params
 from org.campagnelab.dl.pytorch.ureg.LRSchedules import construct_scheduler
 
 
@@ -57,13 +57,16 @@ class TrainModelSplit:
         :param args command line arguments.
         :param use_cuda When True, use the GPU.
          """
-        self.max_regularization_examples = args.num_shaving
-        self.max_validation_examples = args.num_validation
-        self.max_training_examples = args.num_training
-        self.max_examples_per_epoch = args.max_examples_per_epoch if args.max_examples_per_epoch is not None else self.max_regularization_examples
+
+        self.max_regularization_examples = args.num_shaving  if hasattr(args, "num_shaving") else 0
+        self.max_validation_examples = args.num_validation if hasattr(args, "num_validation") else 0
+        self.max_training_examples = args.num_training if hasattr(args, "num_training") else 0
+        max_examples_per_epoch=args.max_examples_per_epoch if hasattr(args,'max_examples_per_epoch') else None
+        self.max_examples_per_epoch = max_examples_per_epoch if max_examples_per_epoch is not None else self.max_regularization_examples
         self.criterion = problem.loss_function()
         self.criterion_multi_label = MultiLabelSoftMarginLoss()  # problem.loss_function()
-        self.split_enabled = args.split
+
+        self.split_enabled = args.split if hasattr(args, "split") else None
         self.args = args
         self.problem = problem
         self.best_acc = 0
@@ -95,18 +98,18 @@ class TrainModelSplit:
         mini_batch_size = self.mini_batch_size
         # restrict limits to actual size of datasets:
         training_set_length = (len(self.problem.train_loader())) * mini_batch_size
-        if args.num_training > training_set_length:
+        if hasattr(args,'num_training') and args.num_training > training_set_length:
             args.num_training = training_set_length
         unsup_set_length = (len(self.problem.reg_loader())) * mini_batch_size
-        if args.num_shaving > unsup_set_length:
+        if hasattr(args, 'num_shaving') and args.num_shaving > unsup_set_length:
             args.num_shaving = unsup_set_length
         test_set_length = (len(self.problem.test_loader())) * mini_batch_size
-        if args.num_validation > test_set_length:
+        if hasattr(args, 'num_validation') and args.num_validation > test_set_length:
             args.num_validation = test_set_length
 
-        self.max_regularization_examples = args.num_shaving
-        self.max_validation_examples = args.num_validation
-        self.max_training_examples = args.num_training
+        self.max_regularization_examples = args.num_shaving  if hasattr(args,'num_shaving')else 0
+        self.max_validation_examples = args.num_validation if hasattr(args,'num_validation')else 0
+        self.max_training_examples = args.num_training if hasattr(args,'num_training')else 0
         self.unsuploader = self.problem.reg_loader()
         model_built = False
         self.best_performance_metrics = None
@@ -145,7 +148,7 @@ class TrainModelSplit:
         if not model_built:
             print('==> Building model {}'.format(args.model))
 
-            self.net = create_model_function(args.model)
+            self.net = create_model_function(args.model, self.problem)
 
         if self.use_cuda:
             self.net.cuda()
@@ -157,7 +160,9 @@ class TrainModelSplit:
         self.scheduler_train = \
             construct_scheduler(self.optimizer_training, 'max', factor=0.5,
                                 lr_patience=self.args.lr_patience,
-                                ureg_reset_every_n_epoch=self.args.reset_lr_every_n_epochs)
+                                ureg_reset_every_n_epoch=self.args.reset_lr_every_n_epochs
+                                    if hasattr(self.args,'reset_lr_every_n_epochs')
+                                    else None)
 
 
     def train(self, epoch,
@@ -248,9 +253,9 @@ class TrainModelSplit:
         self.args.factor *= self.args.increase_decrease
         return performance_estimators
 
-    def pre_train_with_half_images(self, num_cycles=10, epochs_per_cycle=10,
+    def pre_train_with_half_images(self, num_cycles=100, epochs_per_cycle=10,
                                    performance_estimators=None,
-                                   num_classes=10):
+                                   num_classes=None):
         """
         This method pretrains a network: - Try a new spin on split: Select a subset of unsup images.
          Assign a random class to each image. Split each image in two and give each half the same class.
@@ -264,8 +269,14 @@ class TrainModelSplit:
         :param num_classes: number of classes to put in competition.
         :return:
         """
+        if num_classes is None:
+            num_classes=self.problem.num_classes()
+
         self.net.train()
-        pretraining_criterion=torch.nn.CrossEntropyLoss()
+        if performance_estimators is None:
+            performance_estimators = PerformanceList()
+            performance_estimators += [FloatHelper("pretrain_loss")]
+
         for cycle in range(0, num_cycles):
             unsuploader_shuffled = self.problem.reg_loader_subset_range(0, self.args.num_shaving)
             # construct the training set:
@@ -278,23 +289,35 @@ class TrainModelSplit:
                 pre_training_set+=[(image1.data, class_indices)]
                 pre_training_set+=[(image2.data, class_indices)]
                 offset += self.mini_batch_size
-                if class_index>num_classes:
+                if offset>=num_classes:
                     break
 
             # shuffle the pre-training set:
             shuffle(pre_training_set)
 
             for epoch in range(0,epochs_per_cycle):
-                for (half_images, class_indices) in pre_training_set:
+                for performance_estimator in performance_estimators:
+                    performance_estimator.init_performance_metrics()
+
+                init_params(self.net.classifier)
+                for (batch_idx, (half_images, class_indices)) in enumerate(pre_training_set):
 
                     inputs, targets = Variable(half_images), Variable(class_indices, requires_grad=False)
                     self.optimizer_training.zero_grad()
 
                     outputs = self.net(inputs)
                     pre_training_loss = self.criterion(outputs, targets)
+                    performance_estimators.set_metric(batch_idx, "pretrain_loss", pre_training_loss.data[0])
                     pre_training_loss.backward()
                     self.optimizer_training.step()
+                    #progress_bar(batch_idx,
+                    #             (len(pre_training_set)),
+                    #             " ".join([performance_estimator.progress_message() for performance_estimator in
+                    #                       performance_estimators]))
+                    #print()
+                #print("epoch {} pretrainin-loss={}".format(epoch, performance_estimators.get_metric("pretrain_loss")))
 
+            print("cycle {} pretraining-loss={}".format(cycle, performance_estimators.get_metric("pretrain_loss")))
 
     def train_mixup(self, epoch,
                     performance_estimators=None,

@@ -13,16 +13,17 @@ cfg = {
 }
 
 
-
-
 class VGG(EstimateFeatureSize):
     def __init__(self, vgg_name, input_shape=None):
         assert input_shape is not None, "You must provide the image input shape."
         super(VGG, self).__init__()
         self.features = self._make_layers(cfg[vgg_name])
-        num_out=self.estimate_output_size_with_model(input_shape, self.features)
-        self.classifier = nn.Linear(num_out, 10)
+        self.num_out = self.estimate_output_size_with_model(input_shape, self.features)
+        self.remake_classifier(10, False)
 
+    def remake_classifier(self, num_classes, use_cuda):
+        self.classifier = nn.Linear(self.num_out, num_classes)
+        if use_cuda: self.classifier = self.classifier.cuda()
 
     def forward(self, x):
         out = self.features(x)

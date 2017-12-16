@@ -34,7 +34,7 @@ import torch
 import torch.nn as nn
 import torch.nn.init as init
 from itertools import islice, chain
-
+import platform
 
 def get_mean_and_std(dataset):
     '''Compute the mean and std value of dataset.'''
@@ -65,11 +65,13 @@ def init_params(net):
             if m.bias is not None:
                 init.constant(m.bias, 0)
 
-try:
-    _, term_width = os.popen('stty size', 'r').read().split()
-    term_width = int(term_width)
-except ValueError:
-    term_width=80
+term_width=100
+if platform.system()=='Linux':
+    try:
+        _, term_width = os.popen('stty size', 'r').read().split()
+        term_width = int(term_width)
+    except ValueError:
+       pass
 
 TOTAL_BAR_LENGTH = 65.
 last_time = time.time()
@@ -102,7 +104,7 @@ def progress_bar(current, total, msg=None):
         L.append(' | ' + msg)
 
     msg = ''.join(L)
-    sys.stdout.write(msg)
+    sys.stdout.write(msg+" ")
     for i in range(term_width-int(TOTAL_BAR_LENGTH)-len(msg)-3):
         sys.stdout.write(' ')
 

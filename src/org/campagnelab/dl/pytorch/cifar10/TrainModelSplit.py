@@ -58,10 +58,10 @@ class TrainModelSplit:
         :param use_cuda When True, use the GPU.
          """
 
-        self.max_regularization_examples = args.num_shaving  if hasattr(args, "num_shaving") else 0
+        self.max_regularization_examples = args.num_shaving if hasattr(args, "num_shaving") else 0
         self.max_validation_examples = args.num_validation if hasattr(args, "num_validation") else 0
         self.max_training_examples = args.num_training if hasattr(args, "num_training") else 0
-        max_examples_per_epoch=args.max_examples_per_epoch if hasattr(args,'max_examples_per_epoch') else None
+        max_examples_per_epoch = args.max_examples_per_epoch if hasattr(args, 'max_examples_per_epoch') else None
         self.max_examples_per_epoch = max_examples_per_epoch if max_examples_per_epoch is not None else self.max_regularization_examples
         self.criterion = problem.loss_function()
         self.criterion_multi_label = MultiLabelSoftMarginLoss()  # problem.loss_function()
@@ -98,7 +98,7 @@ class TrainModelSplit:
         mini_batch_size = self.mini_batch_size
         # restrict limits to actual size of datasets:
         training_set_length = (len(self.problem.train_loader())) * mini_batch_size
-        if hasattr(args,'num_training') and args.num_training > training_set_length:
+        if hasattr(args, 'num_training') and args.num_training > training_set_length:
             args.num_training = training_set_length
         unsup_set_length = (len(self.problem.reg_loader())) * mini_batch_size
         if hasattr(args, 'num_shaving') and args.num_shaving > unsup_set_length:
@@ -107,9 +107,9 @@ class TrainModelSplit:
         if hasattr(args, 'num_validation') and args.num_validation > test_set_length:
             args.num_validation = test_set_length
 
-        self.max_regularization_examples = args.num_shaving  if hasattr(args,'num_shaving')else 0
-        self.max_validation_examples = args.num_validation if hasattr(args,'num_validation')else 0
-        self.max_training_examples = args.num_training if hasattr(args,'num_training')else 0
+        self.max_regularization_examples = args.num_shaving if hasattr(args, 'num_shaving') else 0
+        self.max_validation_examples = args.num_validation if hasattr(args, 'num_validation') else 0
+        self.max_training_examples = args.num_training if hasattr(args, 'num_training') else 0
         self.unsuploader = self.problem.reg_loader()
         model_built = False
         self.best_performance_metrics = None
@@ -144,6 +144,10 @@ class TrainModelSplit:
             else:
                 print("Could not load model checkpoint, unable to --resume.")
                 model_built = False
+        else:
+            if self.args.load_pre_trained_model:
+                self.net=self.load_pretrained_model()
+                model_built=self.net is not None
 
         if not model_built:
             print('==> Building model {}'.format(args.model))
@@ -161,8 +165,9 @@ class TrainModelSplit:
             construct_scheduler(self.optimizer_training, 'max', factor=0.5,
                                 lr_patience=self.args.lr_patience,
                                 ureg_reset_every_n_epoch=self.args.reset_lr_every_n_epochs
-                                    if hasattr(self.args,'reset_lr_every_n_epochs')
-                                    else None)
+                                if hasattr(self.args, 'reset_lr_every_n_epochs')
+                                else None)
+
 
 
     def train(self, epoch,
@@ -270,7 +275,7 @@ class TrainModelSplit:
         :return:
         """
         if num_classes is None:
-            num_classes=self.problem.num_classes()
+            num_classes = self.problem.num_classes()
         print("Pretraining with num classes={} ".format(num_classes))
         self.net.train()
         if performance_estimators is None:
@@ -279,33 +284,34 @@ class TrainModelSplit:
             performance_estimators += [AccuracyHelper("pretrain_")]
 
         for cycle in range(0, num_cycles):
+            self.net.remake_classifier(num_classes, self.use_cuda)
             unsuploader_shuffled = self.problem.reg_loader_subset_range(0, self.args.num_shaving)
             # construct the training set:
-            pre_training_set=[]
-            offset=0
-            for class_index, (unsup_inputs,_) in enumerate(unsuploader_shuffled):
-                #if self.use_cuda:
+            pre_training_set = []
+            offset = 0
+            for class_index, (unsup_inputs, _) in enumerate(unsuploader_shuffled):
+                # if self.use_cuda:
                 #    unsup_inputs=unsup_inputs.cuda()
-                (image1, image2)= self.half_images(unsup_inputs,slope=self.get_random_slope())
+                (image1, image2) = self.half_images(unsup_inputs, slope=self.get_random_slope())
 
-                class_indices=torch.from_numpy(numpy.array(range(offset,offset+self.mini_batch_size)))
+                class_indices = torch.from_numpy(numpy.array(range(offset, offset + self.mini_batch_size)))
 
-                pre_training_set+=[(image1.data, class_indices)]
-                pre_training_set+=[(image2.data, class_indices)]
+                pre_training_set += [(image1.data, class_indices)]
+                pre_training_set += [(image2.data, class_indices)]
                 offset += self.mini_batch_size
-                if offset>=num_classes:
+                if offset >= num_classes:
                     break
 
             # shuffle the pre-training set:
             shuffle(pre_training_set)
 
-            for epoch in range(0,epochs_per_cycle):
+            for epoch in range(0, epochs_per_cycle):
                 for performance_estimator in performance_estimators:
                     performance_estimator.init_performance_metrics()
 
-                #init_params(self.net.classifier)
+                # init_params(self.net.classifier)
                 for (batch_idx, (half_images, class_indices)) in enumerate(pre_training_set):
-                    class_indices=class_indices.type(torch.LongTensor)
+                    class_indices = class_indices.type(torch.LongTensor)
                     if self.use_cuda:
                         half_images = half_images.cuda()
                         class_indices = class_indices.cuda()
@@ -318,20 +324,23 @@ class TrainModelSplit:
                     pre_training_loss.backward()
                     self.optimizer_training.step()
                     performance_estimators.set_metric(batch_idx, "pretrain_loss", pre_training_loss.data[0])
-                    performance_estimators.set_metric_with_outputs(batch_idx, "pretrain_accuracy", pre_training_loss.data[0],
-                                                                   outputs,targets)
+                    performance_estimators.set_metric_with_outputs(batch_idx, "pretrain_accuracy",
+                                                                   pre_training_loss.data[0],
+                                                                   outputs, targets)
+                if performance_estimators.get_metric("pretrain_accuracy") >= 100.0:
+                    break
 
-                    #progress_bar(batch_idx,
-                    #             (len(pre_training_set)),
-                    #             " ".join([performance_estimator.progress_message() for performance_estimator in
-                    #                       performance_estimators]))
-                    #print()
-                #print("epoch {} pretrainin-loss={}".format(epoch, performance_estimators.get_metric("pretrain_loss")))
+                progress_bar(epoch, (epochs_per_cycle),
+                             msg=" ".join([performance_estimator.progress_message() for performance_estimator in
+                                           performance_estimators]))
+                # print()
+                # print("epoch {} pretrainin-loss={}".format(epoch, performance_estimators.get_metric("pretrain_loss")))
 
             print("cycle {} pretraining-loss={} accuracy={}".format(cycle,
                                                                     performance_estimators.get_metric("pretrain_loss"),
                                                                     performance_estimators.get_metric(
                                                                         "pretrain_accuracy")))
+            self.net.remake_classifier(self.problem.num_classes(), self.use_cuda)
 
     def train_mixup(self, epoch,
                     performance_estimators=None,
@@ -434,9 +443,9 @@ class TrainModelSplit:
                 targets = targets.cuda()
             for example_index in range(0, self.mini_batch_size):
                 inputs[example_index] = inputs1[example_index] * lam[example_index] + inputs2[example_index] * (
-                    1. - lam[example_index])
+                        1. - lam[example_index])
                 targets[example_index] = targets1[example_index] * lam[example_index] + targets2[example_index] * (
-                    1. - lam[example_index])
+                        1. - lam[example_index])
         else:
             lam = numpy.random.beta(alpha, alpha)
             targets1 = self.problem.one_hot(targets1)
@@ -632,7 +641,37 @@ class TrainModelSplit:
                 return metric
         return None
 
+    def load_pretrained_model(self):
+        assert os.path.isdir('checkpoint'), 'Error: no checkpoint directory found!'
+        checkpoint = None
+        try:
+            model_filename = './checkpoint/pretrained_{}.t7'.format(self.args.checkpoint_key)
+            checkpoint = torch.load(model_filename)
+        except FileNotFoundError:
+            pass
+        if checkpoint is not None:
+            print("Loaded pre-trained model from "+model_filename)
+            return checkpoint['net']
+        else:
+            print("Could not load pre-trained model checkpoint.")
+            return None
+
+    def save_pretrained_model(self):
+        # Save pretrained model.
+
+        print('Saving pre-trained model..')
+        model = self.net
+        model.eval()
+
+        state = {
+            'net': model.module if self.is_parallel else model,
+        }
+        if not os.path.isdir('checkpoint'):
+            os.mkdir('checkpoint')
+        torch.save(state, './checkpoint/pretrained_{}.t7'.format(self.args.checkpoint_key))
+
     def save_checkpoint(self, epoch, acc):
+
         # Save checkpoint.
 
         if acc > self.best_acc:
@@ -835,6 +874,6 @@ class TrainModelSplit:
         for c in range(0, channels):
             mask1[c] = mask_up
             mask2[c] = mask_down
-        mask1=Variable(mask1,requires_grad=False)
-        mask2=Variable(mask2,requires_grad=False)
+        mask1 = Variable(mask1, requires_grad=False)
+        mask2 = Variable(mask2, requires_grad=False)
         return uinputs.masked_fill(mask1, 0.), uinputs.masked_fill(mask2, 0.)

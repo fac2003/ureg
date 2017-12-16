@@ -46,6 +46,8 @@ if __name__ == '__main__':
     parser.add_argument('--mini-batch-size', type=int, help='Size of the mini-batch.', default=128)
     parser.add_argument('--num-epochs', '--max-epochs', type=int,
                         help='Number of epochs to run before stopping. Additional epochs when --resume.', default=200)
+    parser.add_argument('--num-classes', type=int,
+                        help='Number of classes to train with for pre-training..', default=10)
     parser.add_argument('--num-shaving', '-u', type=int, help='Maximum number of unlabeled examples to use when shaving'
                                                               'the network.', default=sys.maxsize)
     parser.add_argument('--momentum', type=float, help='Momentum for SGD.', default=0.9)
@@ -102,6 +104,7 @@ if __name__ == '__main__':
             torch.cuda.manual_seed(args.seed)
 
     model_trainer.init_model(create_model_function=create_model)
-    model_trainer.pre_train_with_half_images(num_cycles=args.num_cycles, epochs_per_cycle=args.epochs_per_cycle)
+    model_trainer.pre_train_with_half_images(num_cycles=args.num_cycles, num_classes=args.num_classes,
+                                             epochs_per_cycle=args.epochs_per_cycle)
 
-
+    model_trainer.save_pretrained_model()

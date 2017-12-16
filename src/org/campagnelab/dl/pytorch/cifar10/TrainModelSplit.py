@@ -305,7 +305,7 @@ class TrainModelSplit:
 
                 #init_params(self.net.classifier)
                 for (batch_idx, (half_images, class_indices)) in enumerate(pre_training_set):
-
+                    class_indices=class_indices.type(torch.LongTensor)
                     if self.use_cuda:
                         half_images = half_images.cuda()
                         class_indices = class_indices.cuda()
@@ -835,4 +835,6 @@ class TrainModelSplit:
         for c in range(0, channels):
             mask1[c] = mask_up
             mask2[c] = mask_down
+        mask1=Variable(mask1,requires_grad=False)
+        mask2=Variable(mask2,requires_grad=False)
         return uinputs.masked_fill(mask1, 0.), uinputs.masked_fill(mask2, 0.)

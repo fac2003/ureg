@@ -1,8 +1,20 @@
 # Installation
 
+on windows:
+````bash
+conda create --name pytorch3
+conda install pytorch3 -c peterjc123 pytorch
+miniconda/Scripts/activate.bat pytorch3
 ````
-pip3 install http://download.pytorch.org/whl/cu80/torch-0.3.0.post4-cp35-cp35m-linux_x86_64.whl 
-pip3 install torchvision
+Use the pip.exe in miniconda for the following.
+
+on mac:
+````bash
+pip install http://download.pytorch.org/whl/cu80/torch-0.3.0.post4-cp35-cp35m-linux_x86_64.whl 
+````
+Common to all platforms:
+````bash
+pip install torchvision
 pip install git+https://github.com/pytorch/tnt.git@master
 export UREG=<install-dir>/ureg/
 ````

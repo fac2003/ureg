@@ -111,5 +111,4 @@ if __name__ == '__main__':
                                              epochs_per_cycle=args.epochs_per_cycle,
                                              amount_of_dropout=args.dropout)
 
-    model_trainer.save_pretrained_model()
     print("Finished pre-training "+args.checkpoint_key)

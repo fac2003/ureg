@@ -287,9 +287,6 @@ class TrainModelSplit:
 
         for cycle in range(0, num_cycles):
             self.net.remake_classifier(num_classes, self.use_cuda)
-            optimizer_classifier = torch.optim.SGD(self.net.get_classifier().parameters(),
-                                                   lr=self.args.lr, momentum=self.args.momentum,
-                                                   weight_decay=self.args.L2)
 
             unsuploader_shuffled = self.problem.reg_loader_subset_range(0, self.args.num_shaving)
             # construct the training set:
@@ -309,13 +306,12 @@ class TrainModelSplit:
 
             # shuffle the pre-training set:
             shuffle(pre_training_set)
-            # we train the classifier part only when the cycle is not the first one:
-            train_classifier = cycle > 0
+
             best_acc = 0
             for epoch in range(0, epochs_per_cycle):
                 for performance_estimator in performance_estimators:
                     performance_estimator.init_performance_metrics()
-                optimizer = optimizer_classifier if train_classifier else self.optimizer_training
+                optimizer = self.optimizer_training
                 # init_params(self.net.classifier)
 
                 for (batch_idx, (half_images, class_indices)) in enumerate(pre_training_set):
@@ -337,16 +333,6 @@ class TrainModelSplit:
                                                                    outputs, targets)
 
                 pretrain_acc = performance_estimators.get_metric("pretrain_accuracy")
-
-                if train_classifier:
-                    if epoch > 0 and abs(pretrain_acc - best_acc) < 1E-3 and pretrain_acc <= best_acc:
-                        # the classifier has converged. Now enable training the model:
-                        train_classifier = False
-                        print("Finished training the classifier with start_acc=" + str(pretrain_acc))
-                        best_acc =0
-                    else:
-                        best_acc = pretrain_acc
-                        performance_estimators.set_metric(epoch, "pretrain_start_accuracy", pretrain_acc)
                 if pretrain_acc >= 100.0:
                     break
                 progress_bar(epoch, (epochs_per_cycle),
@@ -354,12 +340,10 @@ class TrainModelSplit:
                 # print()
                 # print("epoch {} pretrainin-loss={}".format(epoch, performance_estimators.get_metric("pretrain_loss")))
 
-            print("cycle {} pretraining-loss={} start_accuracy={} accuracy={}".format(cycle,
-                                                                                      performance_estimators.get_metric(
-                                                                                          "pretrain_loss"),
-                                                                                      performance_estimators.get_metric(
-                                                                                          "pretrain_start_accuracy"),
-                                                                                      pretrain_acc))
+            print("cycle {} pretraining-loss={} accuracy={}".format(cycle,
+                                                                    performance_estimators.get_metric(
+                                                                        "pretrain_loss"),
+                                                                    pretrain_acc))
             self.net.remake_classifier(self.problem.num_classes(), self.use_cuda)
 
     def train_mixup(self, epoch,
@@ -864,6 +848,11 @@ class TrainModelSplit:
             yl = slope * xp + b
             return yp < yl
 
+        def on_line(xp, yp, slope, b):
+            # remember that y coordinate increase downward in images
+            yl = slope * xp + b
+            return abs(yp - yl) < 1
+
         uinputs = Variable(uinputs, requires_grad=False)
 
         mask_up = torch.ByteTensor(uinputs.size()[2:])  # index 2 drops minibatch size and channel dimension.
@@ -877,8 +866,9 @@ class TrainModelSplit:
         for x in range(0, width):
             for y in range(0, height):
                 above_the_line = above_line(x - width / 2, y, slope=slope, b=height / 2.0)
-                mask_up[x, y] = 1 if above_the_line else 0
-                mask_down[x, y] = 0 if above_the_line else 1
+                on_the_line = on_line(x - width / 2, y, slope=slope, b=height / 2.0)
+                mask_up[x, y] = 1 if above_the_line and not on_the_line else 0
+                mask_down[x, y] = 0 if above_the_line and on_the_line else 1
                 # print("." if mask_down[x, y] else " ",end="")
                 # print("|")
 
@@ -896,4 +886,5 @@ class TrainModelSplit:
             mask2[c] = mask_down
         mask1 = Variable(mask1, requires_grad=False)
         mask2 = Variable(mask2, requires_grad=False)
-        return uinputs.masked_fill(mask1, 0.), uinputs.masked_fill(mask2, 0.)
+
+        return uinputs.masked_fill(mask1, random()), uinputs.masked_fill(mask2, random())

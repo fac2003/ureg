@@ -152,6 +152,7 @@ def train_once(args, problem, use_cuda):
 
     if args.mode == "supervised":
         args.split = None
+        args.alpha=1
 
     model_trainer = TrainModelSplit(args=args, problem=problem, use_cuda=use_cuda)
     torch.manual_seed(args.seed)

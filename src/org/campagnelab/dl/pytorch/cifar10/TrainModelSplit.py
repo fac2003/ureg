@@ -263,7 +263,7 @@ class TrainModelSplit:
     def pre_train_with_half_images(self, num_cycles=100, epochs_per_cycle=10,
                                    performance_estimators=None,
                                    num_classes=None,
-                                   amount_of_dropout=0.8):
+                                   amount_of_dropout=0.8, max_acc=10.0):
         """
         This method pretrains a network: - Try a new spin on split: Select a subset of unsup images.
          Assign a random class to each image. Split each image in two and give each half the same class.
@@ -343,7 +343,7 @@ class TrainModelSplit:
                                                                    outputs, targets)
 
                 pretrain_acc = performance_estimators.get_metric("pretrain_accuracy")
-                if pretrain_acc >= 10.0:
+                if pretrain_acc >= max_acc:
                     # we report the number of epochs needed to reach 10% accuracy in this cycle:
                     performance_estimators.set_metric(epoch,"epoch_at_10",epoch)
                     break

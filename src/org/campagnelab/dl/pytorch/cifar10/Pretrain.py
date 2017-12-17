@@ -67,6 +67,8 @@ if __name__ == '__main__':
                         default=1000)
     parser.add_argument('--epochs-per-cycle', type=int, help='Number of epochs per cycle.',
                         default=10)
+    parser.add_argument('--max-accuracy', type=float, help='Maximum accuracy for early stopping a cycle.',
+                        default=10.0)
     args = parser.parse_args()
 
     print("Pre-training " + args.checkpoint_key)
@@ -109,6 +111,7 @@ if __name__ == '__main__':
     model_trainer.init_model(create_model_function=create_model)
     model_trainer.pre_train_with_half_images(num_cycles=args.num_cycles, num_classes=args.num_classes,
                                              epochs_per_cycle=args.epochs_per_cycle,
-                                             amount_of_dropout=args.dropout)
+                                             amount_of_dropout=args.dropout,
+                                             max_acc=args.max_accuracy)
 
     print("Finished pre-training "+args.checkpoint_key)

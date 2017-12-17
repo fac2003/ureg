@@ -21,15 +21,21 @@ export UREG=<install-dir>/ureg/
 
 # Training
 
+To pre-train a model with STL10:
+````bash
+    ${UREG}/bin/pretrain.sh --mini-batch-size 100 --problem STL10 \
+     --epochs-per-cycle 100 --num-cycles 100 --num-classes 1000 \
+     --lr 0.1 --L2 0.
+````
 To train a model with STL10:
 ````
 ${UREG}/bin/cv-with-mixup-stl10.sh -n 4000 -x 8000 -u 100000 \
    --mini-batch-size 100 --model PreActResNet18 --lr 0.01 \
-   --alpha 0.8  --checkpoint-key UNSUP_MIXUP \
+   --alpha 0.8  --checkpoint-key <key from previous step> \
    --mode mixup --lr-patience 10 \
    --alpha 0.9 --unsup-proportion 0.5 \
    --L2 6.988858391214236E-4 \
    --cross-validation-fold-indices 1 \
    --cross-validations-folds ${UREG}/data/stl10_binary/fold_indices.txt \
-   --max-epochs 1000
+   --max-epochs 1000  --load-pre-trained-model
 ````

@@ -231,7 +231,7 @@ class TrainModelSplit:
 
                 supervised_loss = self.criterion(outputs, targets)
                 alpha = self.args.factor
-                optimized_loss = supervised_loss * (1 - alpha) + alpha * average_unsupervised_loss
+                optimized_loss = supervised_loss * ( alpha) + (1.-alpha) * average_unsupervised_loss
                 optimized_loss.backward()
                 self.optimizer_training.step()
                 supervised_grad_norm = grad_norm(self.net.parameters())

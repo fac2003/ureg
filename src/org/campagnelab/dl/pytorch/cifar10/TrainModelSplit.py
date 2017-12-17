@@ -281,13 +281,13 @@ class TrainModelSplit:
         if performance_estimators is None:
             performance_estimators = PerformanceList()
             performance_estimators += [FloatHelper("pretrain_loss")]
-            performance_estimators += [FloatHelper("pretrain_start_accuracy")]
+            performance_estimators += [FloatHelper("epoch_at_10")]
             performance_estimators += [AccuracyHelper("pretrain_")]
         # we create an optimizer that changes only the classifier part of the model:
-
+        self.log_performance_header(performance_estimators,"pre")
         for cycle in range(0, num_cycles):
-            self.net.remake_classifier(num_classes, self.use_cuda)
-
+            self.net.remake_classifier(num_classes, self.use_cuda, 0.8)
+            init_params(self.net.get_classifier())
             unsuploader_shuffled = self.problem.reg_loader_subset_range(0, self.args.num_shaving)
             # construct the training set:
             pre_training_set = []
@@ -312,7 +312,6 @@ class TrainModelSplit:
                 for performance_estimator in performance_estimators:
                     performance_estimator.init_performance_metrics()
                 optimizer = self.optimizer_training
-                # init_params(self.net.classifier)
 
                 for (batch_idx, (half_images, class_indices)) in enumerate(pre_training_set):
                     class_indices = class_indices.type(torch.LongTensor)
@@ -333,7 +332,9 @@ class TrainModelSplit:
                                                                    outputs, targets)
 
                 pretrain_acc = performance_estimators.get_metric("pretrain_accuracy")
-                if pretrain_acc >= 100.0:
+                if pretrain_acc >= 10.0:
+                    # we report the number of epochs needed to reach 10% accuracy in this cycle:
+                    performance_estimators.set_metric(epoch,"epoch_at_10",epoch)
                     break
                 progress_bar(epoch, (epochs_per_cycle),
                              msg=performance_estimators.progress_message(["pretrain_accuracy", "pretrain_loss"]))
@@ -344,6 +345,7 @@ class TrainModelSplit:
                                                                     performance_estimators.get_metric(
                                                                         "pretrain_loss"),
                                                                     pretrain_acc))
+            self.log_performance_metrics(epoch=cycle,performance_estimators=performance_estimators, kind="pre")
             self.net.remake_classifier(self.problem.num_classes(), self.use_cuda)
 
     def train_mixup(self, epoch,
@@ -559,7 +561,7 @@ class TrainModelSplit:
 
             if ((batch_idx + 1) * self.mini_batch_size) > self.max_validation_examples:
                 break
-        print()
+        #print()
 
         # Apply learning rate schedule:
         test_accuracy = self.get_metric(performance_estimators, "test_accuracy")
@@ -569,7 +571,7 @@ class TrainModelSplit:
         self.confusion_matrix = cm.value().transpose()
         return performance_estimators
 
-    def log_performance_header(self, performance_estimators):
+    def log_performance_header(self, performance_estimators, kind="perfs"):
         global best_test_loss
         if (self.args.resume):
             return
@@ -580,15 +582,15 @@ class TrainModelSplit:
             metrics = metrics + performance_estimator.metric_names()
 
         if not self.args.resume:
-            with open("all-perfs-{}.tsv".format(self.args.checkpoint_key), "w") as perf_file:
+            with open("all-{}-{}.tsv".format(kind,self.args.checkpoint_key), "w") as perf_file:
                 perf_file.write("\t".join(map(str, metrics)))
                 perf_file.write("\n")
 
-            with open("best-perfs-{}.tsv".format(self.args.checkpoint_key), "w") as perf_file:
+            with open("best-{}-{}.tsv".format(kind,self.args.checkpoint_key), "w") as perf_file:
                 perf_file.write("\t".join(map(str, metrics)))
                 perf_file.write("\n")
 
-    def log_performance_metrics(self, epoch, performance_estimators):
+    def log_performance_metrics(self, epoch, performance_estimators,kind="perfs"):
         """
         Log metrics and returns the best performance metrics seen so far.
         :param epoch:
@@ -599,7 +601,7 @@ class TrainModelSplit:
         for performance_estimator in performance_estimators:
             metrics = metrics + performance_estimator.estimates_of_metric()
         early_stop = False
-        with open("all-perfs-{}.tsv".format(self.args.checkpoint_key), "a") as perf_file:
+        with open("all-{}-{}.tsv".format(kind,self.args.checkpoint_key), "a") as perf_file:
             perf_file.write("\t".join(map(_format_nice, metrics)))
             perf_file.write("\n")
         if self.best_performance_metrics is None:
@@ -609,7 +611,7 @@ class TrainModelSplit:
         if metric is not None and metric > self.best_acc:
             self.failed_to_improve = 0
 
-            with open("best-perfs-{}.tsv".format(self.args.checkpoint_key), "a") as perf_file:
+            with open("best-{}-{}.tsv".format(kind,self.args.checkpoint_key), "a") as perf_file:
                 perf_file.write("\t".join(map(_format_nice, metrics)))
                 perf_file.write("\n")
 
@@ -665,6 +667,8 @@ class TrainModelSplit:
 
         print('Saving pre-trained model..')
         model = self.net
+        model.remake_classifier(self.problem.num_classes(), self.use_cuda)
+        init_params(model.get_classifier())
         model.eval()
 
         state = {

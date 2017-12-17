@@ -261,7 +261,8 @@ class TrainModelSplit:
 
     def pre_train_with_half_images(self, num_cycles=100, epochs_per_cycle=10,
                                    performance_estimators=None,
-                                   num_classes=None):
+                                   num_classes=None,
+                                   amount_of_dropout=0.8):
         """
         This method pretrains a network: - Try a new spin on split: Select a subset of unsup images.
          Assign a random class to each image. Split each image in two and give each half the same class.
@@ -288,7 +289,7 @@ class TrainModelSplit:
         self.log_performance_header(performance_estimators,"pre")
         best_pretrain_loss = sys.maxsize
         for cycle in range(0, num_cycles):
-            self.net.remake_classifier(num_classes, self.use_cuda, 0.8)
+            self.net.remake_classifier(num_classes, self.use_cuda, amount_of_dropout)
             init_params(self.net.get_classifier())
             unsuploader_shuffled = self.problem.reg_loader_subset_range(0, self.args.num_shaving)
             # construct the training set:
@@ -352,7 +353,7 @@ class TrainModelSplit:
                 self.save_pretrained_model()
                 self.net.train()
                 best_pretrain_loss=pretrain_loss
-            self.net.remake_classifier(self.problem.num_classes(), self.use_cuda)
+            self.net.remake_classifier(self.problem.num_classes(), self.use_cuda,amount_of_dropout)
 
     def train_mixup(self, epoch,
                     performance_estimators=None,
@@ -673,7 +674,7 @@ class TrainModelSplit:
 
         print('Saving pre-trained model..')
         model = self.net
-        model.remake_classifier(self.problem.num_classes(), self.use_cuda,dropout_p=0.5)
+        model.remake_classifier(self.problem.num_classes(), self.use_cuda,dropout_p=0)
         init_params(model.get_classifier())
         model.eval()
 

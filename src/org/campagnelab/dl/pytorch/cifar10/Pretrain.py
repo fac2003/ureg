@@ -52,6 +52,9 @@ if __name__ == '__main__':
                                                               'the network.', default=sys.maxsize)
     parser.add_argument('--momentum', type=float, help='Momentum for SGD.', default=0.9)
     parser.add_argument('--L2', type=float, help='L2 regularization.', default=1E-4)
+    parser.add_argument('--dropout', type=float, help='Dropout rate during pretraining, '
+                                                      '0 for no dropout, 0.9 for 90% dropped.', default=0)
+
     parser.add_argument('--checkpoint-key', help='random key to save/load checkpoint',
                         default=''.join(random.choices(string.ascii_uppercase, k=5)))
     parser.add_argument('--lr-patience', default=10, type=int,
@@ -105,7 +108,8 @@ if __name__ == '__main__':
 
     model_trainer.init_model(create_model_function=create_model)
     model_trainer.pre_train_with_half_images(num_cycles=args.num_cycles, num_classes=args.num_classes,
-                                             epochs_per_cycle=args.epochs_per_cycle)
+                                             epochs_per_cycle=args.epochs_per_cycle,
+                                             amount_of_dropout=args.dropout)
 
     model_trainer.save_pretrained_model()
     print("Finished pre-training "+args.checkpoint_key)

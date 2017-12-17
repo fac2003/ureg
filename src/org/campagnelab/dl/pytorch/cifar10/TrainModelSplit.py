@@ -350,6 +350,7 @@ class TrainModelSplit:
             self.log_performance_metrics(epoch=cycle,performance_estimators=performance_estimators, kind="pre")
             if pretrain_loss<best_pretrain_loss:
                 self.save_pretrained_model()
+                self.net.train()
                 best_pretrain_loss=pretrain_loss
             self.net.remake_classifier(self.problem.num_classes(), self.use_cuda)
 
@@ -672,7 +673,7 @@ class TrainModelSplit:
 
         print('Saving pre-trained model..')
         model = self.net
-        model.remake_classifier(self.problem.num_classes(), self.use_cuda)
+        model.remake_classifier(self.problem.num_classes(), self.use_cuda,dropout_p=0.5)
         init_params(model.get_classifier())
         model.eval()
 

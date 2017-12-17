@@ -65,7 +65,7 @@ def init_params(net):
             if m.bias is not None:
                 init.constant(m.bias, 0)
 
-term_width=100
+term_width=120
 if platform.system()=='Linux':
     try:
         _, term_width = os.popen('stty size', 'r').read().split()

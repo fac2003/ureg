@@ -281,18 +281,21 @@ class TrainModelSplit:
             num_classes = self.problem.num_classes()
         print("Pretraining with num classes={} ".format(num_classes))
         self.net.train()
-        if performance_estimators is None:
-            performance_estimators = PerformanceList()
-            performance_estimators += [FloatHelper("pretrain_loss")]
-            performance_estimators += [FloatHelper("epoch_at_10")]
-            performance_estimators += [AccuracyHelper("pretrain_")]
+
         # we create an optimizer that changes only the classifier part of the model:
-        self.log_performance_header(performance_estimators,"pre")
         best_pretrain_loss = sys.maxsize
         optimizer = self.optimizer_training
         scheduler = ReduceLROnPlateau(optimizer, "min", factor=0.5,
                                            patience=self.args.lr_patience ,
                                            verbose=True)
+        if performance_estimators is None:
+            performance_estimators = PerformanceList()
+            performance_estimators += [FloatHelper("pretrain_loss")]
+            performance_estimators += [FloatHelper("epoch_at_10")]
+            performance_estimators += [AccuracyHelper("pretrain_")]
+            performance_estimators += [LearningRateHelper(scheduler=scheduler, learning_rate_name="pretrain_lr")]
+
+        self.log_performance_header(performance_estimators, "pre")
 
         for cycle in range(0, num_cycles):
             self.net.remake_classifier(num_classes, self.use_cuda, amount_of_dropout)
@@ -353,12 +356,13 @@ class TrainModelSplit:
             print("cycle {} pretraining-loss={} accuracy={}".format(cycle,
                                                                     pretrain_loss,
                                                                     pretrain_acc))
-            self.log_performance_metrics(epoch=cycle,performance_estimators=performance_estimators, kind="pre")
-            scheduler.step(scheduler,epoch=cycle)
             if pretrain_loss<best_pretrain_loss:
                 self.save_pretrained_model()
                 self.net.train()
                 best_pretrain_loss=pretrain_loss
+            scheduler.step(pretrain_loss, epoch=cycle)
+            self.log_performance_metrics(epoch=cycle, performance_estimators=performance_estimators, kind="pre")
+
             self.net.remake_classifier(self.problem.num_classes(), self.use_cuda,amount_of_dropout)
 
     def train_mixup(self, epoch,

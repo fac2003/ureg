@@ -4,6 +4,7 @@ import os
 from random import uniform, randint, random, shuffle
 
 import numpy
+import sys
 import torch
 from torch.autograd import Variable
 from torch.backends import cudnn
@@ -285,6 +286,7 @@ class TrainModelSplit:
             performance_estimators += [AccuracyHelper("pretrain_")]
         # we create an optimizer that changes only the classifier part of the model:
         self.log_performance_header(performance_estimators,"pre")
+        best_pretrain_loss = sys.maxsize
         for cycle in range(0, num_cycles):
             self.net.remake_classifier(num_classes, self.use_cuda, 0.8)
             init_params(self.net.get_classifier())
@@ -341,11 +343,14 @@ class TrainModelSplit:
                 # print()
                 # print("epoch {} pretrainin-loss={}".format(epoch, performance_estimators.get_metric("pretrain_loss")))
 
+            pretrain_loss = performance_estimators.get_metric("pretrain_loss")
             print("cycle {} pretraining-loss={} accuracy={}".format(cycle,
-                                                                    performance_estimators.get_metric(
-                                                                        "pretrain_loss"),
+                                                                    pretrain_loss,
                                                                     pretrain_acc))
             self.log_performance_metrics(epoch=cycle,performance_estimators=performance_estimators, kind="pre")
+            if pretrain_loss<best_pretrain_loss:
+                self.save_pretrained_model()
+                best_pretrain_loss=pretrain_loss
             self.net.remake_classifier(self.problem.num_classes(), self.use_cuda)
 
     def train_mixup(self, epoch,

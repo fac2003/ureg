@@ -9,6 +9,7 @@ import torch
 from torch.autograd import Variable
 from torch.backends import cudnn
 from torch.nn import MSELoss, MultiLabelSoftMarginLoss
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torchnet.meter import ConfusionMeter
 
 from org.campagnelab.dl.pytorch.cifar10.AccuracyHelper import AccuracyHelper
@@ -288,6 +289,11 @@ class TrainModelSplit:
         # we create an optimizer that changes only the classifier part of the model:
         self.log_performance_header(performance_estimators,"pre")
         best_pretrain_loss = sys.maxsize
+        optimizer = self.optimizer_training
+        scheduler = ReduceLROnPlateau(optimizer, "min", factor=0.5,
+                                           patience=self.args.lr_patience ,
+                                           verbose=True)
+
         for cycle in range(0, num_cycles):
             self.net.remake_classifier(num_classes, self.use_cuda, amount_of_dropout)
             init_params(self.net.get_classifier())
@@ -314,7 +320,6 @@ class TrainModelSplit:
             for epoch in range(0, epochs_per_cycle):
                 for performance_estimator in performance_estimators:
                     performance_estimator.init_performance_metrics()
-                optimizer = self.optimizer_training
 
                 for (batch_idx, (half_images, class_indices)) in enumerate(pre_training_set):
                     class_indices = class_indices.type(torch.LongTensor)
@@ -349,6 +354,7 @@ class TrainModelSplit:
                                                                     pretrain_loss,
                                                                     pretrain_acc))
             self.log_performance_metrics(epoch=cycle,performance_estimators=performance_estimators, kind="pre")
+            scheduler.step(scheduler,epoch=cycle)
             if pretrain_loss<best_pretrain_loss:
                 self.save_pretrained_model()
                 self.net.train()

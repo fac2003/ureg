@@ -67,7 +67,7 @@ class PreActBottleneck(nn.Module):
 
 
 class PreActResNet(EstimateFeatureSize):
-    def __init__(self, block, num_blocks, input_shape=(3,32,32), num_classes=10, ):
+    def __init__(self, block, num_blocks, input_shape=(3,32,32), num_classes=10 ):
         super(PreActResNet, self).__init__()
         self.in_planes = 64
 
@@ -76,9 +76,16 @@ class PreActResNet(EstimateFeatureSize):
         self.layer2 = self._make_layer(block, 128, num_blocks[1], stride=2)
         self.layer3 = self._make_layer(block, 256, num_blocks[2], stride=2)
         self.layer4 = self._make_layer(block, 512, num_blocks[3], stride=2)
-        num_out = self.estimate_output_size(input_shape, self.features_forward)
+        self.num_out = self.estimate_output_size(input_shape, self.features_forward)
 
-        self.linear = nn.Linear(num_out, num_classes)
+        self.remake_classifier(num_classes,False)
+
+    def remake_classifier(self, num_classes, use_cuda, dropout_p=0.5):
+        self.linear = nn.Sequential(nn.Dropout(dropout_p), nn.Linear(self.num_out, num_classes))
+        if use_cuda: self.linear = self.linear.cuda()
+
+    def get_classifier(self):
+        return self.linear
 
     def _make_layer(self, block, planes, num_blocks, stride):
         strides = [stride] + [1]*(num_blocks-1)

@@ -81,7 +81,10 @@ class PreActResNet(EstimateFeatureSize):
         self.remake_classifier(num_classes,False)
 
     def remake_classifier(self, num_classes, use_cuda, dropout_p=0.5):
-        self.linear = nn.Sequential(nn.Dropout(dropout_p), nn.Linear(self.num_out, num_classes))
+        self.linear = nn.Sequential(nn.Linear(self.num_out, num_classes),
+                                    nn.Linear(self.num_out, num_classes),
+                                    nn.Linear(self.num_out, num_classes),
+                                    nn.Linear(self.num_out, num_classes))
         if use_cuda: self.linear = self.linear.cuda()
 
     def get_classifier(self):

@@ -142,6 +142,9 @@ class TrainModelSplit:
                 self.split_enabled = checkpoint['split']
                 self.best_model = checkpoint['best-model']
                 self.best_model_confusion_matrix = checkpoint['confusion-matrix']
+                # force all parameters to be optimized, in case we resume after fine-tuning a model:
+                for param in self.net.parameters():
+                    param.requires_grad = True
                 model_built = True
             else:
                 print("Could not load model checkpoint, unable to --resume.")

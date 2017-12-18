@@ -191,6 +191,16 @@ class TrainModelSplit:
         if not self.args.resume:
             self.net.remake_classifier(self.problem.num_classes(), self.use_cuda, 0)
 
+        if self.args.load_pre_trained_model:
+            # we set the model for fine-tuning:
+
+            # freeze the entire model:
+            for param in self.net.parameters():
+                param.requires_grad = False
+            # unfreeze the classifier part:
+                for param in self.net.get_classifier().parameters():
+                    param.requires_grad = True
+
         self.net.train()
         supervised_grad_norm = 1.
         for performance_estimator in performance_estimators:

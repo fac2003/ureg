@@ -6,11 +6,13 @@ from random import uniform, randint, random, shuffle
 import numpy
 import sys
 import torch
+from PIL import Image
 from torch.autograd import Variable
 from torch.backends import cudnn
 from torch.nn import MSELoss, MultiLabelSoftMarginLoss
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torchnet.meter import ConfusionMeter
+from torchvision.transforms.functional import to_grayscale
 
 from org.campagnelab.dl.pytorch.cifar10.AccuracyHelper import AccuracyHelper
 from org.campagnelab.dl.pytorch.cifar10.FloatHelper import FloatHelper
@@ -20,6 +22,7 @@ from org.campagnelab.dl.pytorch.cifar10.PerformanceList import PerformanceList
 from org.campagnelab.dl.pytorch.cifar10.utils import progress_bar, grad_norm, batch, init_params
 from org.campagnelab.dl.pytorch.ureg.LRSchedules import construct_scheduler
 
+import torchvision.transforms
 
 def _format_nice(n):
     try:
@@ -191,18 +194,7 @@ class TrainModelSplit:
             performance_estimators += [FloatHelper("train_grad_norm")]
             performance_estimators += [FloatHelper("factor")]
             print('\nTraining, epoch: %d' % epoch)
-        if not self.args.resume:
-            self.net.remake_classifier(self.problem.num_classes(), self.use_cuda, 0)
 
-        if self.args.load_pre_trained_model and self.args.fine_tune:
-            # we set the model for fine-tuning:
-            print("Preparing to fine-tune pre-trained model..")
-            # freeze the entire model:
-            for param in self.net.parameters():
-                param.requires_grad = False
-            # unfreeze the classifier part:
-                for param in self.net.get_classifier().parameters():
-                    param.requires_grad = True
 
         self.net.train()
         supervised_grad_norm = 1.
@@ -323,6 +315,10 @@ class TrainModelSplit:
             for class_index, (unsup_inputs, _) in enumerate(unsuploader_shuffled):
 
                 (image1, image2) = self.half_images(unsup_inputs, slope=self.get_random_slope())
+                #np_image1 = Image.fromarray(image1.data.numpy(),"RGBA")
+                #np_image2 = Image.fromarray(image2.data.numpy(),"L")
+                #if (random() > 0.5): np_image1 = to_grayscale(np_image1, num_output_channels=3)
+                #if (random() > 0.5): np_image2 = to_grayscale(np_image2, num_output_channels=3)
 
                 class_indices = torch.from_numpy(numpy.array(range(offset, offset + self.mini_batch_size)))
 
@@ -801,6 +797,19 @@ class TrainModelSplit:
         lr_train_helper = LearningRateHelper(scheduler=self.scheduler_train, learning_rate_name="train_lr")
         previous_test_perfs = None
         perfs = PerformanceList()
+        if not self.args.resume:
+            self.net.remake_classifier(self.problem.num_classes(), self.use_cuda, 0)
+
+        if self.args.load_pre_trained_model and self.args.fine_tune:
+            # we set the model for fine-tuning:
+            print("Preparing to fine-tune pre-trained model..")
+            # freeze the entire model:
+            for param in self.net.parameters():
+                param.requires_grad = False
+            # unfreeze the classifier part:
+                for param in self.net.get_classifier().parameters():
+                    param.requires_grad = True
+
         for epoch in range(self.start_epoch, self.start_epoch + self.args.num_epochs):
 
             perfs = PerformanceList()

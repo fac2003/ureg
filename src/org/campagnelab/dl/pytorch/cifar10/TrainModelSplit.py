@@ -889,7 +889,7 @@ class TrainModelSplit:
         def on_line(xp, yp, slope, b):
             # remember that y coordinate increase downward in images
             yl = slope * xp + b
-            return abs(yp - yl) < 1
+            return abs(yp - yl) < 2
 
         uinputs = Variable(uinputs, requires_grad=False)
 
@@ -899,18 +899,20 @@ class TrainModelSplit:
         channels = uinputs.size()[1]
         width = uinputs.size()[2]
         height = uinputs.size()[3]
-        # print("mask down-------------")
+        #print("mask down-------------")
         # fill in the first channel:
         for x in range(0, width):
             for y in range(0, height):
                 above_the_line = above_line(x - width / 2, y, slope=slope, b=height / 2.0)
                 on_the_line = on_line(x - width / 2, y, slope=slope, b=height / 2.0)
                 mask_up[x, y] = 1 if above_the_line and not on_the_line else 0
-                mask_down[x, y] = 0 if above_the_line and on_the_line else 1
-                # print("." if mask_down[x, y] else " ",end="")
-                # print("|")
+                mask_down[x, y] = 0 if above_the_line  else \
+                (1 if not on_the_line else 0)
+                #print("." if mask_down[x, y] else " ",end="")
+            #    print("." if mask_up[x, y] else " ",end="")
+        #    print("|")
 
-        # print("-----------mask down")
+        #print("-----------mask down")
         mask1 = torch.ByteTensor(uinputs.size()[1:])
         mask2 = torch.ByteTensor(uinputs.size()[1:])
 

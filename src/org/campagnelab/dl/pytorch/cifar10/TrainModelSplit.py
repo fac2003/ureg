@@ -668,7 +668,8 @@ class TrainModelSplit:
         assert os.path.isdir('checkpoint'), 'Error: no checkpoint directory found!'
         checkpoint = None
         try:
-            model_filename = './checkpoint/pretrained_{}.t7'.format(self.args.checkpoint_key)
+            key=self.args.checkpoint_key.split("-")[0]
+            model_filename = './checkpoint/pretrained_{}.t7'.format(key)
             checkpoint = torch.load(model_filename)
         except FileNotFoundError as e:
             print("pretrained model filename was not found: "+model_filename)

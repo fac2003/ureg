@@ -670,8 +670,8 @@ class TrainModelSplit:
         try:
             model_filename = './checkpoint/pretrained_{}.t7'.format(self.args.checkpoint_key)
             checkpoint = torch.load(model_filename)
-        except FileNotFoundError:
-            pass
+        except FileNotFoundError as e:
+            print("pretrained model filename was not found: "+model_filename)
         if checkpoint is not None:
             print("Loaded pre-trained model from "+model_filename)
             return checkpoint['net']

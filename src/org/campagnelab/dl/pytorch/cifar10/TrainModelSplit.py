@@ -188,6 +188,9 @@ class TrainModelSplit:
             performance_estimators += [FloatHelper("train_grad_norm")]
             performance_estimators += [FloatHelper("factor")]
             print('\nTraining, epoch: %d' % epoch)
+        if not self.args.resume:
+            self.net.remake_classifier(self.problem.num_classes(), self.use_cuda, 0)
+
         self.net.train()
         supervised_grad_norm = 1.
         for performance_estimator in performance_estimators:

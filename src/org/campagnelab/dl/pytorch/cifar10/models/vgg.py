@@ -22,11 +22,7 @@ class VGG(EstimateFeatureSize):
         self.remake_classifier(10, False)
 
     def remake_classifier(self, num_classes, use_cuda, dropout_p=0.5):
-        self.classifier = nn.Sequential(nn.Linear(self.num_out, num_classes),
-                                        nn.SELU(),
-                                        nn.Linear(num_classes, num_classes),
-                                        nn.SELU(),
-                                        nn.Linear(num_classes, num_classes))
+        self.classifier = nn.Sequential(nn.Linear(self.num_out, num_classes))
         if use_cuda: self.classifier = self.classifier.cuda()
 
     def get_classifier(self):

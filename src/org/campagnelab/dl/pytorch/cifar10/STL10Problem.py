@@ -69,14 +69,14 @@ class STL10Problem(Problem):
         self.transform_train = transforms.Compose([
             transforms.RandomCrop(96, padding=4),
             transforms.RandomHorizontalFlip(),
-            transforms.Grayscale(num_output_channels=3),
+            #transforms.Grayscale(num_output_channels=3),
             transforms.ToTensor(),
             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
 
         ])
 
         self.transform_test = transforms.Compose([
-            transforms.Grayscale(num_output_channels=3),
+            #transforms.Grayscale(num_output_channels=3),
             transforms.ToTensor(),
             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
         ])

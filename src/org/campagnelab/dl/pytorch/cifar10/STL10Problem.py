@@ -5,6 +5,7 @@ import torchvision
 from torch.utils.data.dataloader import default_collate, numpy_type_map, string_classes
 from torchvision import transforms
 from torchvision.transforms import Scale
+from torchvision.transforms.functional import to_grayscale
 
 from org.campagnelab.dl.pytorch.cifar10.Problem import Problem
 from org.campagnelab.dl.pytorch.cifar10.Samplers import ProtectedSubsetRandomSampler
@@ -68,13 +69,16 @@ class STL10Problem(Problem):
         self.transform_train = transforms.Compose([
             transforms.RandomCrop(96, padding=4),
             transforms.RandomHorizontalFlip(),
+            to_grayscale(num_output_channels=3),
             transforms.ToTensor(),
             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
 
         ])
 
         self.transform_test = transforms.Compose([
+            to_grayscale(num_output_channels=3),
             transforms.ToTensor(),
+
             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
         ])
         self._trainset = torchvision.datasets.STL10(root='./data', split="train", download=True,

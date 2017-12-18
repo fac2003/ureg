@@ -44,6 +44,7 @@ if __name__ == '__main__':
     parser.add_argument('--lr', default=0.005, type=float, help='Learning rate.')
     parser.add_argument('--resume', '-r', action='store_true', help='resume from checkpoint.')
     parser.add_argument('--load-pre-trained-model', action='store_true', help='Load a pre-trained model (matching checkpoint-key).')
+    parser.add_argument('--fine-tune', action='store_true', help='Fine-tune a pre-trained model (only optimize classifier layer(s).')
     parser.add_argument('--split', action='store_true', help='Enable unsupervised training (split).')
     parser.add_argument('--factor', default=1, type=float, help='Multiply split training loss by this factor.')
     parser.add_argument('--increase-decrease', default=1, type=float,

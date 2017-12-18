@@ -191,9 +191,9 @@ class TrainModelSplit:
         if not self.args.resume:
             self.net.remake_classifier(self.problem.num_classes(), self.use_cuda, 0)
 
-        if self.args.load_pre_trained_model:
+        if self.args.load_pre_trained_model and self.args.fine_tune:
             # we set the model for fine-tuning:
-
+            print("Preparing to fine-tune pre-trained model..")
             # freeze the entire model:
             for param in self.net.parameters():
                 param.requires_grad = False

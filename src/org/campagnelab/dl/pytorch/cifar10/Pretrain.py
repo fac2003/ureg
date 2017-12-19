@@ -1,4 +1,4 @@
-'''Train CIFAR10 with PyTorch.'''
+'''Pretrain a model using the split image strategy.'''
 from __future__ import print_function
 
 import argparse
@@ -8,6 +8,7 @@ import string
 import sys
 
 import numpy
+from torchvision import models
 
 from org.campagnelab.dl.pytorch.cifar10.Cifar10Problem import Cifar10Problem
 from org.campagnelab.dl.pytorch.cifar10.CrossValidatedProblem import CrossValidatedProblem
@@ -91,8 +92,6 @@ if __name__ == '__main__':
 
 
     # print some info about this dataset:
-
-
 
     def get_metric_value(all_perfs, query_metric_name):
         for perf in all_perfs:

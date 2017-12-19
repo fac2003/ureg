@@ -28,13 +28,15 @@ class Cifar10Problem(Problem):
     def __init__(self, mini_batch_size):
         super().__init__(mini_batch_size)
         self.transform_train = transforms.Compose([
-            transforms.RandomCrop(32, padding=4),
-            transforms.RandomHorizontalFlip(),
+            #transforms.RandomCrop(32, padding=4),
+            #transforms.RandomHorizontalFlip(),
+            #transforms.Grayscale(num_output_channels=3),
             transforms.ToTensor(),
             transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
         ])
 
         self.transform_test = transforms.Compose([
+            #transforms.Grayscale(num_output_channels=3),
             transforms.ToTensor(),
             transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
         ])

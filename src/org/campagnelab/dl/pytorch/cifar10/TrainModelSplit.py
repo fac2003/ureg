@@ -126,7 +126,7 @@ class TrainModelSplit:
 
         self.agreement_loss = MSELoss()
 
-        if args.resume:
+        if hasattr(args, 'resume') and args.resume:
             # Load checkpoint.
 
             print('==> Resuming from checkpoint..')
@@ -173,7 +173,7 @@ class TrainModelSplit:
 
         self.scheduler_train = \
             construct_scheduler(self.optimizer_training, 'max', factor=0.5,
-                                lr_patience=self.args.lr_patience,
+                                lr_patience=self.args.lr_patience if hasattr(self.args, 'lr_patience') else 10,
                                 ureg_reset_every_n_epoch=self.args.reset_lr_every_n_epochs
                                 if hasattr(self.args, 'reset_lr_every_n_epochs')
                                 else None)
@@ -310,28 +310,7 @@ class TrainModelSplit:
         for cycle in range(0, num_cycles):
             self.net.remake_classifier(num_classes, self.use_cuda, amount_of_dropout)
             init_params(self.net.get_classifier())
-            unsuploader_shuffled = self.problem.reg_loader_subset_range(0, self.args.num_shaving)
-            # construct the training set:
-            pre_training_set = []
-            offset = 0
-            for class_index, (unsup_inputs, _) in enumerate(unsuploader_shuffled):
-
-                (image1, image2) = self.half_images(unsup_inputs, slope=self.get_random_slope())
-                #np_image1 = Image.fromarray(image1.data.numpy(),"RGBA")
-                #np_image2 = Image.fromarray(image2.data.numpy(),"L")
-                #if (random() > 0.5): np_image1 = to_grayscale(np_image1, num_output_channels=3)
-                #if (random() > 0.5): np_image2 = to_grayscale(np_image2, num_output_channels=3)
-
-                class_indices = torch.from_numpy(numpy.array(range(offset, offset + self.mini_batch_size)))
-
-                pre_training_set += [(image1.data, class_indices)]
-                pre_training_set += [(image2.data, class_indices)]
-                offset += self.mini_batch_size
-                if offset >= num_classes:
-                    break
-
-            # shuffle the pre-training set:
-            shuffle(pre_training_set)
+            pre_training_set = self.calculate_pre_training_set(num_classes,self.args.num_shaving)
 
             best_acc = 0
             for epoch in range(0, epochs_per_cycle):
@@ -363,6 +342,7 @@ class TrainModelSplit:
                     break
                 progress_bar(epoch, (epochs_per_cycle),
                              msg=performance_estimators.progress_message(["pretrain_accuracy", "pretrain_loss"]))
+
                 # print()
                 # print("epoch {} pretrainin-loss={}".format(epoch, performance_estimators.get_metric("pretrain_loss")))
 
@@ -378,6 +358,31 @@ class TrainModelSplit:
             self.log_performance_metrics(epoch=cycle, performance_estimators=performance_estimators, kind="pre")
 
             self.net.remake_classifier(self.problem.num_classes(), self.use_cuda,amount_of_dropout)
+
+    def calculate_pre_training_set(self, num_classes, num_shaving, shuffle=True):
+        unsuploader_shuffled = self.problem.reg_loader_subset_range(0, num_shaving)
+        # construct the training set:
+        pre_training_set = []
+        offset = 0
+        for class_index, (unsup_inputs, _) in enumerate(unsuploader_shuffled):
+
+            (image1, image2) = self.half_images(unsup_inputs, slope=self.get_random_slope())
+            # np_image1 = Image.fromarray(image1.data.numpy(),"RGBA")
+            # np_image2 = Image.fromarray(image2.data.numpy(),"L")
+            # if (random() > 0.5): np_image1 = to_grayscale(np_image1, num_output_channels=3)
+            # if (random() > 0.5): np_image2 = to_grayscale(np_image2, num_output_channels=3)
+
+            class_indices = torch.from_numpy(numpy.array(range(offset, offset + self.mini_batch_size)))
+
+            pre_training_set += [(image1.data, class_indices)]
+            pre_training_set += [(image2.data, class_indices)]
+            offset += self.mini_batch_size
+            if offset >= num_classes:
+                break
+
+        # shuffle the pre-training set:
+        if shuffle: shuffle(pre_training_set)
+        return pre_training_set
 
     def train_mixup(self, epoch,
                     performance_estimators=None,

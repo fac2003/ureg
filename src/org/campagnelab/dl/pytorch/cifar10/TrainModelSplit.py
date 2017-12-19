@@ -155,6 +155,8 @@ class TrainModelSplit:
         else:
             if hasattr(self.args, 'load_pre_trained_model') and self.args.load_pre_trained_model:
                 self.net=self.load_pretrained_model()
+                self.net.remake_classifier(self.problem.num_classes(), self.use_cuda, dropout_p=0)
+                init_params(self.net.get_classifier())
                 model_built=self.net is not None
 
         if not model_built:
@@ -697,8 +699,6 @@ class TrainModelSplit:
 
         print('Saving pre-trained model..')
         model = self.net
-        model.remake_classifier(self.problem.num_classes(), self.use_cuda,dropout_p=0)
-        init_params(model.get_classifier())
         model.eval()
 
         state = {

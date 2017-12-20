@@ -143,11 +143,15 @@ if __name__ == '__main__':
     criterion = problem.loss_function()
 
     # freeze the features part of the model:
-    for param in model_trainer.net.features.parameters():
+    for param in model_trainer.net.parameters():
         param.requires_grad = False
+        # but not the classifier part:
+    for param in model_trainer.net.get_classifier().parameters():
+        param.requires_grad = True
+
     model_trainer.net.train()
     # train the classifier for a few epochs to finalize the classifier for the test images:
-    for epoch in range(0, 2):
+    for epoch in range(0, 3):
         for (batch_idx, (half_images, class_indices)) in enumerate(pre_training_set):
             class_indices = class_indices.type(torch.LongTensor)
             if use_cuda:

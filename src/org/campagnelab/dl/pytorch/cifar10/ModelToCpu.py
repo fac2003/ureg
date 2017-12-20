@@ -2,18 +2,8 @@
 from __future__ import print_function
 
 import argparse
-import random
-import string
-
-import matplotlib.pyplot as plt
-import numpy
-import torchvision
-from PIL import Image
-from cv2 import cv2
 
 from org.campagnelab.dl.pytorch.cifar10.Cifar10Problem import Cifar10Problem
-from org.campagnelab.dl.pytorch.cifar10.GradCam import GradCam
-from org.campagnelab.dl.pytorch.cifar10.Problems import create_model
 from org.campagnelab.dl.pytorch.cifar10.STL10Problem import STL10Problem
 from org.campagnelab.dl.pytorch.cifar10.TrainModelSplit import TrainModelSplit
 from org.campagnelab.dl.pytorch.cifar10.models import *

@@ -364,9 +364,12 @@ class TrainModelSplit:
         # construct the training set:
         pre_training_set = []
         offset = 0
+        # use a fixed slope throughout the training set to prevent the model learning a mapping from
+        # slope to image index.
+        slope = self.get_random_slope()
         for class_index, (unsup_inputs, _) in enumerate(unsuploader_shuffled):
 
-            (image1, image2) = self.half_images(unsup_inputs, slope=self.get_random_slope())
+            (image1, image2) = self.half_images(unsup_inputs, slope)
             # np_image1 = Image.fromarray(image1.data.numpy(),"RGBA")
             # np_image2 = Image.fromarray(image2.data.numpy(),"L")
             # if (random() > 0.5): np_image1 = to_grayscale(np_image1, num_output_channels=3)

@@ -359,7 +359,7 @@ class TrainModelSplit:
 
             self.net.remake_classifier(self.problem.num_classes(), self.use_cuda,amount_of_dropout)
 
-    def calculate_pre_training_set(self, num_classes, num_shaving, shuffle=True):
+    def calculate_pre_training_set(self, num_classes, num_shaving, shuffle_training_set=True):
         unsuploader_shuffled = self.problem.reg_loader_subset_range(0, num_shaving)
         # construct the training set:
         pre_training_set = []
@@ -381,7 +381,7 @@ class TrainModelSplit:
                 break
 
         # shuffle the pre-training set:
-        if shuffle: shuffle(pre_training_set)
+        if shuffle_training_set: shuffle(pre_training_set)
         return pre_training_set
 
     def train_mixup(self, epoch,

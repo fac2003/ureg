@@ -112,7 +112,7 @@ if __name__ == '__main__':
             torch.cuda.manual_seed(args.seed)
     # View image sample:
 
-    pre_training_set = model_trainer.calculate_pre_training_set(args.num_classes, 4, shuffle=False)
+    pre_training_set = model_trainer.calculate_pre_training_set(args.num_classes, 4, shuffle_training_set=False)
     iterator = iter(pre_training_set)
     combined_set = []
     while True:

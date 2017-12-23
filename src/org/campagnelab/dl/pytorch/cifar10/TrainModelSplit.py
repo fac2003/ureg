@@ -1,28 +1,25 @@
 import itertools
 import math
 import os
-from random import uniform, randint, random, shuffle
+import sys
+from random import uniform, random, shuffle
 
 import numpy
-import sys
 import torch
-from PIL import Image
 from torch.autograd import Variable
 from torch.backends import cudnn
 from torch.nn import MSELoss, MultiLabelSoftMarginLoss
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torchnet.meter import ConfusionMeter
-from torchvision.transforms.functional import to_grayscale
 
 from org.campagnelab.dl.pytorch.cifar10.AccuracyHelper import AccuracyHelper
 from org.campagnelab.dl.pytorch.cifar10.FloatHelper import FloatHelper
 from org.campagnelab.dl.pytorch.cifar10.LRHelper import LearningRateHelper
 from org.campagnelab.dl.pytorch.cifar10.LossHelper import LossHelper
 from org.campagnelab.dl.pytorch.cifar10.PerformanceList import PerformanceList
-from org.campagnelab.dl.pytorch.cifar10.utils import progress_bar, grad_norm, batch, init_params
+from org.campagnelab.dl.pytorch.cifar10.utils import progress_bar, grad_norm, init_params
 from org.campagnelab.dl.pytorch.ureg.LRSchedules import construct_scheduler
 
-import torchvision.transforms
 
 def _format_nice(n):
     try:
@@ -609,6 +606,33 @@ class TrainModelSplit:
             self.scheduler_train.step(test_accuracy, epoch)
         self.confusion_matrix = cm.value().transpose()
         return performance_estimators
+
+    def collect_confusion(self, epoch, evaluation_set, training_loss):
+        print('\nCollecting confusion matrix, epoch: %d' % epoch)
+
+        self.net.eval()
+        cm = ConfusionMeter(self.problem.num_classes(), normalized=False)
+        evaluation_set= self.problem.test_loader_range(0, self.args.num_validation)
+        confusions=[]
+        example_index=0
+        for batch_idx, (inputs, targets) in enumerate(evaluation_set):
+
+            if self.use_cuda:
+                inputs, targets = inputs.cuda(), targets.cuda()
+            inputs, targets = Variable(inputs, volatile=True), Variable(targets)
+            outputs = self.net(inputs)
+            loss = self.criterion(outputs, targets)
+            # accumulate the confusion matrix:
+            _, predicted = torch.max(outputs.data, 1)
+            for index in range(0,self.mini_batch_size):
+                cm.reset()
+                cm.add(predicted=predicted[index], target=targets.data[index])
+                confusions+=[(example_index+index, epoch, training_loss, cm.value())]
+
+            progress_bar(batch_idx * self.mini_batch_size, self.max_validation_examples)
+            example_index+=self.mini_batch_size
+        self.confusion_matrix = cm.value().transpose()
+
 
     def log_performance_header(self, performance_estimators, kind="perfs"):
         global best_test_loss

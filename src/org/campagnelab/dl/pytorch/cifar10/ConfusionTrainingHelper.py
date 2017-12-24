@@ -1,4 +1,7 @@
 import os
+from queue import PriorityQueue
+
+import sys
 import torch
 from torch.autograd import Variable
 from torch.nn import CrossEntropyLoss
@@ -7,6 +10,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from org.campagnelab.dl.pytorch.cifar10.FloatHelper import FloatHelper
 from org.campagnelab.dl.pytorch.cifar10.LossHelper import LossHelper
 from org.campagnelab.dl.pytorch.cifar10.PerformanceList import PerformanceList
+from org.campagnelab.dl.pytorch.cifar10.PriorityQueues import PriorityQueues
 from org.campagnelab.dl.pytorch.cifar10.Problems import create_model
 from org.campagnelab.dl.pytorch.cifar10.confusion.ConfusionModel import ConfusionModel
 from org.campagnelab.dl.pytorch.cifar10.utils import batch, progress_bar
@@ -140,20 +144,25 @@ class ConfusionTrainingHelper:
         return performance_estimators
 
 
-    def predict(self):
+    def predict(self, max_examples=sys.maxsize, max_queue_size=10):
+
         training_losses=self.training_losses
+        pq=PriorityQueues(training_losses,max_queue_size=max_queue_size)
+
         args = self.args
         problem = self.problem
-        performance_estimators = PerformanceList()
-        performance_estimators += [FloatHelper("test_loss")]
         self.model.eval()
-        for performance_estimator in performance_estimators:
-            performance_estimator.init_performance_metrics()
+        decoder={}
         num_classes = problem.num_classes()
-        for training_loss in training_losses:
-            for batch_idx, tensors in enumerate(batch(problem.unsup_set(), args.mini_batch_size)):
+        for i in range(num_classes):
+            for j in range(num_classes):
+                decoder[class_label(num_classes,i,j)]=(i,j)
+
+        image_index=0
+        for batch_idx, tensors in enumerate(batch(problem.unsup_set(), args.mini_batch_size)):
+            image_index=batch_idx*len(tensors)
+            for training_loss in training_losses:
                 batch_size = min(len(tensors), args.mini_batch_size)
-                targets = torch.zeros(batch_size)
                 training_loss_input = torch.zeros(batch_size, 1)
                 trained_with_input = torch.zeros(batch_size, 1)
                 tensor_images=(torch.stack([ ti for ti,_ in tensors], dim=0))
@@ -172,15 +181,19 @@ class ConfusionTrainingHelper:
                     trained_with_input = trained_with_input.cuda()
 
                 outputs = self.model(training_loss_input, trained_with_input, image_input)
-                max_values, indices = torch.max(outputs.data, 1)
-                print(outputs.data)
-                #(predicted, true)=convert(indices)
-                #progress_bar(batch_idx * batch_size,
-                #             len(confusion_data),
-                #             " ".join([performance_estimator.progress_message() for performance_estimator in
-                #                       performance_estimators]))
+                max_values, indices = torch.max(outputs.data, dim=1)
+                for index in range(batch_size):
+                    (predicted_index, true_index)=decoder[indices[index]]
+                    probability=max_values[index]
+                    if predicted_index!=true_index:
+                        # off diagonal prediction, predicting an error on this image:
+                        unsup_index = image_index + index
+                        #print("training_loss={} probability={} predicted_index={}, true_index={} unsup_index={}".format(
+                        #       training_loss, probability, predicted_index, true_index, unsup_index))
+                        pq.put(training_loss,probability, unsup_index)
 
-        return performance_estimators
+            if batch_idx*args.mini_batch_size>max_examples: break
+        return pq
 
     def load_confusion_model(self, checkpoint_key):
         if not os.path.isdir('checkpoint'):

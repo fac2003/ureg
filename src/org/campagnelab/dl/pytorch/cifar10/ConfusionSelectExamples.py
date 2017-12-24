@@ -51,6 +51,8 @@ if __name__ == '__main__':
                         help='The problem that confusion data was collected for, either CIFAR10 or STL10')
     parser.add_argument('--checkpoint-key', help='random key to save/load the image model and save confusion models',
                         default=''.join(random.choices(string.ascii_uppercase, k=5)))
+    parser.add_argument('--max-examples', default=100, type=int, help='Scan at most max examples from the unuspervised set.')
+
     args = parser.parse_args()
 
     use_cuda = torch.cuda.is_available()
@@ -70,4 +72,11 @@ if __name__ == '__main__':
     print("Loading confusion model from {}".format(args.checkpoint_key))
     helper=ConfusionTrainingHelper(None, problem, args, use_cuda, checkpoint_key=args.checkpoint_key)
 
-    helper.predict()
+    priority_queues=helper.predict(max_examples=args.max_examples)
+    with open("unsupexamples-{}.tsv".format(args.checkpoint_key), mode="w") as unsup:
+        for training_loss in helper.training_losses:
+            unsup.write(str(training_loss))
+            unsup.write("\t")
+            unsup.write(" ".join(map(str,priority_queues.get(training_loss))))
+            unsup.write("\n")
+

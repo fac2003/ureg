@@ -43,6 +43,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Evaluate split training against CIFAR10 & STL10')
     parser.add_argument('--lr', default=0.005, type=float, help='Learning rate.')
     parser.add_argument('--resume', '-r', action='store_true', help='resume from checkpoint.')
+    parser.add_argument('--write-confusion', action='store_true', help='Write confusion data to a file. This data can be used '
+                                                                       'to train with TrainConfusion.')
+
     parser.add_argument('--load-pre-trained-model', action='store_true', help='Load a pre-trained model (matching checkpoint-key).')
     parser.add_argument('--fine-tune', action='store_true', help='Fine-tune a pre-trained model (only optimize classifier layer(s).')
     parser.add_argument('--split', action='store_true', help='Enable unsupervised training (split).')

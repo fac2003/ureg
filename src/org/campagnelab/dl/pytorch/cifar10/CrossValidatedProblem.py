@@ -35,13 +35,20 @@ class CrossValidatedProblem(Problem):
     def train_set(self):
         return [self.delegate.train_set()[index] for index in range(0,len(self.training_indices))]
 
+    def delegate_train_index(self, cv_index):
+        """Return the index of the training sample in the delegate."""
+        return self.training_indices[cv_index]
+
+    def delegate_validation_index(self, cv_index):
+        """Return the index of the validation sample in the delegate."""
+        return self.validation_indices[cv_index]
 
     def unsup_set(self):
 
         return self.delegate.unsup_set()
 
     def test_set(self):
-        return [self.delegate.test_set()[index] for index in range(0, len(self.test_set()))]
+        return [self.delegate.train_set()[index] for index in range(0, len(self.validation_indices))]
 
     def name(self):
         return "cross-validated " + self.delegate.name()

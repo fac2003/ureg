@@ -45,18 +45,10 @@ from org.campagnelab.dl.pytorch.cifar10.utils import batch
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Train a confusion model.')
-    parser.add_argument('--lr', default=0.1, type=float, help='Learning rate.')
+    parser = argparse.ArgumentParser(description='Use a confusion model to select unsupervised examples to supplement training.')
     parser.add_argument('--mini-batch-size', default=100, type=int, help='Size of the mini-batch.')
     parser.add_argument('--problem', default="CIFAR10", type=str,
                         help='The problem that confusion data was collected for, either CIFAR10 or STL10')
-    parser.add_argument('--confusion-data', type=str,
-                        help='File with confusion data to train the model with.')
-    parser.add_argument('--num-epochs', '--max-epochs', type=int,
-                        help='Number of epochs to train before stopping. Additional epochs when --resume.', default=200)
-    parser.add_argument('--L2', type=float, help='L2 regularization.', default=1E-4)
-    parser.add_argument('--model', default="PreActResNet18", type=str,
-                        help='The model to instantiate. One of VGG16,	ResNet18, ResNet50, ResNet101,ResNeXt29, ResNeXt29, DenseNet121, PreActResNet18, DPN92')
     parser.add_argument('--checkpoint-key', help='random key to save/load the image model and save confusion models',
                         default=''.join(random.choices(string.ascii_uppercase, k=5)))
     args = parser.parse_args()
@@ -73,29 +65,15 @@ if __name__ == '__main__':
     else:
         print("Unsupported problem: " + args.problem)
         exit(1)
-    Confusion = collections.namedtuple('Confusion', 'trained_with example_index epoch train_loss predicted_label true_label')
 
-    confusion_data = []
-    with open(args.confusion_data, mode="r") as conf_data:
-        for line in conf_data.readlines():
-                line=line.replace("\n","")
-                trained_with, example_index, epoch, train_loss, predicted_label, true_label = line.split("\t")
-                true_label=true_label.split("\n")[0]
-                confusion_data += [Confusion(bool(trained_with=="True"), int(example_index), int(epoch), \
-                                             float(train_loss), int(predicted_label), int(true_label))]
     use_cuda=torch.cuda.is_available()
-    print("Loading pre-trained image model from {}".format(args.checkpoint_key))
-    image_model=TrainModelSplit(args,problem,use_cuda).load_checkpoint()
+    print("Loading confusion model from {}".format(args.checkpoint_key))
+    helper=ConfusionTrainingHelper(None, problem, args, use_cuda, checkpoint_key=args.checkpoint_key)
 
-    helper=ConfusionTrainingHelper(image_model, problem, args, use_cuda)
-    random.shuffle(confusion_data)
-    train_split=confusion_data[0:int(len(confusion_data)*2/3)]
-    test_split=confusion_data[int(len(confusion_data)/3):len(confusion_data)]
-    best_loss=sys.maxsize
-    no_improvement=0
+    helper.predict()
 
-    distinct_training_losses=set([ cd.train_loss for cd in confusion_data])
-    for epoch in range(0, args.num_epochs):
+
+
         perfs=PerformanceList()
         perfs+=[helper.train(epoch, train_split)]
         perfs+=[helper.test(epoch, test_split)]
@@ -103,10 +81,9 @@ if __name__ == '__main__':
         train_loss=perfs.get_metric("train_loss")
         test_loss=perfs.get_metric("test_loss")
         print("epoch {} train_loss={} test_loss={}".format(epoch,train_loss, test_loss))
-
         if test_loss<best_loss:
             best_loss=test_loss
-            helper.save_confusion_model(epoch, test_loss, distinct_training_losses)
+            helper.save_confusion_model(epoch, test_loss)
             no_improvement=0
         else:
             no_improvement+=1

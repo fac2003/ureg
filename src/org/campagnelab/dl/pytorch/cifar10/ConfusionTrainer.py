@@ -8,6 +8,7 @@ import string
 
 import sys
 from torch.nn import CrossEntropyLoss
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from org.campagnelab.dl.pytorch.cifar10.Cifar10Problem import Cifar10Problem
 from org.campagnelab.dl.pytorch.cifar10.ConfusionTrainingHelper import ConfusionTrainingHelper
@@ -92,6 +93,9 @@ if __name__ == '__main__':
     test_split=confusion_data[int(len(confusion_data)/3):len(confusion_data)]
     best_loss=sys.maxsize
     no_improvement=0
+
+
+
     for epoch in range(0, args.num_epochs):
         perfs=PerformanceList()
         perfs+=[helper.train(epoch, train_split)]

@@ -2,6 +2,7 @@ import os
 import torch
 from torch.autograd import Variable
 from torch.nn import CrossEntropyLoss
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from org.campagnelab.dl.pytorch.cifar10.FloatHelper import FloatHelper
 from org.campagnelab.dl.pytorch.cifar10.LossHelper import LossHelper
@@ -23,6 +24,9 @@ class ConfusionTrainingHelper:
         self.args=args
         self.optimizer = torch.optim.SGD(self.model.parameters(), lr=args.lr, momentum=0.9,
                                          weight_decay=args.L2)
+        self.lr_scheduler = ReduceLROnPlateau(self.optimizer, "min", factor=0.5,
+                                               patience=10,
+                                               verbose=True)
         self.criterion = CrossEntropyLoss()
         if use_cuda:
             self.model.cuda()
@@ -125,6 +129,7 @@ class ConfusionTrainingHelper:
             #             len(confusion_data),
             #             " ".join([performance_estimator.progress_message() for performance_estimator in
             #                       performance_estimators]))
+        self.lr_scheduler.step(performance_estimators.get_metric("test_loss"), epoch=epoch)
         return performance_estimators
 
     def save_confusion_model(self, epoch, test_loss):

@@ -114,3 +114,5 @@ if __name__ == '__main__':
         if no_improvement>20:
             print("Early stopping, since no improvement in test loss")
             break
+
+    print("Confusion model training done, best test loss={}".format(best_loss))

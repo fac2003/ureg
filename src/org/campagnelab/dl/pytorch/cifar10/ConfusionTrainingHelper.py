@@ -24,8 +24,8 @@ class ConfusionTrainingHelper:
         self.args=args
         self.optimizer = torch.optim.SGD(self.model.parameters(), lr=args.lr, momentum=0.9,
                                          weight_decay=args.L2)
-        self.lr_scheduler = ReduceLROnPlateau(self.optimizer, "min", factor=0.5,
-                                               patience=10,
+        self.lr_scheduler = ReduceLROnPlateau(self.optimizer, "min", factor=0.1,
+                                               patience=5,
                                                verbose=True)
         self.criterion = CrossEntropyLoss()
         if use_cuda:

@@ -14,6 +14,7 @@ from org.campagnelab.dl.pytorch.cifar10.ConfusionTrainingHelper import Confusion
 from org.campagnelab.dl.pytorch.cifar10.PerformanceList import PerformanceList
 from org.campagnelab.dl.pytorch.cifar10.Problems import create_model
 from org.campagnelab.dl.pytorch.cifar10.STL10Problem import STL10Problem
+from org.campagnelab.dl.pytorch.cifar10.TrainModelSplit import TrainModelSplit
 from org.campagnelab.dl.pytorch.cifar10.confusion.ConfusionModel import ConfusionModel
 from org.campagnelab.dl.pytorch.cifar10.models import *
 # MIT License
@@ -55,7 +56,7 @@ if __name__ == '__main__':
     parser.add_argument('--L2', type=float, help='L2 regularization.', default=1E-4)
     parser.add_argument('--model', default="PreActResNet18", type=str,
                         help='The model to instantiate. One of VGG16,	ResNet18, ResNet50, ResNet101,ResNeXt29, ResNeXt29, DenseNet121, PreActResNet18, DPN92')
-    parser.add_argument('--checkpoint-key', help='random key to save/load confusion models',
+    parser.add_argument('--checkpoint-key', help='random key to save/load the image model and save confusion models',
                         default=''.join(random.choices(string.ascii_uppercase, k=5)))
     args = parser.parse_args()
 
@@ -77,12 +78,15 @@ if __name__ == '__main__':
     with open(args.confusion_data, mode="r") as conf_data:
         for line in conf_data.readlines():
                 line=line.replace("\n","")
-                trained_with, epoch, example_index, train_loss, predicted_label, true_label = line.split("\t")
+                trained_with, example_index, epoch, train_loss, predicted_label, true_label = line.split("\t")
                 true_label=true_label.split("\n")[0]
-                confusion_data += [Confusion(bool(trained_with), int(example_index), int(epoch), \
+                confusion_data += [Confusion(bool(trained_with=="True"), int(example_index), int(epoch), \
                                              float(train_loss), int(predicted_label), int(true_label))]
     use_cuda=torch.cuda.is_available()
-    helper=ConfusionTrainingHelper(args.model, problem, args, use_cuda)
+    print("Loading pre-trained image model from {}".format(args.checkpoint_key))
+    image_model=TrainModelSplit(args,problem,use_cuda).load_checkpoint()
+
+    helper=ConfusionTrainingHelper(image_model, problem, args, use_cuda)
     random.shuffle(confusion_data)
     train_split=confusion_data[0:int(len(confusion_data)*2/3)]
     test_split=confusion_data[int(len(confusion_data)/3):len(confusion_data)]

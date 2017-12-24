@@ -18,7 +18,7 @@ class ConfusionTrainingHelper:
 
     def __init__(self, model, problem, args, use_cuda):
         self.use_cuda = use_cuda
-        self.model = ConfusionModel(create_model(model, problem), problem)
+        self.model = ConfusionModel(model, problem)
         self.problem=problem
         self.args=args
         self.optimizer = torch.optim.SGD(self.model.parameters(), lr=args.lr, momentum=0.9,
@@ -42,9 +42,9 @@ class ConfusionTrainingHelper:
             batch_size = min(len(confusion_list), args.mini_batch_size)
             images = [None] * batch_size
             targets = torch.zeros(batch_size)
+
             optimizer.zero_grad()
             training_loss_input = torch.zeros(batch_size, 1)
-
             trained_with_input = torch.zeros(batch_size, 1)
 
             for index, confusion in enumerate(confusion_list):
@@ -56,7 +56,7 @@ class ConfusionTrainingHelper:
                 images[index], _ = dataset[confusion.example_index]
 
                 training_loss_input[index]=confusion.train_loss
-                training_loss_input[index]=1.0 if confusion.trained_with else 0.0
+                trained_with_input[index]=1.0 if confusion.trained_with else 0.0
 
             image_input = Variable(torch.stack(images, dim=0), requires_grad=True)
             training_loss_input = Variable(training_loss_input, requires_grad=True)

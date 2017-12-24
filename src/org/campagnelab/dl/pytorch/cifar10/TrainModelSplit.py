@@ -17,7 +17,7 @@ from org.campagnelab.dl.pytorch.cifar10.FloatHelper import FloatHelper
 from org.campagnelab.dl.pytorch.cifar10.LRHelper import LearningRateHelper
 from org.campagnelab.dl.pytorch.cifar10.LossHelper import LossHelper
 from org.campagnelab.dl.pytorch.cifar10.PerformanceList import PerformanceList
-from org.campagnelab.dl.pytorch.cifar10.utils import progress_bar, grad_norm, init_params
+from org.campagnelab.dl.pytorch.cifar10.utils import progress_bar, grad_norm, init_params, batch
 from org.campagnelab.dl.pytorch.ureg.LRSchedules import construct_scheduler
 
 
@@ -151,10 +151,10 @@ class TrainModelSplit:
                 model_built = False
         else:
             if hasattr(self.args, 'load_pre_trained_model') and self.args.load_pre_trained_model:
-                self.net=self.load_pretrained_model()
+                self.net = self.load_pretrained_model()
                 self.net.remake_classifier(self.problem.num_classes(), self.use_cuda, dropout_p=0)
                 init_params(self.net.get_classifier())
-                model_built=self.net is not None
+                model_built = self.net is not None
 
         if not model_built:
             print('==> Building model {}'.format(args.model))
@@ -175,8 +175,6 @@ class TrainModelSplit:
                                 if hasattr(self.args, 'reset_lr_every_n_epochs')
                                 else None)
 
-
-
     def train(self, epoch,
               performance_estimators=None,
               train_supervised_model=True,
@@ -193,7 +191,6 @@ class TrainModelSplit:
             performance_estimators += [FloatHelper("train_grad_norm")]
             performance_estimators += [FloatHelper("factor")]
             print('\nTraining, epoch: %d' % epoch)
-
 
         self.net.train()
         supervised_grad_norm = 1.
@@ -240,7 +237,7 @@ class TrainModelSplit:
 
                 supervised_loss = self.criterion(outputs, targets)
                 alpha = self.args.factor
-                optimized_loss = supervised_loss * ( alpha) + (1.-alpha) * average_unsupervised_loss
+                optimized_loss = supervised_loss * (alpha) + (1. - alpha) * average_unsupervised_loss
                 optimized_loss.backward()
                 self.optimizer_training.step()
                 supervised_grad_norm = grad_norm(self.net.parameters())
@@ -293,8 +290,8 @@ class TrainModelSplit:
         best_pretrain_loss = sys.maxsize
         optimizer = self.optimizer_training
         scheduler = ReduceLROnPlateau(optimizer, "min", factor=0.5,
-                                           patience=self.args.lr_patience ,
-                                           verbose=True)
+                                      patience=self.args.lr_patience,
+                                      verbose=True)
         if performance_estimators is None:
             performance_estimators = PerformanceList()
             performance_estimators += [FloatHelper("pretrain_loss")]
@@ -307,7 +304,7 @@ class TrainModelSplit:
         for cycle in range(0, num_cycles):
             self.net.remake_classifier(num_classes, self.use_cuda, amount_of_dropout)
             init_params(self.net.get_classifier())
-            pre_training_set = self.calculate_pre_training_set(num_classes,self.args.num_shaving)
+            pre_training_set = self.calculate_pre_training_set(num_classes, self.args.num_shaving)
 
             best_acc = 0
             for epoch in range(0, epochs_per_cycle):
@@ -335,7 +332,7 @@ class TrainModelSplit:
                 pretrain_acc = performance_estimators.get_metric("pretrain_accuracy")
                 if pretrain_acc >= max_acc:
                     # we report the number of epochs needed to reach 10% accuracy in this cycle:
-                    performance_estimators.set_metric(epoch,"epoch_at_10",epoch)
+                    performance_estimators.set_metric(epoch, "epoch_at_10", epoch)
                     break
                 progress_bar(epoch, (epochs_per_cycle),
                              msg=performance_estimators.progress_message(["pretrain_accuracy", "pretrain_loss"]))
@@ -347,14 +344,14 @@ class TrainModelSplit:
             print("cycle {} pretraining-loss={} accuracy={}".format(cycle,
                                                                     pretrain_loss,
                                                                     pretrain_acc))
-            if pretrain_loss<best_pretrain_loss:
+            if pretrain_loss < best_pretrain_loss:
                 self.save_pretrained_model()
                 self.net.train()
-                best_pretrain_loss=pretrain_loss
+                best_pretrain_loss = pretrain_loss
             scheduler.step(pretrain_loss, epoch=cycle)
             self.log_performance_metrics(epoch=cycle, performance_estimators=performance_estimators, kind="pre")
 
-            self.net.remake_classifier(self.problem.num_classes(), self.use_cuda,amount_of_dropout)
+            self.net.remake_classifier(self.problem.num_classes(), self.use_cuda, amount_of_dropout)
 
     def calculate_pre_training_set(self, num_classes, num_shaving, shuffle_training_set=True):
         unsuploader_shuffled = self.problem.reg_loader_subset_range(0, num_shaving)
@@ -485,9 +482,9 @@ class TrainModelSplit:
                 targets = targets.cuda()
             for example_index in range(0, self.mini_batch_size):
                 inputs[example_index] = inputs1[example_index] * lam[example_index] + inputs2[example_index] * (
-                        1. - lam[example_index])
+                    1. - lam[example_index])
                 targets[example_index] = targets1[example_index] * lam[example_index] + targets2[example_index] * (
-                        1. - lam[example_index])
+                    1. - lam[example_index])
         else:
             lam = numpy.random.beta(alpha, alpha)
             targets1 = self.problem.one_hot(targets1)
@@ -597,7 +594,7 @@ class TrainModelSplit:
 
             if ((batch_idx + 1) * self.mini_batch_size) > self.max_validation_examples:
                 break
-        #print()
+        # print()
 
         # Apply learning rate schedule:
         test_accuracy = self.get_metric(performance_estimators, "test_accuracy")
@@ -607,15 +604,26 @@ class TrainModelSplit:
         self.confusion_matrix = cm.value().transpose()
         return performance_estimators
 
-    def collect_confusion(self, epoch, evaluation_set, training_loss):
+    def collect_confusion(self, epoch, trained_with, training_loss):
+        if not self.args.write_confusion:
+            return
+
         print('\nCollecting confusion matrix, epoch: %d' % epoch)
+        if trained_with:
+            # the model was trained with this set.
+            evaluation_set = self.problem.train_set()
+            max_index = self.args.num_training
+        else:
+            # the model has not seen this set:
+            evaluation_set = self.problem.test_set()
+            max_index = self.args.num_validation
+        evaluation_loader = torch.utils.data.DataLoader(evaluation_set, batch_size=10, shuffle=False, num_workers=1)
 
         self.net.eval()
-        cm = ConfusionMeter(self.problem.num_classes(), normalized=False)
-        evaluation_set= self.problem.test_loader_range(0, self.args.num_validation)
-        confusions=[]
-        example_index=0
-        for batch_idx, (inputs, targets) in enumerate(evaluation_set):
+
+        confusions = []
+        example_index = 0
+        for batch_idx, (inputs, targets) in enumerate(evaluation_loader):
 
             if self.use_cuda:
                 inputs, targets = inputs.cuda(), targets.cuda()
@@ -624,14 +632,28 @@ class TrainModelSplit:
             loss = self.criterion(outputs, targets)
             # accumulate the confusion matrix:
             _, predicted = torch.max(outputs.data, 1)
-            for index in range(0,self.mini_batch_size):
-                cm.reset()
-                cm.add(predicted=predicted[index], target=targets.data[index])
-                confusions+=[(example_index+index, epoch, training_loss, cm.value())]
+            for index in range(0, len(predicted)):
 
+                image_index = example_index + index
+                if hasattr(self.problem,'delegate_train_index'):
+                    # problem is cross-validated, we need to obtain the example index in the original problem:
+                    if trained_with:
+                        image_index=self.problem.delegate_train_index(image_index)
+                    else:
+                        image_index = self.problem.delegate_validation_index(image_index)
+
+                confusion_row=(trained_with, image_index, epoch, training_loss, predicted[index], targets.data[index])
+
+                confusions += [confusion_row]
+            example_index += len(predicted)
+            if ((batch_idx + 1) * self.mini_batch_size) > max_index:
+                    break
             progress_bar(batch_idx * self.mini_batch_size, self.max_validation_examples)
-            example_index+=self.mini_batch_size
-        self.confusion_matrix = cm.value().transpose()
+
+        with open(self.confusion_data_filename(),mode="a") as conf_data:
+            for line in confusions:
+                conf_data.write("{}\t{}\t{}\t{}\t{}\t{}".format(*line))
+                conf_data.write("\n")
 
 
     def log_performance_header(self, performance_estimators, kind="perfs"):
@@ -645,15 +667,15 @@ class TrainModelSplit:
             metrics = metrics + performance_estimator.metric_names()
 
         if not self.args.resume:
-            with open("all-{}-{}.tsv".format(kind,self.args.checkpoint_key), "w") as perf_file:
+            with open("all-{}-{}.tsv".format(kind, self.args.checkpoint_key), "w") as perf_file:
                 perf_file.write("\t".join(map(str, metrics)))
                 perf_file.write("\n")
 
-            with open("best-{}-{}.tsv".format(kind,self.args.checkpoint_key), "w") as perf_file:
+            with open("best-{}-{}.tsv".format(kind, self.args.checkpoint_key), "w") as perf_file:
                 perf_file.write("\t".join(map(str, metrics)))
                 perf_file.write("\n")
 
-    def log_performance_metrics(self, epoch, performance_estimators,kind="perfs"):
+    def log_performance_metrics(self, epoch, performance_estimators, kind="perfs"):
         """
         Log metrics and returns the best performance metrics seen so far.
         :param epoch:
@@ -664,7 +686,7 @@ class TrainModelSplit:
         for performance_estimator in performance_estimators:
             metrics = metrics + performance_estimator.estimates_of_metric()
         early_stop = False
-        with open("all-{}-{}.tsv".format(kind,self.args.checkpoint_key), "a") as perf_file:
+        with open("all-{}-{}.tsv".format(kind, self.args.checkpoint_key), "a") as perf_file:
             perf_file.write("\t".join(map(_format_nice, metrics)))
             perf_file.write("\n")
         if self.best_performance_metrics is None:
@@ -674,7 +696,7 @@ class TrainModelSplit:
         if metric is not None and metric > self.best_acc:
             self.failed_to_improve = 0
 
-            with open("best-{}-{}.tsv".format(kind,self.args.checkpoint_key), "a") as perf_file:
+            with open("best-{}-{}.tsv".format(kind, self.args.checkpoint_key), "a") as perf_file:
                 perf_file.write("\t".join(map(_format_nice, metrics)))
                 perf_file.write("\n")
 
@@ -714,13 +736,13 @@ class TrainModelSplit:
         assert os.path.isdir('checkpoint'), 'Error: no checkpoint directory found!'
         checkpoint = None
         try:
-            key=self.args.checkpoint_key.split("-")[0]
+            key = self.args.checkpoint_key.split("-")[0]
             model_filename = './checkpoint/pretrained_{}.t7'.format(key)
             checkpoint = torch.load(model_filename)
         except FileNotFoundError as e:
-            print("pretrained model filename was not found: "+model_filename)
+            print("pretrained model filename was not found: " + model_filename)
         if checkpoint is not None:
-            print("Loaded pre-trained model from "+model_filename)
+            print("Loaded pre-trained model from " + model_filename)
             return checkpoint['net']
         else:
             print("Could not load pre-trained model checkpoint.")
@@ -838,9 +860,14 @@ class TrainModelSplit:
             # freeze the entire model:
             for param in self.net.parameters():
                 param.requires_grad = False
-            # unfreeze the classifier part:
+                # unfreeze the classifier part:
                 for param in self.net.get_classifier().parameters():
                     param.requires_grad = True
+        if self.args.write_confusion:
+            try:
+                os.remove(self.confusion_data_filename())
+            except FileNotFoundError:
+                pass
 
         for epoch in range(self.start_epoch, self.start_epoch + self.args.num_epochs):
 
@@ -849,9 +876,11 @@ class TrainModelSplit:
                                  train_supervised_model=True,
                                  train_split=False
                                  )]
+            self.collect_confusion(epoch, True, perfs.get_metric("train_loss"))
             perfs += [(lr_train_helper,)]
             if previous_test_perfs is None or self.epoch_is_test_epoch(epoch):
                 perfs += [self.test(epoch)]
+            self.collect_confusion(epoch, False, perfs.get_metric("train_loss"))
 
             perfs = flatten(perfs)
             if (not header_written):
@@ -940,7 +969,7 @@ class TrainModelSplit:
         channels = uinputs.size()[1]
         width = uinputs.size()[2]
         height = uinputs.size()[3]
-        #print("mask down-------------")
+        # print("mask down-------------")
         # fill in the first channel:
         for x in range(0, width):
             for y in range(0, height):
@@ -948,12 +977,12 @@ class TrainModelSplit:
                 on_the_line = on_line(x - width / 2, y, slope=slope, b=height / 2.0)
                 mask_up[x, y] = 1 if above_the_line and not on_the_line else 0
                 mask_down[x, y] = 0 if above_the_line  else \
-                (1 if not on_the_line else 0)
-                #print("." if mask_down[x, y] else " ",end="")
-            #    print("." if mask_up[x, y] else " ",end="")
-        #    print("|")
+                    (1 if not on_the_line else 0)
+                # print("." if mask_down[x, y] else " ",end="")
+                #    print("." if mask_up[x, y] else " ",end="")
+        # print("|")
 
-        #print("-----------mask down")
+        # print("-----------mask down")
         mask1 = torch.ByteTensor(uinputs.size()[1:])
         mask2 = torch.ByteTensor(uinputs.size()[1:])
 
@@ -969,3 +998,6 @@ class TrainModelSplit:
         mask2 = Variable(mask2, requires_grad=False)
 
         return uinputs.masked_fill(mask1, random()), uinputs.masked_fill(mask2, random())
+
+    def confusion_data_filename(self):
+        return "confusion-{}-data.tsv".format(self.args.checkpoint_key)

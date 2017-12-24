@@ -77,7 +77,7 @@ class PreActResNet(EstimateFeatureSize):
         self.layer3 = self._make_layer(block, 256, num_blocks[2], stride=2)
         self.layer4 = self._make_layer(block, 512, num_blocks[3], stride=2)
         self.num_out = self.estimate_output_size(input_shape, self.features_forward)
-
+        #self.features=nn.Sequential(self.conv1, self.layer1,self.layer2,self.layer3, self.layer4,F.avg_pool2d)
         self.remake_classifier(num_classes,False)
 
     def remake_classifier(self, num_classes, use_cuda, dropout_p=0.5):

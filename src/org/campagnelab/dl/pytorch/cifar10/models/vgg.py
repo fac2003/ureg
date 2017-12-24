@@ -34,6 +34,11 @@ class VGG(EstimateFeatureSize):
         out = self.classifier(out)
         return out
 
+    def features_forward(self, x):
+        out = self.features(x)
+        out = out.view(out.size(0), -1)
+        return out
+
     def _make_layers(self, cfg):
         layers = []
         in_channels = 3

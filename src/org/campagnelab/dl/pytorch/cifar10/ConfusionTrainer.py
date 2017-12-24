@@ -8,6 +8,7 @@ import random
 from torch.nn import CrossEntropyLoss
 
 from org.campagnelab.dl.pytorch.cifar10.Cifar10Problem import Cifar10Problem
+from org.campagnelab.dl.pytorch.cifar10.ConfusionTrainingHelper import ConfusionTrainingHelper
 from org.campagnelab.dl.pytorch.cifar10.Problems import create_model
 from org.campagnelab.dl.pytorch.cifar10.STL10Problem import STL10Problem
 from org.campagnelab.dl.pytorch.cifar10.confusion.ConfusionModel import ConfusionModel
@@ -36,8 +37,7 @@ from org.campagnelab.dl.pytorch.cifar10.models import *
 from org.campagnelab.dl.pytorch.cifar10.utils import batch
 
 
-def class_label(num_classes, predicted_index, true_index):
-    return predicted_index*num_classes + true_index
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train a confusion model.')
@@ -78,39 +78,9 @@ if __name__ == '__main__':
                 confusion_data += [Confusion(bool(trained_with), int(example_index), int(epoch), \
                                              float(train_loss), int(predicted_label), int(true_label))]
 
-    model = ConfusionModel(create_model(args.model, problem),problem)
-
-    optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=0.9,
-                                weight_decay=args.L2)
-    criterion=CrossEntropyLoss()
+    helper=ConfusionTrainingHelper(args.model, problem, args)
     random.shuffle(confusion_data)
+
     for epoch in range(0, args.num_epochs):
 
-        for batch_idx, confusion_list in enumerate(batch(confusion_data, args.mini_batch_size)):
-            images=[None]*args.mini_batch_size
-            targets=torch.zeros(args.mini_batch_size)
-            optimizer.zero_grad()
-            training_loss_input = torch.zeros(args.mini_batch_size, 1)
-
-            trained_with_input =torch.zeros(args.mini_batch_size, 1)
-
-            for index, confusion in enumerate(confusion_list):
-
-                num_classes = problem.num_classes()
-                targets[index]=class_label(num_classes,
-                                           confusion.predicted_label,confusion.true_label)
-                dataset=problem.train_set() if confusion.trained_with  else problem.test_set()
-                images[index], _ = dataset[confusion.example_index]
-                training_loss_input[index]=confusion.train_loss
-                training_loss_input[index]=1.0 if confusion.trained_with else 0.0
-
-            image_input=Variable(torch.stack(images,dim=0), requires_grad=True)
-            training_loss_input=Variable(training_loss_input, requires_grad=True)
-            trained_with_input=Variable(trained_with_input, requires_grad=True)
-            targets=Variable(targets, requires_grad=False).type(torch.LongTensor)
-
-            outputs=model( training_loss_input, trained_with_input,image_input)
-            loss=criterion(outputs,targets)
-            print("training loss: "+str(loss.data[0]))
-            loss.backward()
-            optimizer.step()
+        helper.train(epoch, confusion_data)

@@ -71,25 +71,3 @@ if __name__ == '__main__':
     helper=ConfusionTrainingHelper(None, problem, args, use_cuda, checkpoint_key=args.checkpoint_key)
 
     helper.predict()
-
-
-
-        perfs=PerformanceList()
-        perfs+=[helper.train(epoch, train_split)]
-        perfs+=[helper.test(epoch, test_split)]
-
-        train_loss=perfs.get_metric("train_loss")
-        test_loss=perfs.get_metric("test_loss")
-        print("epoch {} train_loss={} test_loss={}".format(epoch,train_loss, test_loss))
-        if test_loss<best_loss:
-            best_loss=test_loss
-            helper.save_confusion_model(epoch, test_loss)
-            no_improvement=0
-        else:
-            no_improvement+=1
-
-        if no_improvement>20:
-            print("Early stopping, since no improvement in test loss")
-            break
-
-    print("Confusion model training done, best test loss={}".format(best_loss))

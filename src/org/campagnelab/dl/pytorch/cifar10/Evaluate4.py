@@ -118,6 +118,8 @@ if __name__ == '__main__':
     parser.add_argument('--cross-validation-indices', type=str,
                         help='coma separated list of fold indices to evaluate. If the option '
                              'is not speficied, all folds are evaluated ', default=None)
+    parser.add_argument('--unsup-confusion', help='Name of file with unsupervised examples calculated with ConfusionSelectExamples.',
+                        default=None)
 
     args = parser.parse_args()
 

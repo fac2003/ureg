@@ -87,6 +87,8 @@ class TrainModelSplit:
         self.failed_to_improve = 0
         self.confusion_matrix = None
         self.best_model_confusion_matrix = None
+        if args.unsup_confusion is not None:
+            self.parse_confusion_examples(args.unsup_confusion)
 
     def init_model(self, create_model_function):
         """Resume training if necessary (args.--resume flag is True), or call the
@@ -1001,3 +1003,41 @@ class TrainModelSplit:
 
     def confusion_data_filename(self):
         return "confusion-{}-data.tsv".format(self.args.checkpoint_key)
+
+    def parse_confusion_examples(self, unsup_confusion):
+        """Load file with examples produced by ConfusionSelectExamples.py """
+        self.confusion_examples_map = {}
+        with open(unsup_confusion,mode="r") as examples:
+
+            while True:
+                line=examples.readline()
+                if line == "": break
+                line.replace("\n","")
+                tokens=line.split("\t")
+                training_loss=float(tokens[0].strip())
+                example_indices=list(map(int,tokens[1].split(" ")))
+                self.confusion_examples_map[training_loss]= example_indices
+
+        #print(str(self.find_examples_closest_to(0.061)))
+
+    def find_examples_closest_to(self, training_loss):
+        """Return the list of examples (integer indices in unsupervised set) for epoch
+        closes to the training loss
+
+        :param training_loss: The training loss at the previous epoch to adjust the set of examples
+        to the progress of training.
+        :return: list of integer indices in unsupervised set.
+        """
+        losses=list(self.confusion_examples_map.keys())
+        min_distance=sys.maxsize
+        min_index=-1
+        index=0
+        for loss in losses:
+            distance=abs(training_loss-loss)
+            if distance<min_distance:
+                min_distance=distance
+                min_index=index
+
+            index+=1
+        # the loss we need is at min_index in losses.
+        return self.confusion_examples_map[losses[min_index]]

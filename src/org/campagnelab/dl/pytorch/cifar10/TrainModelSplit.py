@@ -10,6 +10,7 @@ from torch.autograd import Variable
 from torch.backends import cudnn
 from torch.nn import MSELoss, MultiLabelSoftMarginLoss
 from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torchnet.dataset import ConcatDataset
 from torchnet.meter import ConfusionMeter
 
 from org.campagnelab.dl.pytorch.cifar10.AccuracyHelper import AccuracyHelper
@@ -17,6 +18,7 @@ from org.campagnelab.dl.pytorch.cifar10.FloatHelper import FloatHelper
 from org.campagnelab.dl.pytorch.cifar10.LRHelper import LearningRateHelper
 from org.campagnelab.dl.pytorch.cifar10.LossHelper import LossHelper
 from org.campagnelab.dl.pytorch.cifar10.PerformanceList import PerformanceList
+from org.campagnelab.dl.pytorch.cifar10.datasets.SubsetDataset import SubsetDataset
 from org.campagnelab.dl.pytorch.cifar10.utils import progress_bar, grad_norm, init_params, batch
 from org.campagnelab.dl.pytorch.ureg.LRSchedules import construct_scheduler
 
@@ -180,7 +182,7 @@ class TrainModelSplit:
     def train(self, epoch,
               performance_estimators=None,
               train_supervised_model=True,
-              train_split=False,
+              train_split=False
               ):
 
         if performance_estimators is None:
@@ -265,6 +267,71 @@ class TrainModelSplit:
         # increase factor by 10% at the end of each epoch:
         self.args.factor *= self.args.increase_decrease
         return performance_estimators
+
+
+    def train_with_unsup(self, epoch, previous_training_loss,
+              performance_estimators=None,
+              ):
+
+        if performance_estimators is None:
+            performance_estimators = PerformanceList()
+            performance_estimators += [LossHelper("train_loss")]
+        print('\nTraining with unsupervised examples, epoch: %d' % epoch)
+
+        self.net.train()
+        for performance_estimator in performance_estimators:
+            performance_estimator.init_performance_metrics()
+
+        num_batches = 0
+        problem=self.problem
+        unsup_examples=self.find_examples_closest_to(previous_training_loss)
+        if len(unsup_examples)>self.args.num_training:
+            unsup_examples=unsup_examples[0:self.args.num_training]
+        training_dataset=ConcatDataset(datasets=[
+            SubsetDataset(self.problem.train_set(), range(0,self.args.num_training)),
+            SubsetDataset(self.problem.unsup_set(), unsup_examples)])
+        train_loader_subset = torch.utils.data.DataLoader(training_dataset,
+                                                          batch_size=problem.mini_batch_size(),
+                                                          shuffle=True,
+                                                          num_workers=2)
+
+        for batch_idx, (inputs, targets) in enumerate(train_loader_subset):
+            num_batches += 1
+            if targets is None:
+                targets = torch.ones(self.mini_batch_size, self.problem.num_classes()) / self.problem.num_classes()
+            else:
+                targets = self.problem.one_hot(targets)
+
+            if self.use_cuda:
+                inputs, targets = inputs.cuda(), targets.cuda()
+
+            inputs, targets = Variable(inputs), Variable(targets, requires_grad=False)
+            self.net.train()
+            self.optimizer_training.zero_grad()
+            outputs = self.net(inputs)
+
+            supervised_loss = self.criterion_multi_label(outputs, targets)
+
+            optimized_loss = supervised_loss
+            optimized_loss.backward()
+            self.optimizer_training.step()
+            performance_estimators.set_metric_with_outputs(batch_idx, "train_loss", supervised_loss.data[0],
+                                                           outputs, targets)
+
+            progress_bar(batch_idx * self.mini_batch_size,
+                         min(self.max_regularization_examples, self.max_training_examples),
+                         " ".join([performance_estimator.progress_message() for performance_estimator in
+                                   performance_estimators]))
+
+            if (batch_idx + 1) * self.mini_batch_size > len(training_dataset):
+                break
+
+            print("\n")
+
+        # increase factor by 10% at the end of each epoch:
+        self.args.factor *= self.args.increase_decrease
+        return performance_estimators
+
 
     def pre_train_with_half_images(self, num_cycles=100, epochs_per_cycle=10,
                                    performance_estimators=None,
@@ -870,14 +937,18 @@ class TrainModelSplit:
                 os.remove(self.confusion_data_filename())
             except FileNotFoundError:
                 pass
-
+        previous_training_loss=None
         for epoch in range(self.start_epoch, self.start_epoch + self.args.num_epochs):
 
             perfs = PerformanceList()
-            perfs += [self.train(epoch,
+            if self.args.unsup_confusion is not None and previous_training_loss is not None:
+                perfs += [self.train_with_unsup(epoch,previous_training_loss=previous_training_loss)]
+            else:
+                perfs += [self.train(epoch,
                                  train_supervised_model=True,
                                  train_split=False
                                  )]
+                previous_training_loss=perfs.get_metric("train_loss")
             self.collect_confusion(epoch, True, perfs.get_metric("train_loss"))
             perfs += [(lr_train_helper,)]
             if previous_test_perfs is None or self.epoch_is_test_epoch(epoch):
@@ -895,6 +966,9 @@ class TrainModelSplit:
                 return perfs
 
         return perfs
+
+
+
 
     def training_split(self):
         """Train the model with a single pass through the training set using the unsup split strategy.

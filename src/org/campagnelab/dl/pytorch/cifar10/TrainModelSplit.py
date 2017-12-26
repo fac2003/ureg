@@ -267,8 +267,6 @@ class TrainModelSplit:
             if (batch_idx + 1) * self.mini_batch_size > self.max_training_examples:
                 break
 
-            print("\n")
-
         # increase factor by 10% at the end of each epoch:
         self.args.factor *= self.args.increase_decrease
         return performance_estimators
@@ -886,6 +884,7 @@ class TrainModelSplit:
                                        alpha=self.args.alpha,
                                        ratio_unsup=self.args.unsup_proportion
                                        )]
+            self.collect_confusion(epoch, True, perfs.get_metric("train_loss"))
             # increase ratio_unsup by 10% at the end of each epoch:
             self.args.unsup_proportion *= self.args.increase_decrease
             if self.args.unsup_proportion > 1:
@@ -902,6 +901,7 @@ class TrainModelSplit:
             perfs += [(lr_train_helper,)]
             if previous_test_perfs is None or self.epoch_is_test_epoch(epoch):
                 perfs += [self.test(epoch)]
+                self.collect_confusion(epoch, False, perfs.get_metric("train_loss"))
 
             perfs = flatten(perfs)
             if (not header_written):

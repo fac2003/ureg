@@ -53,6 +53,7 @@ if __name__ == '__main__':
                         default=''.join(random.choices(string.ascii_uppercase, k=5)))
     parser.add_argument('--max-examples', default=sys.maxsize, type=int, help='Scan at most max examples from the unuspervised set.')
     parser.add_argument('-n', default=1000, type=int, help='Return at most n examples per training_loss value.')
+    parser.add_argument('--progress-bar', action='store_true', help='Show progress bars')
 
     args = parser.parse_args()
 

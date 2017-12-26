@@ -51,6 +51,8 @@ if __name__ == '__main__':
                         help='File with confusion data to train the model with.')
     parser.add_argument('--num-epochs', '--max-epochs', type=int,
                         help='Number of epochs to train before stopping. Additional epochs when --resume.', default=200)
+    parser.add_argument('--max-training', type=int,
+                        help='Number of training example to use at each epoch.', default=sys.maxsize)
     parser.add_argument('--L2', type=float, help='L2 regularization.', default=1E-4)
     parser.add_argument('--model', default="PreActResNet18", type=str,
                         help='The model to instantiate. One of VGG16,	ResNet18, ResNet50, ResNet101,ResNeXt29, ResNeXt29, DenseNet121, PreActResNet18, DPN92')
@@ -73,7 +75,7 @@ if __name__ == '__main__':
         exit(1)
     Confusion = collections.namedtuple('Confusion',
                                        'trained_with example_index epoch train_loss predicted_label true_label')
-
+    print("Loading confusion data..")
     confusion_data = []
     with open(args.confusion_data, mode="r") as conf_data:
         for line in conf_data.readlines():
@@ -85,6 +87,8 @@ if __name__ == '__main__':
                 confusion_data += [Confusion(bool(trained_with == "True"), int(example_index), int(epoch), \
                                              float(train_loss), int(predicted_label), int(true_label))]
     use_cuda = torch.cuda.is_available()
+    print("Loaded {} lines of confusion data".format(len(confusion_data)))
+
     print("Loading pre-trained image model from {}".format(args.checkpoint_key))
     image_model = TrainModelSplit(args, problem, use_cuda).load_checkpoint()
 

@@ -2,6 +2,8 @@ import os
 from queue import PriorityQueue
 
 import sys
+from random import shuffle
+
 import torch
 from torch.autograd import Variable
 from torch.nn import CrossEntropyLoss
@@ -53,6 +55,9 @@ class ConfusionTrainingHelper:
         for performance_estimator in performance_estimators:
             performance_estimator.init_performance_metrics()
         self.model.train()
+        shuffle(confusion_data)
+        max=min(args.max_training,len(confusion_data))
+        confusion_data=confusion_data[0:max]
         for batch_idx, confusion_list in enumerate(batch(confusion_data, args.mini_batch_size)):
             batch_size = min(len(confusion_list), args.mini_batch_size)
             images = [None] * batch_size
@@ -89,7 +94,7 @@ class ConfusionTrainingHelper:
             optimizer.step()
 
             performance_estimators.set_metric(batch_idx, "train_loss", loss.data[0])
-            if self.args.progress_bar:
+            if args.progress_bar:
                 progress_bar(batch_idx * batch_size,
                              len(confusion_data),
                              " ".join([performance_estimator.progress_message() for performance_estimator in
@@ -104,6 +109,10 @@ class ConfusionTrainingHelper:
         self.model.eval()
         for performance_estimator in performance_estimators:
             performance_estimator.init_performance_metrics()
+
+        shuffle(confusion_data)
+        max = min(args.max_training, len(confusion_data))
+        confusion_data = confusion_data[0:max]
 
         for batch_idx, confusion_list in enumerate(batch(confusion_data, args.mini_batch_size)):
             batch_size = min(len(confusion_list), args.mini_batch_size)
@@ -122,10 +131,10 @@ class ConfusionTrainingHelper:
                 training_loss_input[index] = confusion.train_loss
                 trained_with_input[index] = 1.0 if confusion.trained_with else 0.0
 
-            image_input = Variable(torch.stack(images, dim=0), volative=True)
-            training_loss_input = Variable(training_loss_input, volative=True)
-            trained_with_input = Variable(trained_with_input, volative=True)
-            targets = Variable(targets, volative=True).type(torch.LongTensor)
+            image_input = Variable(torch.stack(images, dim=0), volatile=True)
+            training_loss_input = Variable(training_loss_input, volatile=True)
+            trained_with_input = Variable(trained_with_input, volatile=True)
+            targets = Variable(targets, volatile=True).type(torch.LongTensor)
             if self.use_cuda:
                 image_input = image_input.cuda()
                 training_loss_input = training_loss_input.cuda()
@@ -136,7 +145,7 @@ class ConfusionTrainingHelper:
             loss = self.criterion(outputs, targets)
 
             performance_estimators.set_metric(batch_idx, "test_loss", loss.data[0])
-            if self.args.progress_bar:
+            if args.progress_bar:
                 progress_bar(batch_idx * batch_size,
                          len(confusion_data),
                          " ".join([performance_estimator.progress_message() for performance_estimator in

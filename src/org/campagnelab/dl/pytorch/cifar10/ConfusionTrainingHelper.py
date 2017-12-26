@@ -170,27 +170,22 @@ class ConfusionTrainingHelper:
         image_index = 0
         for batch_idx, tensors in enumerate(batch(problem.unsup_set(), args.mini_batch_size)):
             image_index = batch_idx * len(tensors)
-            batch_size = min(len(tensors), args.mini_batch_size)
-
-            trained_with_input = torch.zeros(batch_size, 1)
-            tensor_images = (torch.stack([ti for ti, _ in tensors], dim=0))
-
-            image_input = Variable(torch.stack(tensor_images, dim=0), volatile=True)
-
-            if self.use_cuda:
-                image_input = image_input.cuda()
-
             for training_loss in training_losses:
+                batch_size = min(len(tensors), args.mini_batch_size)
                 training_loss_input = torch.zeros(batch_size, 1)
+                trained_with_input = torch.zeros(batch_size, 1)
+                tensor_images = (torch.stack([ti for ti, _ in tensors], dim=0))
 
                 for index in range(batch_size):
                     training_loss_input[index] = training_loss
                     trained_with_input[index] = 0  # we are predicting on a set never seen by the model
 
+                image_input = Variable(torch.stack(tensor_images, dim=0), volatile=True)
                 training_loss_input = Variable(training_loss_input, volatile=True)
                 trained_with_input = Variable(trained_with_input, volatile=True)
 
                 if self.use_cuda:
+                    image_input = image_input.cuda()
                     training_loss_input = training_loss_input.cuda()
                     trained_with_input = trained_with_input.cuda()
 

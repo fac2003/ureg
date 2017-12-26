@@ -89,7 +89,7 @@ class TrainModelSplit:
         self.failed_to_improve = 0
         self.confusion_matrix = None
         self.best_model_confusion_matrix = None
-        if args.unsup_confusion is not None:
+        if hasattr(args,'unsup_confusion') and args.unsup_confusion is not None:
             self.parse_confusion_examples(args.unsup_confusion)
 
     def init_model(self, create_model_function):
@@ -208,6 +208,7 @@ class TrainModelSplit:
         unsupiter = itertools.cycle(unsuploader_shuffled)
         performance_estimators.set_metric(epoch, "factor", self.args.factor)
 
+
         for batch_idx, (inputs, targets) in enumerate(train_loader_subset):
             num_batches += 1
 
@@ -246,12 +247,16 @@ class TrainModelSplit:
                 self.optimizer_training.step()
                 supervised_grad_norm = grad_norm(self.net.parameters())
                 performance_estimators.set_metric(batch_idx, "train_grad_norm", supervised_grad_norm)
-
-                performance_estimators.set_metric_with_outputs(batch_idx, "train_loss", supervised_loss.data[0],
-                                                               outputs, targets)
                 performance_estimators.set_metric_with_outputs(batch_idx, "optimized_loss", optimized_loss.data[0],
                                                                outputs, targets)
                 performance_estimators.set_metric_with_outputs(batch_idx, "train_accuracy", supervised_loss.data[0],
+                                                               outputs, targets)
+
+                if self.args.write_confusion:
+                    # write the multi-label train loss for confusions:
+                    supervised_loss=self.criterion_multi_label(outputs, Variable(self.problem.one_hot(targets.data.cpu()),
+                                                                                 requires_grad=False).cuda())
+                performance_estimators.set_metric_with_outputs(batch_idx, "train_loss", supervised_loss.data[0],
                                                                outputs, targets)
 
             progress_bar(batch_idx * self.mini_batch_size,

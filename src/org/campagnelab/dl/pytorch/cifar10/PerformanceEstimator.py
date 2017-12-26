@@ -13,6 +13,11 @@ class PerformanceEstimator:
         """
         pass
 
+
+    def __iter__(self):
+        """Support the iterable interface by wrapping itself in a list. """
+        return iter([ self ])
+
     def metric_names(self):
         """
         Names of estimated metrics.

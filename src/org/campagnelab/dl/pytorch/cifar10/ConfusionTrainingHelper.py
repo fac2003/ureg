@@ -180,9 +180,9 @@ class ConfusionTrainingHelper:
                     training_loss_input[index] = training_loss
                     trained_with_input[index] = 0  # we are predicting on a set never seen by the model
 
-                image_input = Variable(torch.stack(tensor_images, dim=0), requires_grad=False)
-                training_loss_input = Variable(training_loss_input, requires_grad=False)
-                trained_with_input = Variable(trained_with_input, requires_grad=False)
+                image_input = Variable(torch.stack(tensor_images, dim=0), volatile=True)
+                training_loss_input = Variable(training_loss_input, volatile=True)
+                trained_with_input = Variable(trained_with_input, volatile=True)
 
                 if self.use_cuda:
                     image_input = image_input.cuda()

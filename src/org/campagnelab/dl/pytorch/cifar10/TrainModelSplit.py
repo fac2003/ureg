@@ -572,7 +572,7 @@ class TrainModelSplit:
             inputs = inputs1 * lam + inputs2 * (1. - lam)
             targets = targets1 * lam + targets2 * (1. - lam)
 
-        inputs, targets = Variable(inputs), Variable(targets, requires_grad=False)
+        inputs, targets = Variable(inputs, requires_grad=True), Variable(targets, requires_grad=False)
         return inputs, targets
 
     def dream_up_target2(self, inputs_gpu, targets2):
@@ -655,7 +655,7 @@ class TrainModelSplit:
 
             if self.use_cuda:
                 inputs, targets = inputs.cuda(), targets.cuda()
-            inputs, targets = Variable(inputs, volatile=True), Variable(targets)
+            inputs, targets = Variable(inputs, volatile=True), Variable(targets, volatile=True)
             outputs = self.net(inputs)
             loss = self.criterion(outputs, targets)
             # accumulate the confusion matrix:
@@ -705,7 +705,7 @@ class TrainModelSplit:
 
             if self.use_cuda:
                 inputs, targets = inputs.cuda(), targets.cuda()
-            inputs, targets = Variable(inputs, volatile=True), Variable(targets)
+            inputs, targets = Variable(inputs, volatile=True), Variable(targets, volatile=True)
             outputs = self.net(inputs)
             loss = self.criterion(outputs, targets)
             # accumulate the confusion matrix:
@@ -1033,7 +1033,7 @@ class TrainModelSplit:
         (image_1, image_2) = self.half_images(uinputs, slope)
         answer_1 = self.net(image_1)
         answer_2 = self.net(image_2)
-        targets = Variable(answer_2.data, requires_grad=False)
+        targets = Variable(answer_2.data, volatile=True)
         return self.agreement_loss(answer_1, targets)
 
     def get_random_slope(self):

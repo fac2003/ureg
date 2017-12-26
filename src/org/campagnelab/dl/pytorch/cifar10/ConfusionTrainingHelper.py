@@ -56,8 +56,8 @@ class ConfusionTrainingHelper:
             performance_estimator.init_performance_metrics()
         self.model.train()
         shuffle(confusion_data)
-        max=min(args.max_training,len(confusion_data))
-        confusion_data=confusion_data[0:max]
+        max = min(args.max_training, len(confusion_data))
+        confusion_data = confusion_data[0:max]
         for batch_idx, confusion_list in enumerate(batch(confusion_data, args.mini_batch_size)):
             batch_size = min(len(confusion_list), args.mini_batch_size)
             images = [None] * batch_size
@@ -147,9 +147,9 @@ class ConfusionTrainingHelper:
             performance_estimators.set_metric(batch_idx, "test_loss", loss.data[0])
             if args.progress_bar:
                 progress_bar(batch_idx * batch_size,
-                         len(confusion_data),
-                         " ".join([performance_estimator.progress_message() for performance_estimator in
-                                   performance_estimators]))
+                             len(confusion_data),
+                             " ".join([performance_estimator.progress_message() for performance_estimator in
+                                       performance_estimators]))
         self.lr_scheduler.step(performance_estimators.get_metric("test_loss"), epoch=epoch)
         return performance_estimators
 
@@ -166,7 +166,7 @@ class ConfusionTrainingHelper:
         for i in range(num_classes):
             for j in range(num_classes):
                 decoder[class_label(num_classes, i, j)] = (i, j)
-
+        unsup_set_length = len(problem.unsup_set())
         image_index = 0
         for batch_idx, tensors in enumerate(batch(problem.unsup_set(), args.mini_batch_size)):
             image_index = batch_idx * len(tensors)
@@ -200,6 +200,9 @@ class ConfusionTrainingHelper:
                         # print("training_loss={} probability={} predicted_index={}, true_index={} unsup_index={}".format(
                         #       training_loss, probability, predicted_index, true_index, unsup_index))
                         pq.put(training_loss, probability, unsup_index)
+            if args.progress_bar:
+                progress_bar(batch_idx * batch_size,
+                             unsup_set_length)
 
             if batch_idx * args.mini_batch_size > max_examples: break
         return pq

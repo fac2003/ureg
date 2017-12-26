@@ -19,15 +19,15 @@ from org.campagnelab.dl.pytorch.cifar10.utils import batch, progress_bar
 def class_label(num_classes, predicted_index, true_index):
     return predicted_index * num_classes + true_index
 
-class ConfusionTrainingHelper:
 
+class ConfusionTrainingHelper:
     def __init__(self, model, problem, args, use_cuda, checkpoint_key=None):
 
         self.use_cuda = use_cuda
         self.problem = problem
         self.args = args
         if checkpoint_key is not None:
-            self.model, self.training_losses=self.load_confusion_model( self.args.checkpoint_key)
+            self.model, self.training_losses = self.load_confusion_model(self.args.checkpoint_key)
             if use_cuda:
                 self.model.cuda()
 
@@ -36,17 +36,17 @@ class ConfusionTrainingHelper:
             self.optimizer = torch.optim.SGD(self.model.parameters(), lr=args.lr, momentum=0.9,
                                              weight_decay=args.L2)
             self.lr_scheduler = ReduceLROnPlateau(self.optimizer, "min", factor=0.1,
-                                                   patience=5,
-                                                   verbose=True)
+                                                  patience=5,
+                                                  verbose=True)
             self.criterion = CrossEntropyLoss()
             if use_cuda:
                 self.model.cuda()
                 self.criterion = self.criterion.cuda()
 
     def train(self, epoch, confusion_data):
-        args=self.args
-        optimizer=self.optimizer
-        problem=self.problem
+        args = self.args
+        optimizer = self.optimizer
+        problem = self.problem
         performance_estimators = PerformanceList()
         performance_estimators += [FloatHelper("train_loss")]
 
@@ -63,15 +63,14 @@ class ConfusionTrainingHelper:
             trained_with_input = torch.zeros(batch_size, 1)
 
             for index, confusion in enumerate(confusion_list):
-
                 num_classes = problem.num_classes()
-                targets[index]=class_label(num_classes,
-                                           confusion.predicted_label,confusion.true_label)
-                dataset=problem.train_set() if confusion.trained_with  else problem.test_set()
+                targets[index] = class_label(num_classes,
+                                             confusion.predicted_label, confusion.true_label)
+                dataset = problem.train_set() if confusion.trained_with  else problem.test_set()
                 images[index], _ = dataset[confusion.example_index]
 
-                training_loss_input[index]=confusion.train_loss
-                trained_with_input[index]=1.0 if confusion.trained_with else 0.0
+                training_loss_input[index] = confusion.train_loss
+                trained_with_input[index] = 1.0 if confusion.trained_with else 0.0
 
             image_input = Variable(torch.stack(images, dim=0), requires_grad=True)
             training_loss_input = Variable(training_loss_input, requires_grad=True)
@@ -90,10 +89,11 @@ class ConfusionTrainingHelper:
             optimizer.step()
 
             performance_estimators.set_metric(batch_idx, "train_loss", loss.data[0])
-            #progress_bar(batch_idx * batch_size,
-            #             len(confusion_data),
-            #             " ".join([performance_estimator.progress_message() for performance_estimator in
-            #                       performance_estimators]))
+            if self.args.progress_bar:
+                progress_bar(batch_idx * batch_size,
+                             len(confusion_data),
+                             " ".join([performance_estimator.progress_message() for performance_estimator in
+                                       performance_estimators]))
         return performance_estimators
 
     def test(self, epoch, confusion_data):
@@ -122,10 +122,10 @@ class ConfusionTrainingHelper:
                 training_loss_input[index] = confusion.train_loss
                 trained_with_input[index] = 1.0 if confusion.trained_with else 0.0
 
-            image_input = Variable(torch.stack(images, dim=0), requires_grad=False)
-            training_loss_input = Variable(training_loss_input, requires_grad=False)
-            trained_with_input = Variable(trained_with_input, requires_grad=False)
-            targets = Variable(targets, requires_grad=False).type(torch.LongTensor)
+            image_input = Variable(torch.stack(images, dim=0), volative=True)
+            training_loss_input = Variable(training_loss_input, volative=True)
+            trained_with_input = Variable(trained_with_input, volative=True)
+            targets = Variable(targets, volative=True).type(torch.LongTensor)
             if self.use_cuda:
                 image_input = image_input.cuda()
                 training_loss_input = training_loss_input.cuda()
@@ -136,40 +136,40 @@ class ConfusionTrainingHelper:
             loss = self.criterion(outputs, targets)
 
             performance_estimators.set_metric(batch_idx, "test_loss", loss.data[0])
-            #progress_bar(batch_idx * batch_size,
-            #             len(confusion_data),
-            #             " ".join([performance_estimator.progress_message() for performance_estimator in
-            #                       performance_estimators]))
+            if self.args.progress_bar:
+                progress_bar(batch_idx * batch_size,
+                         len(confusion_data),
+                         " ".join([performance_estimator.progress_message() for performance_estimator in
+                                   performance_estimators]))
         self.lr_scheduler.step(performance_estimators.get_metric("test_loss"), epoch=epoch)
         return performance_estimators
 
-
     def predict(self, max_examples=sys.maxsize, max_queue_size=10):
 
-        training_losses=self.training_losses
-        pq=PriorityQueues(training_losses,max_queue_size=max_queue_size)
+        training_losses = self.training_losses
+        pq = PriorityQueues(training_losses, max_queue_size=max_queue_size)
 
         args = self.args
         problem = self.problem
         self.model.eval()
-        decoder={}
+        decoder = {}
         num_classes = problem.num_classes()
         for i in range(num_classes):
             for j in range(num_classes):
-                decoder[class_label(num_classes,i,j)]=(i,j)
+                decoder[class_label(num_classes, i, j)] = (i, j)
 
-        image_index=0
+        image_index = 0
         for batch_idx, tensors in enumerate(batch(problem.unsup_set(), args.mini_batch_size)):
-            image_index=batch_idx*len(tensors)
+            image_index = batch_idx * len(tensors)
             for training_loss in training_losses:
                 batch_size = min(len(tensors), args.mini_batch_size)
                 training_loss_input = torch.zeros(batch_size, 1)
                 trained_with_input = torch.zeros(batch_size, 1)
-                tensor_images=(torch.stack([ ti for ti,_ in tensors], dim=0))
+                tensor_images = (torch.stack([ti for ti, _ in tensors], dim=0))
 
                 for index in range(batch_size):
                     training_loss_input[index] = training_loss
-                    trained_with_input[index] =0 # we are predicting on a set never seen by the model
+                    trained_with_input[index] = 0  # we are predicting on a set never seen by the model
 
                 image_input = Variable(torch.stack(tensor_images, dim=0), requires_grad=False)
                 training_loss_input = Variable(training_loss_input, requires_grad=False)
@@ -183,16 +183,16 @@ class ConfusionTrainingHelper:
                 outputs = self.model(training_loss_input, trained_with_input, image_input)
                 max_values, indices = torch.max(outputs.data, dim=1)
                 for index in range(batch_size):
-                    (predicted_index, true_index)=decoder[indices[index]]
-                    probability=max_values[index]
-                    if predicted_index!=true_index:
+                    (predicted_index, true_index) = decoder[indices[index]]
+                    probability = max_values[index]
+                    if predicted_index != true_index:
                         # off diagonal prediction, predicting an error on this image:
                         unsup_index = image_index + index
-                        #print("training_loss={} probability={} predicted_index={}, true_index={} unsup_index={}".format(
+                        # print("training_loss={} probability={} predicted_index={}, true_index={} unsup_index={}".format(
                         #       training_loss, probability, predicted_index, true_index, unsup_index))
-                        pq.put(training_loss,probability, unsup_index)
+                        pq.put(training_loss, probability, unsup_index)
 
-            if batch_idx*args.mini_batch_size>max_examples: break
+            if batch_idx * args.mini_batch_size > max_examples: break
         return pq
 
     def load_confusion_model(self, checkpoint_key):
@@ -200,7 +200,7 @@ class ConfusionTrainingHelper:
             os.mkdir('checkpoint')
         state = torch.load('./checkpoint/confusionmodel_{}.t7'.format(self.args.checkpoint_key))
         model = state['confusion-model']
-        training_losses=state[ 'training_losses']
+        training_losses = state['training_losses']
         model.cpu()
         model.eval()
         return (model, training_losses)
@@ -209,7 +209,7 @@ class ConfusionTrainingHelper:
 
         # Save checkpoint.
 
-        #print('Saving confusion model..')
+        # print('Saving confusion model..')
         model = self.model
         model.eval()
 

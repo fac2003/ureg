@@ -170,6 +170,8 @@ class ConfusionTrainingHelper:
         image_index = 0
         for batch_idx, tensors in enumerate(batch(problem.unsup_set(), args.mini_batch_size)):
             image_index = batch_idx * len(tensors)
+            batch_size = min(len(tensors), args.mini_batch_size)
+
             trained_with_input = torch.zeros(batch_size, 1)
             tensor_images = (torch.stack([ti for ti, _ in tensors], dim=0))
 
@@ -179,7 +181,6 @@ class ConfusionTrainingHelper:
                 image_input = image_input.cuda()
 
             for training_loss in training_losses:
-                batch_size = min(len(tensors), args.mini_batch_size)
                 training_loss_input = torch.zeros(batch_size, 1)
 
                 for index in range(batch_size):

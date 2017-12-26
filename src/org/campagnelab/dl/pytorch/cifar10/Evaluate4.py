@@ -144,6 +144,10 @@ if __name__ == '__main__':
         print("Unsupported problem: " + args.problem)
         exit(1)
 
+    if args.unsup_confusion is not None:
+        # prepend unsupervised marker to checkpoint key to save log in a different place
+        # and not overwrite the original supervised logs:
+        args.checkpoint_key="U-"+args.checkpoint_key
 
     # print some info about this dataset:
 

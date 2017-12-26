@@ -17,7 +17,7 @@ from org.campagnelab.dl.pytorch.cifar10.AccuracyHelper import AccuracyHelper
 from org.campagnelab.dl.pytorch.cifar10.FloatHelper import FloatHelper
 from org.campagnelab.dl.pytorch.cifar10.LRHelper import LearningRateHelper
 from org.campagnelab.dl.pytorch.cifar10.LossHelper import LossHelper
-from org.campagnelab.dl.pytorch.cifar10.PerformanceList import PerformanceList
+from org.campagnelab.dl.pytorch.cifar10.PerformanceList import PerformanceList, flatten
 from org.campagnelab.dl.pytorch.cifar10.datasets.SubsetDataset import SubsetDataset
 from org.campagnelab.dl.pytorch.cifar10.utils import progress_bar, grad_norm, init_params, batch
 from org.campagnelab.dl.pytorch.ureg.LRSchedules import construct_scheduler
@@ -41,7 +41,7 @@ def rmse_dim_1(y, y_hat):
     return torch.sqrt(torch.mean((y - y_hat).pow(2), 1))
 
 
-flatten = lambda l: [item for sublist in l for item in sublist]
+
 
 
 def print_params(epoch, net):
@@ -255,7 +255,8 @@ class TrainModelSplit:
                 if self.args.write_confusion:
                     # write the multi-label train loss for confusions:
                     supervised_loss=self.criterion_multi_label(outputs, Variable(self.problem.one_hot(targets.data.cpu()),
-                                                                                 requires_grad=False).cuda())
+                                                                                 requires_grad=False))
+                    if self.use_cuda: supervised_loss=supervised_loss.cuda()
                 performance_estimators.set_metric_with_outputs(batch_idx, "train_loss", supervised_loss.data[0],
                                                                outputs, targets)
 
@@ -638,8 +639,11 @@ class TrainModelSplit:
             exit(1)
         return targets2
 
-    def test(self, epoch, performance_estimators=(LossHelper("test_loss"), AccuracyHelper("test_"))):
+    def test(self, epoch, performance_estimators=None):
         print('\nTesting, epoch: %d' % epoch)
+        if performance_estimators is None:
+            performance_estimators=PerformanceList()
+            performance_estimators+=[LossHelper("test_loss"), AccuracyHelper("test_")]
 
         self.net.eval()
         for performance_estimator in performance_estimators:
@@ -657,12 +661,11 @@ class TrainModelSplit:
             _, predicted = torch.max(outputs.data, 1)
 
             cm.add(predicted=predicted, target=targets.data)
-            for performance_estimator in performance_estimators:
-                performance_estimator.observe_performance_metric(batch_idx, loss.data[0], outputs, targets)
+            performance_estimators.set_metric_with_outputs(batch_idx, "test_loss", loss.data[0], outputs, targets)
+            performance_estimators.set_metric_with_outputs(batch_idx, "test_accuracy", loss.data[0], outputs, targets)
 
             progress_bar(batch_idx * self.mini_batch_size, self.max_validation_examples,
-                         " ".join([performance_estimator.progress_message() for performance_estimator in
-                                   performance_estimators]))
+                         performance_estimators.progress_message(["test_loss","test_accuracy"]))
 
             if ((batch_idx + 1) * self.mini_batch_size) > self.max_validation_examples:
                 break
@@ -948,7 +951,6 @@ class TrainModelSplit:
             except FileNotFoundError:
                 pass
         previous_training_loss=None
-        train_loss=None
         test_loss=None
         for epoch in range(self.start_epoch, self.start_epoch + self.args.num_epochs):
 
@@ -962,11 +964,11 @@ class TrainModelSplit:
                                  )]
                 previous_training_loss=perfs.get_metric("train_loss")
             self.collect_confusion(epoch, True, previous_training_loss, test_loss)
-            perfs += [(lr_train_helper,)]
+            perfs += [[lr_train_helper]]
             if previous_test_perfs is None or self.epoch_is_test_epoch(epoch):
                 perfs += [self.test(epoch)]
             test_loss = perfs.get_metric("test_loss")
-            self.collect_confusion(epoch, False, perfs.get_metric("train_loss"), validation_loss=test_loss)
+            self.collect_confusion(epoch, False, previous_training_loss, validation_loss=test_loss)
 
             perfs = flatten(perfs)
             if (not header_written):

@@ -1,3 +1,5 @@
+flatten = lambda l: [item for sublist in l for item in sublist]
+
 class PerformanceList(list):
 
 
@@ -9,7 +11,7 @@ class PerformanceList(list):
    #     self.list.append(values)
 
     def get_metric(self, metric_name):
-        for pe in self:
+        for pe in flatten(self):
             metric = pe.get_metric(metric_name)
             if metric is not None:
                 return metric

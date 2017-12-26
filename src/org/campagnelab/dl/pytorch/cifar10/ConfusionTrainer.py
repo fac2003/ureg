@@ -79,7 +79,7 @@ if __name__ == '__main__':
     with open(args.confusion_data, mode="r") as conf_data:
         for line in conf_data.readlines():
                 line=line.replace("\n","")
-                trained_with, example_index, epoch, train_loss, predicted_label, true_label = line.split("\t")
+                trained_with, example_index, epoch, train_loss, predicted_label, true_label, val_loss = line.split("\t")
                 true_label=true_label.split("\n")[0]
                 confusion_data += [Confusion(bool(trained_with=="True"), int(example_index), int(epoch), \
                                              float(train_loss), int(predicted_label), int(true_label))]

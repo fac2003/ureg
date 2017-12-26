@@ -122,9 +122,9 @@ class ConfusionTrainingHelper:
                 training_loss_input[index] = confusion.train_loss
                 trained_with_input[index] = 1.0 if confusion.trained_with else 0.0
 
-            image_input = Variable(torch.stack(images, dim=0), requires_grad=True)
-            training_loss_input = Variable(training_loss_input, requires_grad=True)
-            trained_with_input = Variable(trained_with_input, requires_grad=True)
+            image_input = Variable(torch.stack(images, dim=0), requires_grad=False)
+            training_loss_input = Variable(training_loss_input, requires_grad=False)
+            trained_with_input = Variable(trained_with_input, requires_grad=False)
             targets = Variable(targets, requires_grad=False).type(torch.LongTensor)
             if self.use_cuda:
                 image_input = image_input.cuda()

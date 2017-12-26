@@ -676,9 +676,11 @@ class TrainModelSplit:
         self.confusion_matrix = cm.value().transpose()
         return performance_estimators
 
-    def collect_confusion(self, epoch, trained_with, training_loss):
+    def collect_confusion(self, epoch, trained_with, training_loss, validation_loss=None):
         if not self.args.write_confusion:
             return
+        if validation_loss is None:
+            validation_loss=training_loss
 
         print('\nCollecting confusion matrix, epoch: %d' % epoch)
         if trained_with:
@@ -714,7 +716,7 @@ class TrainModelSplit:
                     else:
                         image_index = self.problem.delegate_validation_index(image_index)
 
-                confusion_row=(trained_with, image_index, epoch, training_loss, predicted[index], targets.data[index])
+                confusion_row=(trained_with, image_index, epoch, training_loss, predicted[index], targets.data[index], validation_loss)
 
                 confusions += [confusion_row]
             example_index += len(predicted)
@@ -724,7 +726,7 @@ class TrainModelSplit:
 
         with open(self.confusion_data_filename(),mode="a") as conf_data:
             for line in confusions:
-                conf_data.write("{}\t{}\t{}\t{}\t{}\t{}".format(*line))
+                conf_data.write("{}\t{}\t{}\t{}\t{}\t{}\t{}".format(*line))
                 conf_data.write("\n")
 
 
@@ -876,6 +878,8 @@ class TrainModelSplit:
         lr_train_helper = LearningRateHelper(scheduler=self.scheduler_train, learning_rate_name="train_lr")
         previous_test_perfs = None
         perfs = PerformanceList()
+        train_loss=None
+        test_loss=None
         for epoch in range(self.start_epoch, self.start_epoch + self.args.num_epochs):
 
             perfs = PerformanceList()
@@ -884,7 +888,7 @@ class TrainModelSplit:
                                        alpha=self.args.alpha,
                                        ratio_unsup=self.args.unsup_proportion
                                        )]
-            self.collect_confusion(epoch, True, perfs.get_metric("train_loss"))
+            self.collect_confusion(epoch, True, perfs.get_metric("train_loss"),validation_loss=test_loss)
             # increase ratio_unsup by 10% at the end of each epoch:
             self.args.unsup_proportion *= self.args.increase_decrease
             if self.args.unsup_proportion > 1:
@@ -901,7 +905,8 @@ class TrainModelSplit:
             perfs += [(lr_train_helper,)]
             if previous_test_perfs is None or self.epoch_is_test_epoch(epoch):
                 perfs += [self.test(epoch)]
-                self.collect_confusion(epoch, False, perfs.get_metric("train_loss"))
+                test_loss=perfs.get_metric("test_loss")
+                self.collect_confusion(epoch, False, perfs.get_metric("train_loss"),test_loss)
 
             perfs = flatten(perfs)
             if (not header_written):
@@ -943,6 +948,8 @@ class TrainModelSplit:
             except FileNotFoundError:
                 pass
         previous_training_loss=None
+        train_loss=None
+        test_loss=None
         for epoch in range(self.start_epoch, self.start_epoch + self.args.num_epochs):
 
             perfs = PerformanceList()
@@ -954,11 +961,12 @@ class TrainModelSplit:
                                  train_split=False
                                  )]
                 previous_training_loss=perfs.get_metric("train_loss")
-            self.collect_confusion(epoch, True, perfs.get_metric("train_loss"))
+            self.collect_confusion(epoch, True, previous_training_loss, test_loss)
             perfs += [(lr_train_helper,)]
             if previous_test_perfs is None or self.epoch_is_test_epoch(epoch):
                 perfs += [self.test(epoch)]
-            self.collect_confusion(epoch, False, perfs.get_metric("train_loss"))
+            test_loss = perfs.get_metric("test_loss")
+            self.collect_confusion(epoch, False, perfs.get_metric("train_loss"), validation_loss=test_loss)
 
             perfs = flatten(perfs)
             if (not header_written):

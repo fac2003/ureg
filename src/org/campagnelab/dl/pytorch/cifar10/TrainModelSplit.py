@@ -251,13 +251,6 @@ class TrainModelSplit:
                                                                outputs, targets)
                 performance_estimators.set_metric_with_outputs(batch_idx, "train_accuracy", supervised_loss.data[0],
                                                                outputs, targets)
-
-                if self.args.write_confusion:
-                    # write the multi-label train loss for confusions:
-                    variable = Variable(self.problem.one_hot(targets.data.cpu()), requires_grad=False)
-                    if self.use_cuda: variable = variable.cuda()
-                    supervised_loss=self.criterion_multi_label(outputs, variable)
-
                 performance_estimators.set_metric_with_outputs(batch_idx, "train_loss", supervised_loss.data[0],
                                                                outputs, targets)
 

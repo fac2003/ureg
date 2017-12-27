@@ -290,11 +290,14 @@ class TrainModelSplit:
         num_batches = 0
         problem=self.problem
         unsup_examples=self.find_examples_closest_to(previous_training_loss)
-        if len(unsup_examples)>self.args.num_training:
-            unsup_examples=unsup_examples[0:self.args.num_training]
+        #if len(unsup_examples)>=self.args.num_training:
+        # Use 10% random unsupervised samples for 100% training examples.
+        shuffle(unsup_examples)
+        unsup_examples=unsup_examples[0:int(self.args.num_training/10)]
         training_dataset=ConcatDataset(datasets=[
             SubsetDataset(self.problem.train_set(), range(0,self.args.num_training)),
             SubsetDataset(self.problem.unsup_set(), unsup_examples)])
+        length=len(training_dataset)
         train_loader_subset = torch.utils.data.DataLoader(training_dataset,
                                                           batch_size=problem.mini_batch_size(),
                                                           shuffle=True,
@@ -324,14 +327,12 @@ class TrainModelSplit:
                                                            outputs, targets)
 
             progress_bar(batch_idx * self.mini_batch_size,
-                         min(self.max_regularization_examples, self.max_training_examples),
+                         length,
                          " ".join([performance_estimator.progress_message() for performance_estimator in
                                    performance_estimators]))
 
             if (batch_idx + 1) * self.mini_batch_size > len(training_dataset):
                 break
-
-            print("\n")
 
         # increase factor by 10% at the end of each epoch:
         self.args.factor *= self.args.increase_decrease

@@ -73,7 +73,7 @@ if __name__ == '__main__':
     use_cuda=torch.cuda.is_available()
     print("Loading confusion model from {}".format(args.checkpoint_key))
     helper=ConfusionTrainingHelper(None, problem, args, use_cuda, checkpoint_key=args.checkpoint_key)
-
+    print("Predicting..")
     priority_queues=helper.predict(max_examples=args.max_examples, max_queue_size=args.n)
 
     with open("unsupexamples-{}.tsv".format(args.checkpoint_key), mode="w") as unsup:

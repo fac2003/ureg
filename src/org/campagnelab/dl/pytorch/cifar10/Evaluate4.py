@@ -88,7 +88,9 @@ if __name__ == '__main__':
                         default="split")
     parser.add_argument("--reset-lr-every-n-epochs", type=int, help='Reset learning rate to initial value every n epochs.')
     parser.add_argument('--label-strategy',
-                        help='Strategy to dream up labels for the unsupervised set. One of CERTAIN, UNIFORM, MODEL.',
+                        help='Strategy to dream up labels for the unsupervised set (mixup mode). '
+                             'One of CERTAIN, UNIFORM, MODEL,VAL_CONFUSION, VAL_CONFUSION_SAMPLING. '
+                             'For supervised mode with --unsup-confusion optiond, either UNIFORM or VAL_LABEL.',
                         default="CERTAIN")
     parser.add_argument('--abort-when-failed-to-improve', default=sys.maxsize, type=int,
                         help='Abort training if performance fails to improve for more than the specified number of epochs.')

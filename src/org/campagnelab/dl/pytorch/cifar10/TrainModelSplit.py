@@ -292,8 +292,13 @@ class TrainModelSplit:
             if len(unsup_examples)>=self.args.num_training:
                 unsup_examples=unsup_examples[0:int(self.args.num_training)]
 
-            #made_up_label=lambda index: randint(0,self.problem.num_classes()-1)
-            made_up_label=lambda index: unsup_true_label[index]
+            if self.args.label_strategy == "UNIFORM":
+                made_up_label=lambda index: randint(0,self.problem.num_classes()-1)
+            elif self.args.label_strategy == "VAL_LABEL":
+                made_up_label=lambda index: unsup_true_label[index]
+            else:
+                print("Unsupported --label-strategy: "+self.args.label_strategy+" only UNIFORM or VAL_LABEL are supported with this mode.")
+                exit(1)
 
             training_dataset=ConcatDataset(datasets=[
                 SubsetDataset(self.problem.train_set(), range(0,self.args.num_training)),

@@ -73,13 +73,15 @@ if __name__ == '__main__':
     use_cuda=torch.cuda.is_available()
     print("Loading confusion model from {}".format(args.checkpoint_key))
     helper=ConfusionTrainingHelper(None, problem, args, use_cuda, checkpoint_key=args.checkpoint_key)
-    print("Predicting..")
+
     priority_queues=helper.predict(max_examples=args.max_examples, max_queue_size=args.n)
+    def tuple_to_string(t):
+        return ",".join(map(str,t))
 
     with open("unsupexamples-{}.tsv".format(args.checkpoint_key), mode="w") as unsup:
         for training_loss in helper.training_losses:
             unsup.write(str(training_loss))
             unsup.write("\t")
-            unsup.write(" ".join(map(str,priority_queues.get(training_loss))))
+            unsup.write(" ".join(map(tuple_to_string,priority_queues.get(training_loss))))
             unsup.write("\n")
 

@@ -289,8 +289,11 @@ class TrainModelSplit:
 
         num_batches = 0
         problem=self.problem
-        unsup_examples=self.find_examples_closest_to(previous_training_loss)
-        shuffle(unsup_examples)
+        unsup_examples_triplets=self.find_examples_closest_to(previous_training_loss)
+
+        shuffle(unsup_examples_triplets)
+        unsup_examples=list(map(lambda t: t[0],unsup_examples_triplets))
+
         if len(unsup_examples)>=self.args.num_training:
             # Use 10% random unsupervised samples for 100% training examples.
             unsup_examples=unsup_examples[0:int(self.args.num_training)]
@@ -1098,6 +1101,10 @@ class TrainModelSplit:
     def parse_confusion_examples(self, unsup_confusion):
         """Load file with examples produced by ConfusionSelectExamples.py """
         self.confusion_examples_map = {}
+        def parse_tuple(t):
+            parsed=t.split(",")
+            return (int(parsed[0]), int(parsed[1]), int(parsed[2]))
+
         with open(unsup_confusion,mode="r") as examples:
 
             while True:
@@ -1106,7 +1113,8 @@ class TrainModelSplit:
                 line.replace("\n","")
                 tokens=line.split("\t")
                 training_loss=float(tokens[0].strip())
-                example_indices=list(map(int,tokens[1].split(" ")))
+                example_indices=list(map(parse_tuple,tokens[1].split(" ")))
+
                 self.confusion_examples_map[training_loss]= example_indices
 
         #print(str(self.find_examples_closest_to(0.061)))

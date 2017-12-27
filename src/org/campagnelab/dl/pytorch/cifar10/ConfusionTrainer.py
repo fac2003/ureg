@@ -62,18 +62,6 @@ if __name__ == '__main__':
     parser.add_argument('--score-threshold', type=float, help='Train only with validation scores below the threshold.')
     args = parser.parse_args()
 
-    use_cuda = torch.cuda.is_available()
-    is_parallel = False
-    best_acc = 0  # best test accuracy
-    start_epoch = 0  # start from epoch 0 or last checkpoint epoch
-    problem = None
-    if args.problem == "CIFAR10":
-        problem = Cifar10Problem(args.mini_batch_size)
-    elif args.problem == "STL10":
-        problem = STL10Problem(args.mini_batch_size)
-    else:
-        print("Unsupported problem: " + args.problem)
-        exit(1)
     Confusion = collections.namedtuple('Confusion',
                                        'trained_with example_index epoch train_loss predicted_label true_label val_loss')
     print("Loading confusion data..")
@@ -87,11 +75,24 @@ if __name__ == '__main__':
             true_label = true_label.split("\n")[0]
             confusion_data += [Confusion(bool(trained_with == "True"), int(example_index), int(epoch), \
                                              float(train_loss), int(predicted_label), int(true_label), float(val_loss))]
-
     distinct_validation_losses = list(set([cd.val_loss for cd in confusion_data]))
     distinct_validation_losses.sort()
     distinct_validation_losses.reverse()
-    print("Read the following validation losses: "+" ".join(map(str,distinct_validation_losses)))
+    print("Read the following validation losses: " + " ".join(map(str, distinct_validation_losses)))
+
+    use_cuda = torch.cuda.is_available()
+    is_parallel = False
+    best_acc = 0  # best test accuracy
+    start_epoch = 0  # start from epoch 0 or last checkpoint epoch
+    problem = None
+    if args.problem == "CIFAR10":
+        problem = Cifar10Problem(args.mini_batch_size)
+    elif args.problem == "STL10":
+        problem = STL10Problem(args.mini_batch_size)
+    else:
+        print("Unsupported problem: " + args.problem)
+        exit(1)
+
     if args.score_threshold is not None:
         confusion_data=[c for c in confusion_data if c.val_loss<=args.score_threshold]
 

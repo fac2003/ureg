@@ -290,10 +290,10 @@ class TrainModelSplit:
         num_batches = 0
         problem=self.problem
         unsup_examples=self.find_examples_closest_to(previous_training_loss)
-        #if len(unsup_examples)>=self.args.num_training:
-        # Use 10% random unsupervised samples for 100% training examples.
         shuffle(unsup_examples)
-        unsup_examples=unsup_examples[0:int(self.args.num_training/10)]
+        if len(unsup_examples)>=self.args.num_training:
+            # Use 10% random unsupervised samples for 100% training examples.
+            unsup_examples=unsup_examples[0:int(self.args.num_training)]
         training_dataset=ConcatDataset(datasets=[
             SubsetDataset(self.problem.train_set(), range(0,self.args.num_training)),
             SubsetDataset(self.problem.unsup_set(), unsup_examples)])

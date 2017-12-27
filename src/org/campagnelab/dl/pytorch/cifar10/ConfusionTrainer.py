@@ -59,6 +59,7 @@ if __name__ == '__main__':
     parser.add_argument('--checkpoint-key', help='random key to save/load the image model and save confusion models',
                         default=''.join(random.choices(string.ascii_uppercase, k=5)))
     parser.add_argument('--progress-bar', action='store_true', help='Show progress bars')
+    parser.add_argument('--best-score-only', action='store_true', help='Train only for the lowest validation score.')
     args = parser.parse_args()
 
     use_cuda = torch.cuda.is_available()
@@ -77,15 +78,18 @@ if __name__ == '__main__':
                                        'trained_with example_index epoch train_loss predicted_label true_label val_loss')
     print("Loading confusion data..")
     confusion_data = []
+    best_score=sys.maxsize
     with open(args.confusion_data, mode="r") as conf_data:
         for line in conf_data.readlines():
             line = line.replace("\n", "")
             trained_with, example_index, epoch, train_loss, predicted_label, true_label, val_loss = line.split("\t")
-            if float(train_loss)<float(val_loss):
-                # only train when there is evidence that some over-fitting is happening:
-                true_label = true_label.split("\n")[0]
-                confusion_data += [Confusion(bool(trained_with == "True"), int(example_index), int(epoch), \
+            best_score=min(best_score,float(val_loss))
+            true_label = true_label.split("\n")[0]
+            confusion_data += [Confusion(bool(trained_with == "True"), int(example_index), int(epoch), \
                                              float(train_loss), int(predicted_label), int(true_label), float(val_loss))]
+    if args.best_score_only:
+        confusion_data=[c for c in confusion_data if abs(c.val_loss-best_score)<0.01]
+
     use_cuda = torch.cuda.is_available()
     print("Loaded {} lines of confusion data".format(len(confusion_data)))
 

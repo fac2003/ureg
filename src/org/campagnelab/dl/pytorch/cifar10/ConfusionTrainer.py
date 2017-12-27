@@ -59,7 +59,7 @@ if __name__ == '__main__':
     parser.add_argument('--checkpoint-key', help='random key to save/load the image model and save confusion models',
                         default=''.join(random.choices(string.ascii_uppercase, k=5)))
     parser.add_argument('--progress-bar', action='store_true', help='Show progress bars')
-    parser.add_argument('--best-score-only', action='store_true', help='Train only for the lowest validation score.')
+    parser.add_argument('--score-threshold', type=float, help='Train only with validation scores below the threshold.')
     args = parser.parse_args()
 
     use_cuda = torch.cuda.is_available()
@@ -87,8 +87,13 @@ if __name__ == '__main__':
             true_label = true_label.split("\n")[0]
             confusion_data += [Confusion(bool(trained_with == "True"), int(example_index), int(epoch), \
                                              float(train_loss), int(predicted_label), int(true_label), float(val_loss))]
-    if args.best_score_only:
-        confusion_data=[c for c in confusion_data if abs(c.val_loss-best_score)<0.01]
+
+    distinct_validation_losses = list(set([cd.val_loss for cd in confusion_data]))
+    distinct_validation_losses.sort()
+    distinct_validation_losses.reverse()
+    print("Read the following validation losses: "+" ".join(map(str,distinct_validation_losses)))
+    if args.score_threshold is not None:
+        confusion_data=[c for c in confusion_data if c.val_loss<=args.score_threshold]
 
     use_cuda = torch.cuda.is_available()
     print("Loaded {} lines of confusion data".format(len(confusion_data)))

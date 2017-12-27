@@ -2,7 +2,7 @@ import itertools
 import math
 import os
 import sys
-from random import uniform, random, shuffle
+from random import uniform, random, shuffle, randint
 
 import numpy
 import torch
@@ -296,11 +296,14 @@ class TrainModelSplit:
         unsup_true_label=list(map(lambda t: t[2],unsup_examples_triplets))
 
         if len(unsup_examples)>=self.args.num_training:
-            # Use 10% random unsupervised samples for 100% training examples.
             unsup_examples=unsup_examples[0:int(self.args.num_training)]
+
+        made_up_label=lambda index: randint(0,self.problem.num_classes()-1)
+        #made_up_label=lambda index: unsup_true_label[index]
+
         training_dataset=ConcatDataset(datasets=[
             SubsetDataset(self.problem.train_set(), range(0,self.args.num_training)),
-            SubsetDataset(self.problem.unsup_set(), unsup_examples, unsup_true_label)])
+            SubsetDataset(self.problem.unsup_set(), unsup_examples, get_label=made_up_label)])
         length=len(training_dataset)
         train_loader_subset = torch.utils.data.DataLoader(training_dataset,
                                                           batch_size=problem.mini_batch_size(),

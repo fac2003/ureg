@@ -301,7 +301,7 @@ class TrainModelSplit:
         train_loader_subset = torch.utils.data.DataLoader(training_dataset,
                                                           batch_size=problem.mini_batch_size(),
                                                           shuffle=True,
-                                                          num_workers=2)
+                                                          num_workers=1)
 
         for batch_idx, (inputs, targets) in enumerate(train_loader_subset):
             num_batches += 1

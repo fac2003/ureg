@@ -1,6 +1,8 @@
 import torch
 from torch.nn import Module, Sequential, Linear, ReLU
 
+from org.campagnelab.dl.pytorch.cifar10.utils import init_params
+
 
 class ConfusionModel(Module):
     def __init__(self, image_model, problem):
@@ -17,7 +19,7 @@ class ConfusionModel(Module):
                                    torch.nn.ReLU(True),
                                    torch.nn.Dropout(),
                                    Linear(num_inputs, num_classes * num_classes))
-
+        init_params(self.classifier)
 
     def forward(self, training_loss, trained_with, image_input):
         # combine training loss and image features before classifier:

@@ -29,7 +29,8 @@ class ConfusionTrainingHelper:
         self.problem = problem
         self.args = args
         if checkpoint_key is not None:
-            self.model, self.training_losses = self.load_confusion_model(self.args.checkpoint_key)
+            self.model, self.training_losses, self.validation_losses = \
+                self.load_confusion_model(self.args.checkpoint_key)
             if use_cuda:
                 self.model.cuda()
 
@@ -155,8 +156,8 @@ class ConfusionTrainingHelper:
 
     def predict(self, max_examples=sys.maxsize, max_queue_size=10):
 
-        training_losses = self.training_losses
-        pq = PriorityQueues(training_losses, max_queue_size=max_queue_size)
+        val_losses = self.validation_losses
+        pq = PriorityQueues(val_losses, max_queue_size=max_queue_size)
 
         args = self.args
         problem = self.problem
@@ -178,7 +179,7 @@ class ConfusionTrainingHelper:
             if self.use_cuda:
                 image_input = image_input.cuda()
 
-            for training_loss in training_losses:
+            for training_loss in val_losses:
                 training_loss_input = torch.zeros(batch_size, 1)
                 trained_with_input = torch.zeros(batch_size, 1)
 
@@ -204,7 +205,7 @@ class ConfusionTrainingHelper:
                         unsup_index = image_index + index
                         # print("training_loss={} probability={} predicted_index={}, true_index={} unsup_index={}".format(
                         #       training_loss, probability, predicted_index, true_index, unsup_index))
-                        pq.put(training_loss, probability, unsup_index)
+                        pq.put(training_loss, probability, (unsup_index, predicted_index, true_index))
             if args.progress_bar:
                 progress_bar(batch_idx * batch_size,
                              unsup_set_length)
@@ -218,11 +219,12 @@ class ConfusionTrainingHelper:
         state = torch.load('./checkpoint/confusionmodel_{}.t7'.format(self.args.checkpoint_key))
         model = state['confusion-model']
         training_losses = state['training_losses']
+        validation_losses = state['validation_losses']
         model.cpu()
         model.eval()
-        return (model, training_losses)
+        return (model, training_losses, validation_losses)
 
-    def save_confusion_model(self, epoch, test_loss, training_losses):
+    def save_confusion_model(self, epoch, test_loss, training_losses, validation_losses):
 
         # Save checkpoint.
 
@@ -234,7 +236,8 @@ class ConfusionTrainingHelper:
             'confusion-model': self.model,
             'test_loss': test_loss,
             'epoch': epoch,
-            'training_losses': training_losses
+            'training_losses': training_losses,
+            'validation_losses': validation_losses
         }
         if not os.path.isdir('checkpoint'):
             os.mkdir('checkpoint')

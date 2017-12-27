@@ -74,18 +74,18 @@ if __name__ == '__main__':
         print("Unsupported problem: " + args.problem)
         exit(1)
     Confusion = collections.namedtuple('Confusion',
-                                       'trained_with example_index epoch train_loss predicted_label true_label')
+                                       'trained_with example_index epoch train_loss predicted_label true_label val_loss')
     print("Loading confusion data..")
     confusion_data = []
     with open(args.confusion_data, mode="r") as conf_data:
         for line in conf_data.readlines():
             line = line.replace("\n", "")
             trained_with, example_index, epoch, train_loss, predicted_label, true_label, val_loss = line.split("\t")
-            if train_loss<val_loss:
+            if float(train_loss)<float(val_loss):
                 # only train when there is evidence that some over-fitting is happening:
                 true_label = true_label.split("\n")[0]
                 confusion_data += [Confusion(bool(trained_with == "True"), int(example_index), int(epoch), \
-                                             float(train_loss), int(predicted_label), int(true_label))]
+                                             float(train_loss), int(predicted_label), int(true_label), float(val_loss))]
     use_cuda = torch.cuda.is_available()
     print("Loaded {} lines of confusion data".format(len(confusion_data)))
 
@@ -100,6 +100,7 @@ if __name__ == '__main__':
     no_improvement = 0
 
     distinct_training_losses = set([cd.train_loss for cd in confusion_data])
+    distinct_validation_losses = set([cd.val_loss for cd in confusion_data])
     for epoch in range(0, args.num_epochs):
         perfs = PerformanceList()
         perfs += [helper.train(epoch, train_split)]
@@ -111,7 +112,7 @@ if __name__ == '__main__':
 
         if test_loss < best_loss:
             best_loss = test_loss
-            helper.save_confusion_model(epoch, test_loss, distinct_training_losses)
+            helper.save_confusion_model(epoch, test_loss, distinct_training_losses, distinct_validation_losses)
             no_improvement = 0
         else:
             no_improvement += 1

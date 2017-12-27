@@ -79,9 +79,9 @@ if __name__ == '__main__':
         return ",".join(map(str,t))
 
     with open("unsupexamples-{}.tsv".format(args.checkpoint_key), mode="w") as unsup:
-        for training_loss in helper.training_losses:
-            unsup.write(str(training_loss))
+        for val_loss in helper.validation_losses:
+            unsup.write(str(val_loss))
             unsup.write("\t")
-            unsup.write(" ".join(map(tuple_to_string,priority_queues.get(training_loss))))
+            unsup.write(" ".join(map(tuple_to_string,priority_queues.get(val_loss))))
             unsup.write("\n")
 

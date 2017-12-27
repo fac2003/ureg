@@ -274,9 +274,9 @@ class TrainModelSplit:
         return performance_estimators
 
 
-    def train_with_unsup(self, epoch, previous_training_loss,
-              performance_estimators=None,
-              ):
+    def train_with_unsup(self, epoch, previous_validation_loss,
+                         performance_estimators=None,
+                         ):
 
         if performance_estimators is None:
             performance_estimators = PerformanceList()
@@ -289,7 +289,7 @@ class TrainModelSplit:
 
         num_batches = 0
         problem=self.problem
-        unsup_examples_triplets=self.find_examples_closest_to(previous_training_loss)
+        unsup_examples_triplets=self.find_examples_closest_to(previous_validation_loss)
 
         shuffle(unsup_examples_triplets)
         unsup_examples=list(map(lambda t: t[0],unsup_examples_triplets))
@@ -688,7 +688,7 @@ class TrainModelSplit:
         if not self.args.write_confusion:
             return
         if validation_loss is None:
-            validation_loss=training_loss
+            return
 
         print('\nCollecting confusion matrix, epoch: %d' % epoch)
         if trained_with:
@@ -955,25 +955,24 @@ class TrainModelSplit:
                 os.remove(self.confusion_data_filename())
             except FileNotFoundError:
                 pass
-        previous_training_loss=None
-        test_loss=None
+        previous_test_loss=None
         for epoch in range(self.start_epoch, self.start_epoch + self.args.num_epochs):
 
             perfs = PerformanceList()
-            if self.args.unsup_confusion is not None and previous_training_loss is not None:
-                perfs += [self.train_with_unsup(epoch,previous_training_loss=previous_training_loss)]
+            if self.args.unsup_confusion is not None and previous_test_loss is not None:
+                perfs += [self.train_with_unsup(epoch, previous_validation_loss=previous_test_loss)]
             else:
                 perfs += [self.train(epoch,
                                  train_supervised_model=True,
                                  train_split=False
                                  )]
                 previous_training_loss=perfs.get_metric("train_loss")
-            self.collect_confusion(epoch, True, previous_training_loss, test_loss)
+            self.collect_confusion(epoch, True, previous_training_loss, previous_test_loss)
             perfs += [[lr_train_helper]]
             if previous_test_perfs is None or self.epoch_is_test_epoch(epoch):
                 perfs += [self.test(epoch)]
-            test_loss = perfs.get_metric("test_loss")
-            self.collect_confusion(epoch, False, previous_training_loss, validation_loss=test_loss)
+            previous_test_loss = perfs.get_metric("test_loss")
+            self.collect_confusion(epoch, False, previous_training_loss, validation_loss=previous_test_loss)
 
             perfs = flatten(perfs)
             if (not header_written):

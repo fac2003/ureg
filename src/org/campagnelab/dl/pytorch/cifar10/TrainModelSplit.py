@@ -274,7 +274,7 @@ class TrainModelSplit:
         return performance_estimators
 
 
-    def train_with_unsup(self, epoch, previous_validation_loss,
+    def train_with_unsup(self, epoch, previous_validation_loss=None,
                          performance_estimators=None,
                          ):
 
@@ -289,21 +289,25 @@ class TrainModelSplit:
 
         num_batches = 0
         problem=self.problem
-        unsup_examples_triplets=self.find_examples_closest_to(previous_validation_loss)
+        if previous_validation_loss is not None:
+            unsup_examples_triplets=self.find_examples_closest_to(previous_validation_loss)
 
-        shuffle(unsup_examples_triplets)
-        unsup_examples=list(map(lambda t: t[0],unsup_examples_triplets))
-        unsup_true_label=list(map(lambda t: t[2],unsup_examples_triplets))
+            shuffle(unsup_examples_triplets)
+            unsup_examples=list(map(lambda t: t[0],unsup_examples_triplets))
+            unsup_true_label=list(map(lambda t: t[2],unsup_examples_triplets))
 
-        if len(unsup_examples)>=self.args.num_training:
-            unsup_examples=unsup_examples[0:int(self.args.num_training)]
+            if len(unsup_examples)>=self.args.num_training:
+                unsup_examples=unsup_examples[0:int(self.args.num_training)]
 
-        made_up_label=lambda index: randint(0,self.problem.num_classes()-1)
-        #made_up_label=lambda index: unsup_true_label[index]
+            #made_up_label=lambda index: randint(0,self.problem.num_classes()-1)
+            made_up_label=lambda index: unsup_true_label[index]
 
-        training_dataset=ConcatDataset(datasets=[
-            SubsetDataset(self.problem.train_set(), range(0,self.args.num_training)),
-            SubsetDataset(self.problem.unsup_set(), unsup_examples, get_label=made_up_label)])
+            training_dataset=ConcatDataset(datasets=[
+                SubsetDataset(self.problem.train_set(), range(0,self.args.num_training)),
+                SubsetDataset(self.problem.unsup_set(), unsup_examples, get_label=made_up_label)])
+        else:
+            training_dataset = SubsetDataset(self.problem.train_set(), range(0, self.args.num_training))
+
         length=len(training_dataset)
         train_loader_subset = torch.utils.data.DataLoader(training_dataset,
                                                           batch_size=problem.mini_batch_size(),
@@ -957,17 +961,18 @@ class TrainModelSplit:
             except FileNotFoundError:
                 pass
         previous_test_loss=None
+
         for epoch in range(self.start_epoch, self.start_epoch + self.args.num_epochs):
 
             perfs = PerformanceList()
-            if self.args.unsup_confusion is not None and previous_test_loss is not None:
+            if self.args.unsup_confusion is not None:
                 perfs += [self.train_with_unsup(epoch, previous_validation_loss=previous_test_loss)]
             else:
                 perfs += [self.train(epoch,
                                  train_supervised_model=True,
                                  train_split=False
                                  )]
-                previous_training_loss=perfs.get_metric("train_loss")
+            previous_training_loss=perfs.get_metric("train_loss")
             self.collect_confusion(epoch, True, previous_training_loss, previous_test_loss)
             perfs += [[lr_train_helper]]
             if previous_test_perfs is None or self.epoch_is_test_epoch(epoch):

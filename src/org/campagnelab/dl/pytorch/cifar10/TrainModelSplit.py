@@ -293,13 +293,14 @@ class TrainModelSplit:
 
         shuffle(unsup_examples_triplets)
         unsup_examples=list(map(lambda t: t[0],unsup_examples_triplets))
+        unsup_true_label=list(map(lambda t: t[2],unsup_examples_triplets))
 
         if len(unsup_examples)>=self.args.num_training:
             # Use 10% random unsupervised samples for 100% training examples.
             unsup_examples=unsup_examples[0:int(self.args.num_training)]
         training_dataset=ConcatDataset(datasets=[
             SubsetDataset(self.problem.train_set(), range(0,self.args.num_training)),
-            SubsetDataset(self.problem.unsup_set(), unsup_examples)])
+            SubsetDataset(self.problem.unsup_set(), unsup_examples, unsup_true_label)])
         length=len(training_dataset)
         train_loader_subset = torch.utils.data.DataLoader(training_dataset,
                                                           batch_size=problem.mini_batch_size(),
@@ -308,10 +309,7 @@ class TrainModelSplit:
 
         for batch_idx, (inputs, targets) in enumerate(train_loader_subset):
             num_batches += 1
-            if targets is None:
-                targets = torch.ones(self.mini_batch_size, self.problem.num_classes()) / self.problem.num_classes()
-            else:
-                targets = self.problem.one_hot(targets)
+            targets = self.problem.one_hot(targets)
 
             if self.use_cuda:
                 inputs, targets = inputs.cuda(), targets.cuda()

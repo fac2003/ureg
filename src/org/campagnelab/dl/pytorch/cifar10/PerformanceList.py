@@ -31,7 +31,12 @@ class PerformanceList(list):
 
     def metric_names(self):
         names=[perf.metric_names() for perf in self]
-        return names
+        return flatten(names)
+
+    def estimates_of_metrics(self):
+        estimates=[]
+        estimates +=[perf.estimates_of_metric() for perf in self]
+        return flatten(estimates)
 
     def progress_message(self, metrics):
         estimators=[]

@@ -1,12 +1,13 @@
-import itertools
 import os
-from random import random
+from random import randint
 
 import numpy
+import sys
 import torch
 from torch.autograd import Variable
 from torch.backends import cudnn
-from torch.nn import MSELoss, MultiLabelSoftMarginLoss
+from torch.nn import MultiLabelSoftMarginLoss
+from torchnet.dataset import ConcatDataset
 from torchnet.meter import ConfusionMeter
 
 from org.campagnelab.dl.pytorch.cifar10.AccuracyHelper import AccuracyHelper
@@ -14,6 +15,7 @@ from org.campagnelab.dl.pytorch.cifar10.FloatHelper import FloatHelper
 from org.campagnelab.dl.pytorch.cifar10.LRHelper import LearningRateHelper
 from org.campagnelab.dl.pytorch.cifar10.LossHelper import LossHelper
 from org.campagnelab.dl.pytorch.cifar10.PerformanceList import PerformanceList
+from org.campagnelab.dl.pytorch.cifar10.datasets.SubsetDataset import SubsetDataset
 from org.campagnelab.dl.pytorch.cifar10.utils import progress_bar, grad_norm
 from org.campagnelab.dl.pytorch.ureg.LRSchedules import construct_scheduler
 
@@ -43,8 +45,9 @@ def print_params(epoch, net):
     print("epoch=" + str(epoch) + " " + " ".join(map(str, params)))
 
 
-class TrainModelUnsupMixup:
-    """Train a model using the unsupervised mixup apporach."""
+class TrainModelUnsupDirect:
+    """Train a model using the unsupervised direct approach. This approach uses unsupervised samples
+    to complement the training set, and makes up labels. """
 
     def __init__(self, args, problem, use_cuda):
         """
@@ -108,12 +111,6 @@ class TrainModelUnsupMixup:
         model_built = False
         self.best_performance_metrics = None
         self.best_model = None
-
-        def rmse(y, y_hat):
-            """Compute root mean squared error"""
-            return torch.sqrt(torch.mean((y - y_hat).pow(2)))
-
-        self.agreement_loss = MSELoss()
 
         if hasattr(args, 'resume') and args.resume:
             # Load checkpoint.
@@ -182,7 +179,24 @@ class TrainModelUnsupMixup:
 
         unsupervised_loss_acc = 0
         num_batches = 0
-        train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
+        unsup_examples = numpy.random.random_integers(0,self.args.num_shaving-1, int(self.args.unsup_proportion * self.args.num_training))
+
+        if self.args.label_strategy == "RANDOM_UNIFORM":
+            made_up_label = lambda index: randint(0, self.problem.num_classes() - 1)
+        else:
+            print(
+                "Unsupported --label-strategy: " + self.args.label_strategy + " only RANDOM_UNIFORM is supported with this mode.")
+            exit(1)
+
+        training_dataset = ConcatDataset(
+            datasets=[
+                SubsetDataset(self.problem.train_set(), range(0, self.args.num_training)),
+                SubsetDataset(self.problem.unsup_set(), unsup_examples, get_label=made_up_label)])
+        length = len(training_dataset)
+        train_loader_subset = torch.utils.data.DataLoader(training_dataset,
+                                                          batch_size=self.problem.mini_batch_size(),
+                                                          shuffle=True,
+                                                          num_workers=0)
 
         for batch_idx, (inputs, targets) in enumerate(train_loader_subset):
             num_batches += 1
@@ -197,10 +211,7 @@ class TrainModelUnsupMixup:
             self.optimizer_training.zero_grad()
             outputs = self.net(inputs)
 
-
             if train_supervised_model:
-                # if self.ureg._which_one_model is not None:
-                #    self.ureg.estimate_example_weights(inputs)
 
                 supervised_loss = self.criterion(outputs, targets)
                 optimized_loss = supervised_loss
@@ -216,196 +227,13 @@ class TrainModelUnsupMixup:
                                                                outputs, targets)
 
             progress_bar(batch_idx * self.mini_batch_size,
-                         min(self.max_regularization_examples, self.max_training_examples),
-                         " ".join([performance_estimator.progress_message() for performance_estimator in
-                                   performance_estimators]))
-
-            if (batch_idx + 1) * self.mini_batch_size > self.max_training_examples:
-                break
-
-        return performance_estimators
-
-    def train_mixup(self, epoch,
-                    performance_estimators=None,
-                    train_supervised_model=True,
-                    alpha=0.5,
-                    ratio_unsup=0,
-                    ):
-
-        if performance_estimators is None:
-            performance_estimators = PerformanceList()
-            performance_estimators += [LossHelper("optimized_loss")]
-            performance_estimators += [LossHelper("train_loss")]
-            # performance_estimators += [AccuracyHelper("train_")]
-            performance_estimators += [FloatHelper("train_grad_norm")]
-            performance_estimators += [FloatHelper("alpha")]
-            performance_estimators += [FloatHelper("unsup_proportion")]
-            print('\nTraining, epoch: %d' % epoch)
-        self.net.train()
-        supervised_grad_norm = 1.
-        for performance_estimator in performance_estimators:
-            performance_estimator.init_performance_metrics()
-
-        unsupervised_loss_acc = 0
-        num_batches = 0
-        train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
-        sec_train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
-        unsuploader_shuffled = self.problem.reg_loader_subset_range(0, self.args.num_shaving)
-        unsupiter = itertools.cycle(unsuploader_shuffled)
-
-        performance_estimators.set_metric(epoch, "alpha", alpha)
-        performance_estimators.set_metric(epoch, "unsup_proportion", ratio_unsup)
-
-        for batch_idx, ((inputs1, targets1),
-                        (inputs2, targets2),
-                        (uinputs1, _)) in enumerate(zip(train_loader_subset,
-                                                        sec_train_loader_subset,
-                                                        unsupiter)):
-            num_batches += 1
-
-            use_unsup = random() < ratio_unsup
-
-            if use_unsup:
-                # use an example from the unsupervised set to mixup with inputs1:
-                inputs2 = uinputs1
-
-            if self.use_cuda:
-                inputs1 = inputs1.cuda()
-                inputs2 = inputs2.cuda()
-
-            inputs, targets = self.mixup_inputs_targets(alpha, inputs1, inputs2, targets1, targets2)
-
-            # outputs used to calculate the loss of the supervised model
-            # must be done with the model prior to regularization:
-            self.net.train()
-            self.optimizer_training.zero_grad()
-            outputs = self.net(inputs)
-
-            if train_supervised_model:
-                supervised_loss = self.criterion_multi_label(outputs, targets)
-                optimized_loss = supervised_loss
-                optimized_loss.backward()
-                self.optimizer_training.step()
-                supervised_grad_norm = grad_norm(self.net.parameters())
-                performance_estimators.set_metric(batch_idx, "train_grad_norm", supervised_grad_norm)
-                performance_estimators.set_metric(batch_idx, "optimized_loss", optimized_loss.data[0])
-
-                performance_estimators.set_metric_with_outputs(batch_idx, "train_loss", supervised_loss.data[0],
-                                                               outputs, targets)
-                # performance_estimators.set_metric_with_outputs(batch_idx, "train_accuracy", supervised_loss.data[0],
-                #                                               outputs, targets)
-
-            progress_bar(batch_idx * self.mini_batch_size,
-                         min(self.max_regularization_examples, self.max_training_examples),
+                         length,
                          performance_estimators.progress_message(["train_loss","train_accuracy"]))
 
             if (batch_idx + 1) * self.mini_batch_size > self.max_training_examples:
                 break
 
         return performance_estimators
-
-    def mixup_inputs_targets(self, alpha, inputs1, inputs2, targets1, targets2):
-        """" Implement mixup: combine inputs and targets in alpha amounts. """
-        if self.args.one_mixup_per_batch:
-
-            # one distinct lam scalar per example:
-            lam = torch.from_numpy(numpy.random.beta(alpha, alpha, self.mini_batch_size)).type(torch.FloatTensor)
-            targets1 = self.problem.one_hot(targets1)
-            inputs_gpu = inputs2.cuda(self.args.second_gpu_index) if self.use_cuda else inputs2
-            targets2 = self.dream_up_target2(inputs_gpu, targets2)
-            inputs = torch.zeros(inputs1.size())
-            targets = torch.zeros(targets1.size())
-            if self.use_cuda:
-                lam = lam.cuda()
-                targets1 = targets1.cuda()
-                targets2 = targets2.cuda()
-                inputs = inputs.cuda()
-                targets = targets.cuda()
-            for example_index in range(0, self.mini_batch_size):
-                inputs[example_index] = inputs1[example_index] * lam[example_index] + inputs2[example_index] * (
-                        1. - lam[example_index])
-                targets[example_index] = targets1[example_index] * lam[example_index] + targets2[example_index] * (
-                        1. - lam[example_index])
-        else:
-            lam = numpy.random.beta(alpha, alpha)
-            targets1 = self.problem.one_hot(targets1)
-            inputs_gpu = inputs2.cuda(self.args.second_gpu_index) if self.use_cuda else inputs2
-            targets2 = self.dream_up_target2(inputs_gpu, targets2)
-
-            if self.use_cuda:
-                targets1 = targets1.cuda()
-                targets2 = targets2.cuda()
-
-            inputs = inputs1 * lam + inputs2 * (1. - lam)
-            targets = targets1 * lam + targets2 * (1. - lam)
-
-        inputs, targets = Variable(inputs, requires_grad=True), Variable(targets, requires_grad=False)
-        return inputs, targets
-
-    def dream_up_target2(self, inputs_gpu, targets2):
-        if self.args.label_strategy == "CERTAIN" or self.best_model is None:
-            # we don't know the target on the unsup set, so we just let the training set make it up (this guess is correct
-            # with probability 1/num_classes times):
-            targets2 = self.problem.one_hot(targets2)
-        elif self.args.label_strategy == "UNIFORM":
-            # we use uniform labels that represent the expectation of the correct answer if classes where equally represented:
-            targets2 = torch.ones(self.mini_batch_size, self.problem.num_classes()) / self.problem.num_classes()
-        elif self.args.label_strategy == "MODEL":
-            # we use the best model we trained so far to predict the outputs. These labels will overfit to the
-            # training set as training progresses:
-            best_model_output = self.best_model(Variable(inputs_gpu, requires_grad=False))
-            _, predicted = torch.max(best_model_output.data)
-            targets2 = best_model_output.data
-        elif self.args.label_strategy == "VAL_CONFUSION":
-            # we use the best model we trained so far to predict the outputs. These labels will overfit to the
-            # training set as training progresses:
-            best_model_output = self.best_model(Variable(inputs_gpu, requires_grad=False))
-            _, predicted = torch.max(best_model_output.data, 1)
-            predicted = predicted.type(torch.LongTensor)
-            if self.use_cuda:
-                predicted = predicted.cuda(self.args.second_gpu_index)
-            # we use the confusion matrix to set the target on the unsupervised example. We simply normalize the
-            # row of the confusion matrix corresponding to the  label predicted by the best model:
-            select = torch.index_select(self.best_model_confusion_matrix, dim=0, index=predicted).type(
-                torch.FloatTensor)
-            targets2 = torch.renorm(select, p=1, dim=0, maxnorm=1)
-            # print("normalized: "+str(targets2))
-        elif self.args.label_strategy == "VAL_CONFUSION_SAMPLING":
-            # we use the best model we trained so far to predict the outputs. These labels will overfit to the
-            # training set as training progresses:
-            self.best_model.eval()
-            best_model_output = self.best_model(Variable(inputs_gpu, requires_grad=False))
-            _, predicted = torch.max(best_model_output.data, 1)
-            predicted = predicted.type(torch.LongTensor)
-
-            if self.use_cuda:
-                predicted = predicted.cuda(self.args.second_gpu_index)
-            # we lookup the confusion matrix, but instead of using it directly as output, we sample from it to
-            # create a one-hot encoded unsupervised output label:
-            select = torch.index_select(self.best_model_confusion_matrix, dim=0, index=predicted).type(
-                torch.FloatTensor)
-            if random() > (1 - self.args.exploration_rate):
-                # remove the class with the most correct answers from consideration (set its probability to zero):
-                max_value, max_index = select.max(dim=1)
-                select.scatter_(dim=1, index=max_index.view(self.mini_batch_size, 1), value=0.)
-
-            normalized_confusion_matrix = torch.renorm(select, p=1, dim=0, maxnorm=1)
-            confusion_cumulative = torch.cumsum(normalized_confusion_matrix, dim=1)
-            class_indices = []
-            random_choice = torch.rand(self.mini_batch_size)
-            for index, example in enumerate(confusion_cumulative):
-                nonzero = example.ge(random_choice[index]).nonzero()
-                if len(nonzero) > 0:
-                    class_indices += [nonzero.min()]
-                else:
-                    class_indices += [self.problem.num_classes() - 1]
-
-            targets2 = self.problem.one_hot(torch.from_numpy(numpy.array(class_indices)))
-            # print("targets2: "+str(targets2))
-        else:
-            print("Incorrect label strategy name: " + self.args.label_strategy)
-            exit(1)
-        return targets2
 
     def test(self, epoch, performance_estimators=None):
         print('\nTesting, epoch: %d' % epoch)
@@ -546,53 +374,6 @@ class TrainModelUnsupMixup:
         model.eval()
         return model
 
-    def training_mixup(self):
-        """Train the model with unsupervised mixup. Returns the performance obtained
-           at the end of the configured training run.
-        :return list of performance estimators that observed performance on the last epoch run.
-        """
-        header_written = False
-
-        lr_train_helper = LearningRateHelper(scheduler=self.scheduler_train, learning_rate_name="train_lr")
-        previous_test_perfs = None
-        perfs = PerformanceList()
-        train_loss = None
-        test_loss = None
-        for epoch in range(self.start_epoch, self.start_epoch + self.args.num_epochs):
-
-            perfs = PerformanceList()
-            perfs += self.train_mixup(epoch,
-                                       train_supervised_model=True,
-                                       alpha=self.args.alpha,
-                                       ratio_unsup=self.args.unsup_proportion
-                                       )
-
-            if self.args.unsup_proportion > 1:
-                self.args.unsup_proportion = 1
-                self.args.alpha *= 1. / self.args.increase_decrease
-            if self.args.unsup_proportion < 1E-5:
-                self.args.unsup_proportion = 0
-                self.args.alpha *= 1. / self.args.increase_decrease
-            if self.args.alpha < 0:
-                self.args.alpha = 0
-            if self.args.alpha > 1:
-                self.args.alpha = 1
-
-            perfs += [lr_train_helper]
-            if previous_test_perfs is None or self.epoch_is_test_epoch(epoch):
-                perfs += self.test(epoch)
-
-            if (not header_written):
-                header_written = True
-                self.log_performance_header(perfs)
-
-            early_stop, perfs = self.log_performance_metrics(epoch, perfs)
-            if early_stop:
-                # early stopping requested.
-                return perfs
-
-        return perfs
-
     def epoch_is_test_epoch(self, epoch):
         epoch_is_one_of_last_ten = epoch > (self.start_epoch + self.args.num_epochs - 10)
         return (epoch % self.args.test_every_n_epochs + 1) == 1 or epoch_is_one_of_last_ten
@@ -607,21 +388,20 @@ class TrainModelUnsupMixup:
         lr_train_helper = LearningRateHelper(scheduler=self.scheduler_train, learning_rate_name="train_lr")
         previous_test_perfs = None
         perfs = PerformanceList()
-        if not self.args.resume:
-            self.net.remake_classifier(self.problem.num_classes(), self.use_cuda, 0)
-
+        best_test_loss=sys.maxsize
+        num_rollbacks=0
+        epochs_since_rollback=0
         for epoch in range(self.start_epoch, self.start_epoch + self.args.num_epochs):
 
             perfs = PerformanceList()
 
-            perfs += self.train(epoch,
-                                     train_supervised_model=True)
+            perfs += self.train(epoch,train_supervised_model=True)
 
             perfs += [lr_train_helper]
             if previous_test_perfs is None or self.epoch_is_test_epoch(epoch):
                 perfs += self.test(epoch)
 
-
+            test_loss=perfs.get_metric("test_loss")
             if (not header_written):
                 header_written = True
                 self.log_performance_header(perfs)
@@ -630,6 +410,15 @@ class TrainModelUnsupMixup:
             if early_stop:
                 # early stopping requested.
                 return perfs
-
+            if self.args.rollback_when_worse and epochs_since_rollback> 5 and test_loss>best_test_loss:
+                self.net=self.load_checkpoint()
+                if self.use_cuda:self.net.cuda()
+                print("Rolled-back")
+                num_rollbacks+=1
+                epochs_since_rollback=0
+            else:
+                best_test_loss=test_loss
+                epochs_since_rollback+=1
+                print("best test loss={} rolled-back {} times.".format(best_test_loss,num_rollbacks))
         return perfs
 

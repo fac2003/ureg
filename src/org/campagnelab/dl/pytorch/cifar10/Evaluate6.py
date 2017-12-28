@@ -1,4 +1,4 @@
-'''Train CIFAR10/STL10 with unsupervised mixup.'''
+'''Train CIFAR10/STL10 with the unsupervised direct approach.'''
 from __future__ import print_function
 
 import argparse
@@ -13,6 +13,7 @@ from org.campagnelab.dl.pytorch.cifar10.Cifar10Problem import Cifar10Problem
 from org.campagnelab.dl.pytorch.cifar10.CrossValidatedProblem import CrossValidatedProblem
 from org.campagnelab.dl.pytorch.cifar10.Problems import create_model
 from org.campagnelab.dl.pytorch.cifar10.STL10Problem import STL10Problem
+from org.campagnelab.dl.pytorch.cifar10.TrainModelUnsupDirect import TrainModelUnsupDirect
 from org.campagnelab.dl.pytorch.cifar10.TrainModelUnsupMixup import TrainModelUnsupMixup
 from org.campagnelab.dl.pytorch.cifar10.models import *
 
@@ -43,11 +44,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Evaluate split training against CIFAR10 & STL10')
     parser.add_argument('--lr', default=0.005, type=float, help='Learning rate.')
     parser.add_argument('--resume', '-r', action='store_true', help='resume from checkpoint.')
-
-    parser.add_argument('--alpha', default=0.4, type=float, help='Alpha for mixup (default: 0.4).')
-    parser.add_argument('--one-mixup-per-batch', default=True,  action='store_true', help='Use one value of mixup parameter per minibatch.')
-    parser.add_argument('--unsup-proportion', default=0.1, type=float, help='Amount of unsupervised samples to use'
-                                                                          'instead of training samples (default: 0.1).')
+    parser.add_argument('--unsup-proportion', default=1, type=float, help='Amount of unsupervised samples to use'
+                                                                          'in proportion to training samples (default: 1).')
     parser.add_argument('--constant-learning-rates', action='store_true',
                         help='Use constant learning rates, not schedules.')
     parser.add_argument('--mini-batch-size', type=int, help='Size of the mini-batch.', default=128)
@@ -62,9 +60,6 @@ if __name__ == '__main__':
     parser.add_argument('--max-examples-per-epoch', type=int, help='Maximum number of examples scanned in an epoch'
                                                                    '(e.g., for ureg model training). By default, equal to the '
                                                                    'number of examples in the training set.', default=None)
-    parser.add_argument('--increase-decrease', default=1, type=float,
-                        help='Multiply unsup proportion by this number at each epoch. Used to increase >1 or decrease <1 the '
-                             'proportion of unsupervised samples used at each epoch.')
     parser.add_argument('--momentum', type=float, help='Momentum for SGD.', default=0.9)
     parser.add_argument('--L2', type=float, help='L2 regularization.', default=1E-4)
     parser.add_argument('--seed', type=int,
@@ -77,18 +72,19 @@ if __name__ == '__main__':
                         help='The model to instantiate. One of VGG16,	ResNet18, ResNet50, ResNet101,ResNeXt29, ResNeXt29, DenseNet121, PreActResNet18, DPN92')
     parser.add_argument('--problem', default="CIFAR10", type=str,
                         help='The problem, either CIFAR10 or STL10')
-    parser.add_argument('--mode', help='Training mode: supervised or mixup',
+    parser.add_argument('--mode', help='Training mode: supervised or semisupervised',
                         default="supervised")
     parser.add_argument("--reset-lr-every-n-epochs", type=int, help='Reset learning rate to initial value every n epochs.')
     parser.add_argument('--label-strategy',
                         help='Strategy to dream up labels for the unsupervised set (mixup mode). '
-                             'One of CERTAIN, UNIFORM, MODEL,VAL_CONFUSION, VAL_CONFUSION_SAMPLING. '
-                             'For supervised mode with --unsup-confusion optiond, either UNIFORM or VAL_LABEL.',
-                        default="CERTAIN")
+                             'One of RANDOM_UNIFORM. ',
+                        default="RANDOM_UNIFORM")
     parser.add_argument('--abort-when-failed-to-improve', default=sys.maxsize, type=int,
                         help='Abort training if performance fails to improve for more than the specified number of epochs.')
     parser.add_argument('--two-models', action='store_true',
                         help='Keep two models in memory, one if the model with the best performance seen so far.')
+    parser.add_argument('--rollback-when-worse', action='store_true',
+                        help='Rollback the model to a previous copy when the validation performance got worse after an epoch.')
     parser.add_argument('--second-gpu-index', default=0, type=int,
                         help='Index of the second gpu, if working with two models. Use 0 if the first GPU has enough memory'
                              'to hold both models, use another index to put models on different GPUs.')
@@ -151,7 +147,7 @@ if __name__ == '__main__':
         if args.mode == "supervised":
             args.split = None
 
-        model_trainer = TrainModelUnsupMixup(args=args, problem=problem, use_cuda=use_cuda)
+        model_trainer = TrainModelUnsupDirect(args=args, problem=problem, use_cuda=use_cuda)
         torch.manual_seed(args.seed)
         if use_cuda:
             torch.cuda.manual_seed(args.seed)
@@ -159,9 +155,15 @@ if __name__ == '__main__':
         model_trainer.init_model(create_model_function=create_model)
 
         if args.mode == "supervised":
+            if args.unsup_proportion != 0:
+                print("Forcing --unsup-proportion to zero since you selected supervised training.")
+                args.unsup_proportion=0
             return model_trainer.training_supervised()
-        if args.mode == "mixup":
-            return model_trainer.training_mixup()
+        if args.mode == "semisupervised":
+            if args.unsup_proportion==0 or args.num_shaving==0:
+                print("Warning: semisupervised mode with no unsupervised samples is the same as fully supervised training.")
+
+            return model_trainer.training_supervised()
         else:
             print("unknown mode specified: " + args.mode)
             exit(1)

@@ -133,9 +133,6 @@ class TrainModelUnsupMixup:
                 self.start_epoch = checkpoint['epoch']
                 self.best_model = checkpoint['best-model']
                 self.best_model_confusion_matrix = checkpoint['confusion-matrix']
-                # force all parameters to be optimized, in case we resume after fine-tuning a model:
-                for param in self.net.parameters():
-                    param.requires_grad = True
                 model_built = True
             else:
                 print("Could not load model checkpoint, unable to --resume.")
@@ -357,6 +354,7 @@ class TrainModelUnsupMixup:
             _, predicted = torch.max(best_model_output.data)
             targets2 = best_model_output.data
         elif self.args.label_strategy == "VAL_CONFUSION":
+            self.best_model.eval()
             # we use the best model we trained so far to predict the outputs. These labels will overfit to the
             # training set as training progresses:
             best_model_output = self.best_model(Variable(inputs_gpu, requires_grad=False))

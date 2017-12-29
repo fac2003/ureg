@@ -120,17 +120,17 @@ class PreActResNet(EstimateFeatureSize):
 def PreActResNet18(input_shape):
     return PreActResNet(PreActBlock, [2,2,2,2], input_shape)
 
-def PreActResNet34():
-    return PreActResNet(PreActBlock, [3,4,6,3])
+def PreActResNet34(input_shape):
+    return PreActResNet(PreActBlock, [3,4,6,3], input_shape)
 
-def PreActResNet50():
-    return PreActResNet(PreActBottleneck, [3,4,6,3])
+def PreActResNet50(input_shape):
+    return PreActResNet(PreActBottleneck, [3,4,6,3], input_shape)
 
-def PreActResNet101():
-    return PreActResNet(PreActBottleneck, [3,4,23,3])
+def PreActResNet101(input_shape):
+    return PreActResNet(PreActBottleneck, [3,4,23,3], input_shape)
 
-def PreActResNet152():
-    return PreActResNet(PreActBottleneck, [3,8,36,3])
+def PreActResNet152(input_shape):
+    return PreActResNet(PreActBottleneck, [3,8,36,3], input_shape)
 
 
 def test():

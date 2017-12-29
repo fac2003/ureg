@@ -1,6 +1,7 @@
 from org.campagnelab.dl.pytorch.cifar10.models \
     import VGG, ResNet18, PreActResNet18, GoogLeNet, DPN92, MobileNet, \
-    ResNeXt29_2x64d, ShuffleNetG2, SENet18, DenseNet121
+    ResNeXt29_2x64d, ShuffleNetG2, SENet18, DenseNet121, PreActResNet34, PreActResNet50, PreActResNet152, \
+    PreActResNet101
 
 
 def vgg16(problem):
@@ -17,6 +18,19 @@ def resnet18(problem):
 
 def preactresnet18(problem):
     return PreActResNet18(problem.example_size())
+
+
+def preactresnet34(problem):
+    return PreActResNet34(problem.example_size())
+
+def preactresnet50(problem):
+    return PreActResNet50(problem.example_size())
+
+def preactresnet101(problem):
+    return PreActResNet101(problem.example_size())
+
+def preactresnet152(problem):
+    return PreActResNet152(problem.example_size())
 
 
 def googlenet(problem):
@@ -51,6 +65,10 @@ models = {
     "VGG19": vgg19,
     "ResNet18": resnet18,
     "PreActResNet18": preactresnet18,
+    "PreActResNet34": preactresnet34,
+    "PreActResNet50": preactresnet50,
+    "PreActResNet101": preactresnet101,
+    "PreActResNet152": preactresnet152,
     "GoogLeNet": googlenet,
     "DenseNet121": densenet121,
     "ResNeXt29": resnetx29,

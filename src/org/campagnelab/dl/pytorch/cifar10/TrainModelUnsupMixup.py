@@ -350,14 +350,14 @@ class TrainModelUnsupMixup:
         elif self.args.label_strategy == "MODEL":
             # we use the best model we trained so far to predict the outputs. These labels will overfit to the
             # training set as training progresses:
-            best_model_output = self.best_model(Variable(inputs_gpu, requires_grad=False))
+            best_model_output = self.best_model(Variable(inputs_gpu, volatile=True))
             _, predicted = torch.max(best_model_output.data)
             targets2 = best_model_output.data
         elif self.args.label_strategy == "VAL_CONFUSION":
             self.best_model.eval()
             # we use the best model we trained so far to predict the outputs. These labels will overfit to the
             # training set as training progresses:
-            best_model_output = self.best_model(Variable(inputs_gpu, requires_grad=False))
+            best_model_output = self.best_model(Variable(inputs_gpu, volatile=True))
             _, predicted = torch.max(best_model_output.data, 1)
             predicted = predicted.type(torch.LongTensor)
             if self.use_cuda:
@@ -372,7 +372,7 @@ class TrainModelUnsupMixup:
             # we use the best model we trained so far to predict the outputs. These labels will overfit to the
             # training set as training progresses:
             self.best_model.eval()
-            best_model_output = self.best_model(Variable(inputs_gpu, requires_grad=False))
+            best_model_output = self.best_model(Variable(inputs_gpu, volatile=True))
             _, predicted = torch.max(best_model_output.data, 1)
             predicted = predicted.type(torch.LongTensor)
 

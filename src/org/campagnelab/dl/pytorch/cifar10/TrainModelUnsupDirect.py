@@ -138,7 +138,6 @@ class TrainModelUnsupDirect:
                 print("Could not load model checkpoint, unable to --resume.")
                 model_built = False
 
-
         if not model_built:
             print('==> Building model {}'.format(args.model))
 
@@ -179,7 +178,8 @@ class TrainModelUnsupDirect:
 
         unsupervised_loss_acc = 0
         num_batches = 0
-        unsup_examples = numpy.random.random_integers(0,self.args.num_shaving-1, int(self.args.unsup_proportion * self.args.num_training))
+        unsup_examples = numpy.random.random_integers(0, self.args.num_shaving - 1,
+                                                      int(self.args.unsup_proportion * self.args.num_training))
 
         if self.args.label_strategy == "RANDOM_UNIFORM":
             made_up_label = lambda index: randint(0, self.problem.num_classes() - 1)
@@ -212,7 +212,6 @@ class TrainModelUnsupDirect:
             outputs = self.net(inputs)
 
             if train_supervised_model:
-
                 supervised_loss = self.criterion(outputs, targets)
                 optimized_loss = supervised_loss
                 optimized_loss.backward()
@@ -228,7 +227,75 @@ class TrainModelUnsupDirect:
 
             progress_bar(batch_idx * self.mini_batch_size,
                          length,
-                         performance_estimators.progress_message(["train_loss","train_accuracy"]))
+                         performance_estimators.progress_message(["train_loss", "train_accuracy"]))
+
+            if (batch_idx + 1) * self.mini_batch_size > self.max_training_examples:
+                break
+
+        return performance_estimators
+
+    def train_unsup_only(self, epoch, unsup_index_to_label,
+                         performance_estimators=None
+                         ):
+        """ Continue training a model on the unsupervised set with labels.
+        :param epoch:
+        :param unsup_index_to_label: map from index of the unsupervised example to label (in one hot encoding format, one element per class)
+        :param performance_estimators:
+        :param train_supervised_model:
+        :return:
+        """
+        if performance_estimators is None:
+            performance_estimators = PerformanceList()
+            performance_estimators += [LossHelper("optimized_loss")]
+            performance_estimators += [LossHelper("train_loss")]
+
+            performance_estimators += [AccuracyHelper("train_")]
+            performance_estimators += [FloatHelper("train_grad_norm")]
+
+        print('\nTraining, epoch: %d' % epoch)
+
+        self.net.train()
+        train_supervised_model = True
+        for performance_estimator in performance_estimators:
+            performance_estimator.init_performance_metrics()
+
+        num_batches = 0
+        training_dataset = SubsetDataset(self.problem.unsup_set(),
+                                         self.args.num_shaving, get_label=lambda index: unsup_index_to_label[index])
+        length = len(training_dataset)
+        train_loader_subset = torch.utils.data.DataLoader(training_dataset,
+                                                          batch_size=self.problem.mini_batch_size(),
+                                                          shuffle=True,
+                                                          num_workers=0)
+
+        for batch_idx, (inputs, targets) in enumerate(train_loader_subset):
+            num_batches += 1
+
+            if self.use_cuda:
+                inputs, targets = inputs.cuda(), targets.cuda()
+
+            inputs, targets = Variable(inputs), Variable(targets, requires_grad=False)
+            # outputs used to calculate the loss of the supervised model
+            # must be done with the model prior to regularization:
+            self.net.train()
+            self.optimizer_training.zero_grad()
+            outputs = self.net(inputs)
+
+            if train_supervised_model:
+                supervised_loss = self.criterion_multi_label(outputs, targets)
+                optimized_loss = supervised_loss
+                optimized_loss.backward()
+                self.optimizer_training.step()
+                supervised_grad_norm = grad_norm(self.net.parameters())
+                performance_estimators.set_metric(batch_idx, "train_grad_norm", supervised_grad_norm)
+                performance_estimators.set_metric_with_outputs(batch_idx, "optimized_loss", optimized_loss.data[0],
+                                                               outputs, targets)
+                performance_estimators.set_metric_with_outputs(batch_idx, "train_loss", supervised_loss.data[0],
+                                                               outputs, targets)
+
+            progress_bar(batch_idx * self.mini_batch_size,
+                         length,
+                         performance_estimators.progress_message(["train_loss", "train_accuracy"]))
 
             if (batch_idx + 1) * self.mini_batch_size > self.max_training_examples:
                 break
@@ -378,9 +445,10 @@ class TrainModelUnsupDirect:
         epoch_is_one_of_last_ten = epoch > (self.start_epoch + self.args.num_epochs - 10)
         return (epoch % self.args.test_every_n_epochs + 1) == 1 or epoch_is_one_of_last_ten
 
-    def training_supervised(self):
+    def training_supervised(self, unsup_only=False):
         """Train the model in a completely supervised manner. Returns the performance obtained
            at the end of the configured training run.
+           :param unsup_only Set to true to train with dreamed-up labels on the unsupervised examples only.
         :return list of performance estimators that observed performance on the last epoch run.
         """
         header_written = False
@@ -388,20 +456,41 @@ class TrainModelUnsupDirect:
         lr_train_helper = LearningRateHelper(scheduler=self.scheduler_train, learning_rate_name="train_lr")
         previous_test_perfs = None
         perfs = PerformanceList()
-        best_test_loss=sys.maxsize
-        num_rollbacks=0
-        epochs_since_rollback=0
+        best_test_loss = sys.maxsize
+        num_rollbacks = 0
+        epochs_since_rollback = 0
+
+        if unsup_only:
+            assert self.best_model is not None, "best model cannot be None to continue training with unsup only."
+            # scan the unsupervised set to calculate labels using the previously trained best model:
+            unsup_index_to_labels = {}
+            unsup_set_loader = self.problem.loader_for_dataset(self.problem.unsup_set())
+            for batch_idx, (inputs, _) in enumerate(unsup_set_loader):
+                if self.use_cuda:
+                    inputs, = inputs.cuda()
+                inputs = Variable(inputs, volatile=True)
+                predicted = self.best_model(inputs)
+                select = torch.index_select(self.best_model_confusion_matrix, dim=0, index=predicted).type(
+                    torch.FloatTensor)
+                confusion_labels = torch.renorm(select, p=1, dim=0, maxnorm=1)
+                start_of_range=batch_idx * self.problem.mini_batch_size
+                for example_index in range(start_of_range,
+                                           start_of_range + self.problem.mini_batch_size):
+                    label_for_example=confusion_labels[example_index-start_of_range]
+                    unsup_index_to_labels[example_index]=label_for_example
+
         for epoch in range(self.start_epoch, self.start_epoch + self.args.num_epochs):
 
             perfs = PerformanceList()
 
-            perfs += self.train(epoch,train_supervised_model=True)
+            perfs += self.train_unsup_only(epoch, unsup_index_to_label=unsup_index_to_labels) if unsup_only else \
+                self.train(epoch, train_supervised_model=True)
 
             perfs += [lr_train_helper]
             if previous_test_perfs is None or self.epoch_is_test_epoch(epoch):
                 perfs += self.test(epoch)
 
-            test_loss=perfs.get_metric("test_loss")
+            test_loss = perfs.get_metric("test_loss")
             if (not header_written):
                 header_written = True
                 self.log_performance_header(perfs)
@@ -410,15 +499,14 @@ class TrainModelUnsupDirect:
             if early_stop:
                 # early stopping requested.
                 return perfs
-            if self.args.rollback_when_worse and epochs_since_rollback> 5 and test_loss>best_test_loss:
-                self.net=self.load_checkpoint()
-                if self.use_cuda:self.net.cuda()
+            if self.args.rollback_when_worse and epochs_since_rollback > 5 and test_loss > best_test_loss:
+                self.net = self.load_checkpoint()
+                if self.use_cuda: self.net.cuda()
                 print("Rolled-back")
-                num_rollbacks+=1
-                epochs_since_rollback=0
+                num_rollbacks += 1
+                epochs_since_rollback = 0
             else:
-                best_test_loss=test_loss
-                epochs_since_rollback+=1
-                print("best test loss={} rolled-back {} times.".format(best_test_loss,num_rollbacks))
+                best_test_loss = test_loss
+                epochs_since_rollback += 1
+                print("best test loss={} rolled-back {} times.".format(best_test_loss, num_rollbacks))
         return perfs
-

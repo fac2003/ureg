@@ -130,9 +130,6 @@ class TrainModelUnsupDirect:
                 self.start_epoch = checkpoint['epoch']
                 self.best_model = checkpoint['best-model']
                 self.best_model_confusion_matrix = checkpoint['confusion-matrix']
-                # force all parameters to be optimized, in case we resume after fine-tuning a model:
-                for param in self.net.parameters():
-                    param.requires_grad = True
                 model_built = True
             else:
                 print("Could not load model checkpoint, unable to --resume.")
@@ -145,6 +142,10 @@ class TrainModelUnsupDirect:
 
         if self.use_cuda:
             self.net.cuda()
+            if self.best_model is not None:
+                self.best_model.cuda()
+                self.best_model_confusion_matrix = self.best_model_confusion_matrix.cuda()
+
         cudnn.benchmark = True
 
         self.optimizer_training = torch.optim.SGD(self.net.parameters(), lr=args.lr, momentum=args.momentum,
@@ -261,11 +262,11 @@ class TrainModelUnsupDirect:
 
         num_batches = 0
         training_dataset = SubsetDataset(self.problem.unsup_set(),
-                                         self.args.num_shaving, get_label=lambda index: unsup_index_to_label[index])
+                                         range(0,self.args.num_shaving), get_label=lambda index: unsup_index_to_label[index])
         length = len(training_dataset)
         train_loader_subset = torch.utils.data.DataLoader(training_dataset,
                                                           batch_size=self.problem.mini_batch_size(),
-                                                          shuffle=True,
+                                                          shuffle=False,
                                                           num_workers=0)
 
         for batch_idx, (inputs, targets) in enumerate(train_loader_subset):
@@ -296,9 +297,6 @@ class TrainModelUnsupDirect:
             progress_bar(batch_idx * self.mini_batch_size,
                          length,
                          performance_estimators.progress_message(["train_loss", "train_accuracy"]))
-
-            if (batch_idx + 1) * self.mini_batch_size > self.max_training_examples:
-                break
 
         return performance_estimators
 
@@ -448,7 +446,7 @@ class TrainModelUnsupDirect:
     def training_supervised(self, unsup_only=False):
         """Train the model in a completely supervised manner. Returns the performance obtained
            at the end of the configured training run.
-           :param unsup_only Set to true to train with dreamed-up labels on the unsupervised examples only.
+        :param unsup_only Set to true to train with dreamed-up labels on the unsupervised examples only.
         :return list of performance estimators that observed performance on the last epoch run.
         """
         header_written = False
@@ -463,22 +461,31 @@ class TrainModelUnsupDirect:
         if unsup_only:
             assert self.best_model is not None, "best model cannot be None to continue training with unsup only."
             # scan the unsupervised set to calculate labels using the previously trained best model:
+            print("Calculating labels for unsupervised set..")
+
             unsup_index_to_labels = {}
             unsup_set_loader = self.problem.loader_for_dataset(self.problem.unsup_set())
             for batch_idx, (inputs, _) in enumerate(unsup_set_loader):
                 if self.use_cuda:
-                    inputs, = inputs.cuda()
+                    inputs = inputs.cuda()
                 inputs = Variable(inputs, volatile=True)
                 predicted = self.best_model(inputs)
-                select = torch.index_select(self.best_model_confusion_matrix, dim=0, index=predicted).type(
-                    torch.FloatTensor)
+                if predicted.size()[1]==self.problem.num_classes():
+                    # need to take the argmax to find the index of predicted class.
+                    _, predicted = torch.max(predicted.data, 1)
+                    predicted = predicted.type(torch.cuda.LongTensor) if self.use_cuda else predicted.type(torch.LongTensor)
+
+                select = torch.index_select(self.best_model_confusion_matrix, dim=0, index=predicted)
+                select=select.type(torch.cuda.FloatTensor)  if self.use_cuda else select.type(torch.FloatTensor)
                 confusion_labels = torch.renorm(select, p=1, dim=0, maxnorm=1)
-                start_of_range=batch_idx * self.problem.mini_batch_size
+                start_of_range=batch_idx * self.problem.mini_batch_size()
                 for example_index in range(start_of_range,
-                                           start_of_range + self.problem.mini_batch_size):
+                                           start_of_range + self.problem.mini_batch_size()):
                     label_for_example=confusion_labels[example_index-start_of_range]
                     unsup_index_to_labels[example_index]=label_for_example
-
+                progress_bar(batch_idx, self.args.num_shaving/self.problem.mini_batch_size())
+            self.net=self.best_model
+            print("Training with unsupervised set..")
         for epoch in range(self.start_epoch, self.start_epoch + self.args.num_epochs):
 
             perfs = PerformanceList()

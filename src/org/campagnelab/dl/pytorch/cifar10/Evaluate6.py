@@ -148,6 +148,10 @@ if __name__ == '__main__':
         if args.mode == "supervised":
             args.split = None
 
+        if args.mode == "unsup_only":
+            args.resume=True
+            args.two_models=True
+
         model_trainer = TrainModelUnsupDirect(args=args, problem=problem, use_cuda=use_cuda)
         torch.manual_seed(args.seed)
         if use_cuda:
@@ -166,6 +170,7 @@ if __name__ == '__main__':
 
             return model_trainer.training_supervised()
         if args.mode == "unsup_only":
+
             return model_trainer.training_supervised(unsup_only=True)
 
         else:

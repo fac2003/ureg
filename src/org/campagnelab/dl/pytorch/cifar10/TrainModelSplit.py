@@ -143,8 +143,12 @@ class TrainModelSplit:
                 self.net = checkpoint['net']
                 self.best_acc = checkpoint['acc']
                 self.start_epoch = checkpoint['epoch']
-                self.split_enabled = checkpoint['split']
+
                 self.best_model = checkpoint['best-model']
+                try:
+                    self.split_enabled = checkpoint['split']
+                except:
+                    pass
                 self.best_model_confusion_matrix = checkpoint['confusion-matrix']
                 # force all parameters to be optimized, in case we resume after fine-tuning a model:
                 for param in self.net.parameters():

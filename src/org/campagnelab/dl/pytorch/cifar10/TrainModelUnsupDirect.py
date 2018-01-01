@@ -6,7 +6,7 @@ import sys
 import torch
 from torch.autograd import Variable
 from torch.backends import cudnn
-from torch.nn import MultiLabelSoftMarginLoss
+from torch.nn import MultiLabelSoftMarginLoss, BCELoss
 from torchnet.dataset import ConcatDataset
 from torchnet.meter import ConfusionMeter
 
@@ -16,7 +16,7 @@ from org.campagnelab.dl.pytorch.cifar10.LRHelper import LearningRateHelper
 from org.campagnelab.dl.pytorch.cifar10.LossHelper import LossHelper
 from org.campagnelab.dl.pytorch.cifar10.PerformanceList import PerformanceList
 from org.campagnelab.dl.pytorch.cifar10.datasets.SubsetDataset import SubsetDataset
-from org.campagnelab.dl.pytorch.cifar10.utils import progress_bar, grad_norm
+from org.campagnelab.dl.pytorch.cifar10.utils import progress_bar, grad_norm, init_params
 from org.campagnelab.dl.pytorch.ureg.LRSchedules import construct_scheduler
 
 
@@ -249,10 +249,10 @@ class TrainModelUnsupDirect:
             performance_estimators = PerformanceList()
             performance_estimators += [LossHelper("optimized_loss")]
             performance_estimators += [LossHelper("train_loss")]
-
-            performance_estimators += [AccuracyHelper("train_")]
             performance_estimators += [FloatHelper("train_grad_norm")]
 
+        # reset the model before training:
+        #init_params(self.net)
         print('\nTraining, epoch: %d' % epoch)
 
         self.net.train()
@@ -268,7 +268,12 @@ class TrainModelUnsupDirect:
                                                           batch_size=self.problem.mini_batch_size(),
                                                           shuffle=False,
                                                           num_workers=0)
+        self.optimizer_training = torch.optim.SGD(self.net.parameters(), lr=self.args.lr, momentum=self.args.momentum,
+                                                  weight_decay=self.args.L2)
 
+        # we use binary cross-entropy for single label with smoothing.
+        self.net.train()
+        criterion = BCELoss()
         for batch_idx, (inputs, targets) in enumerate(train_loader_subset):
             num_batches += 1
 
@@ -278,21 +283,22 @@ class TrainModelUnsupDirect:
             inputs, targets = Variable(inputs), Variable(targets, requires_grad=False)
             # outputs used to calculate the loss of the supervised model
             # must be done with the model prior to regularization:
-            self.net.train()
+
             self.optimizer_training.zero_grad()
             outputs = self.net(inputs)
+            # renormalize outputs by example, from multi-label to single label prediction::
+            outputs=torch.renorm(torch.exp(outputs), p=1, maxnorm=1, dim=1)
 
-            if train_supervised_model:
-                supervised_loss = self.criterion_multi_label(outputs, targets)
-                optimized_loss = supervised_loss
-                optimized_loss.backward()
-                self.optimizer_training.step()
-                supervised_grad_norm = grad_norm(self.net.parameters())
-                performance_estimators.set_metric(batch_idx, "train_grad_norm", supervised_grad_norm)
-                performance_estimators.set_metric_with_outputs(batch_idx, "optimized_loss", optimized_loss.data[0],
-                                                               outputs, targets)
-                performance_estimators.set_metric_with_outputs(batch_idx, "train_loss", supervised_loss.data[0],
-                                                               outputs, targets)
+            supervised_loss = criterion(outputs, targets)
+            optimized_loss = supervised_loss
+            optimized_loss.backward()
+            self.optimizer_training.step()
+            supervised_grad_norm = grad_norm(self.net.parameters())
+            performance_estimators.set_metric(batch_idx, "train_grad_norm", supervised_grad_norm)
+            performance_estimators.set_metric_with_outputs(batch_idx, "optimized_loss", optimized_loss.data[0],
+                                                           outputs, targets)
+            performance_estimators.set_metric_with_outputs(batch_idx, "train_loss", supervised_loss.data[0],
+                                                           outputs, targets)
 
             progress_bar(batch_idx * self.mini_batch_size,
                          length,
@@ -477,13 +483,15 @@ class TrainModelUnsupDirect:
 
                 select = torch.index_select(self.best_model_confusion_matrix, dim=0, index=predicted)
                 select=select.type(torch.cuda.FloatTensor)  if self.use_cuda else select.type(torch.FloatTensor)
-                confusion_labels = torch.renorm(select, p=1, dim=0, maxnorm=1)
+                confusion_labels = torch.renorm(select, p=1, dim=1, maxnorm=1)
                 start_of_range=batch_idx * self.problem.mini_batch_size()
                 for example_index in range(start_of_range,
                                            start_of_range + self.problem.mini_batch_size()):
                     label_for_example=confusion_labels[example_index-start_of_range]
                     unsup_index_to_labels[example_index]=label_for_example
                 progress_bar(batch_idx, self.args.num_shaving/self.problem.mini_batch_size())
+                if batch_idx*self.problem.mini_batch_size()>self.args.num_shaving:
+                    break
             self.net=self.best_model
             print("Training with unsupervised set..")
         for epoch in range(self.start_epoch, self.start_epoch + self.args.num_epochs):

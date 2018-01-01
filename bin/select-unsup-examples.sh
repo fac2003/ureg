@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 # Run ConfusionSelectExamples
 
-python ${UREG}/src/org/campagnelab/dl/pytorch/cifar10/ConfusionSelectExamples.py "$@"
+python ${UREG}/src/org/campagnelab/dl/pytorch/images/ConfusionSelectExamples.py "$@"

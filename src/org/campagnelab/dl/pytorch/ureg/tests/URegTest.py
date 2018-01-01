@@ -9,9 +9,9 @@ from torch.autograd import Variable
 from torch.legacy.nn import MSECriterion, AbsCriterion
 from torch.nn import BCELoss
 
-from org.campagnelab.dl.pytorch.cifar10.LossHelper import LossHelper
-from org.campagnelab.dl.pytorch.cifar10.PerformanceList import PerformanceList
-from org.campagnelab.dl.pytorch.cifar10.TrainModel import TrainModel, print_params
+from org.campagnelab.dl.pytorch.images.LossHelper import LossHelper
+from org.campagnelab.dl.pytorch.images.PerformanceList import PerformanceList
+from org.campagnelab.dl.pytorch.images.TrainModel import TrainModel, print_params
 from org.campagnelab.dl.pytorch.ureg.URegularizer import URegularizer
 from org.campagnelab.dl.pytorch.ureg.tests.DummyArgs import DummyArgs
 from org.campagnelab.dl.pytorch.ureg.tests.SimpleModel import SimpleModel

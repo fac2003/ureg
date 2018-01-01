@@ -3,7 +3,7 @@ import random
 import torch
 from torch.utils.data import DataLoader
 
-from org.campagnelab.dl.pytorch.cifar10.Problem import Problem
+from org.campagnelab.dl.pytorch.images.Problem import Problem
 
 
 class ProblemLoader(DataLoader):

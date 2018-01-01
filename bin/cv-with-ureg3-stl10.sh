@@ -1,6 +1,6 @@
 # Run evaluate3
 CHECKPOINT=STL10_${RANDOM}
-python ${UREG}/src/org/campagnelab/dl/pytorch/cifar10/Evaluate3.py \
+python ${UREG}/src/org/campagnelab/dl/pytorch/images/Evaluate3.py \
 -n 5000 -x 8000 -u 100000 --mini-batch-size 50 --ureg \
 --checkpoint-key ${CHECKPOINT} \
 --problem STL10  \

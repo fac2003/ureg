@@ -2,7 +2,7 @@ import torch
 from torch.autograd import Variable
 from torch.nn import Sequential
 
-from org.campagnelab.dl.pytorch.cifar10.utils import init_params
+from org.campagnelab.dl.pytorch.images.utils import init_params
 
 
 class ModelAssembler:

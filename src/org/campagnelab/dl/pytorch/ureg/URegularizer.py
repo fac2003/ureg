@@ -4,10 +4,10 @@ import sys
 import torch
 from torch.autograd import Variable
 
-from org.campagnelab.dl.pytorch.cifar10.FloatHelper import FloatHelper
-from org.campagnelab.dl.pytorch.cifar10.LossHelper import LossHelper
-from org.campagnelab.dl.pytorch.cifar10.PerformanceList import PerformanceList
-from org.campagnelab.dl.pytorch.cifar10.utils import progress_bar, grad_norm
+from org.campagnelab.dl.pytorch.images.FloatHelper import FloatHelper
+from org.campagnelab.dl.pytorch.images.LossHelper import LossHelper
+from org.campagnelab.dl.pytorch.images.PerformanceList import PerformanceList
+from org.campagnelab.dl.pytorch.images.utils import progress_bar, grad_norm
 from org.campagnelab.dl.pytorch.ureg.LRSchedules import construct_scheduler
 from org.campagnelab.dl.pytorch.ureg.ModelAssembler import ModelAssembler
 from org.campagnelab.dl.pytorch.ureg.MyFeatureExtractor import MyFeatureExtractor

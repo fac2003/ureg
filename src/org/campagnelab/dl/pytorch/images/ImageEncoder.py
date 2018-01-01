@@ -1,6 +1,8 @@
 import torch
 from torch import nn
 
+from org.campagnelab.dl.pytorch.images.ImageGenerator import weights_init
+
 
 class ImageEncoder(nn.Module):
     def __init__(self, model, input_shape, number_encoded_features,
@@ -15,14 +17,29 @@ class ImageEncoder(nn.Module):
             # reduce the number of state features progressively to nz
             nn.Linear(num_out, int(num_out/4)),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Dropout(0.5),
+            #nn.Dropout(0.5),
             nn.Linear(int(num_out/4), int(num_out/8)),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Dropout(0.5),
+            #nn.Dropout(0.5),
             nn.Linear(int(num_out/8), number_encoded_features)
         )
+        self.main.apply(weights_init)
         if use_cuda:
             self.projection=self.projection.cuda()
+
+    def parameters(self):
+        for param in self.main.parameters():
+            yield param
+        for param in self.projection.parameters():
+            yield param
+
+    def train(self):
+        self.main.train()
+        self.projection.train()
+
+    def eval(self):
+        self.main.eval()
+        self.projection.eval()
 
     def forward(self, input):
         if isinstance(input.data, torch.cuda.FloatTensor) and self.ngpu > 1:

@@ -115,6 +115,7 @@ class TrainModelDeconvolutionSplit:
         model_built = False
         self.best_performance_metrics = None
         self.best_model = None
+        self.optimizer=None
 
         if hasattr(args, 'resume') and args.resume:
             # Load checkpoint.
@@ -130,6 +131,8 @@ class TrainModelDeconvolutionSplit:
             if checkpoint is not None:
 
                 self.net = checkpoint['net']
+                self.image_encoder = checkpoint['encoder']
+                self.image_generator = checkpoint['generator']
                 self.best_acc = checkpoint['acc']
                 self.start_epoch = checkpoint['epoch']
                 self.best_model = checkpoint['best-model']
@@ -145,11 +148,11 @@ class TrainModelDeconvolutionSplit:
             self.net = create_model_function(args.model, self.problem)
 
 
-        self.image_encoder=ImageEncoder(model=self.net, number_encoded_features=64,
+            self.image_encoder=ImageEncoder(model=self.net, number_encoded_features=self.args.num_encoding_features,
                                      input_shape=self.problem.example_size())
-        self.image_generator=ImageGenerator(number_encoded_features=64,
-                                            number_of_generator_features=64,
-                                            output_shape=self.problem.example_size())
+            self.image_generator=ImageGenerator(number_encoded_features=self.args.num_encoding_features,
+                                            number_of_generator_features=self.args.num_encoding_features,
+                                            output_shape=self.problem.example_size(),use_cuda=self.use_cuda)
         if self.use_cuda:
             self.net.cuda()
             self.image_encoder.cuda()
@@ -159,8 +162,10 @@ class TrainModelDeconvolutionSplit:
                 self.best_model_confusion_matrix = self.best_model_confusion_matrix.cuda()
         cudnn.benchmark = True
         all_params = []
-        all_params += list(self.image_encoder.parameters())
+
         all_params += list(self.image_generator.parameters())
+        all_params += list(self.image_encoder.parameters())
+
         self.optimizer = torch.optim.Adam(all_params, lr=self.args.lr, betas=(0.5, 0.999))
 
 
@@ -185,13 +190,15 @@ class TrainModelDeconvolutionSplit:
         if performance_estimators is None:
             performance_estimators = PerformanceList()
             performance_estimators += [LossHelper("train_loss")]
-            performance_estimators += [FloatHelper("train_grad_norm")]
+            performance_estimators += [FloatHelper("encoder_grad_norm")]
+            performance_estimators += [FloatHelper("generator_grad_norm")]
+            performance_estimators += [FloatHelper("net_grad_norm")]
 
         # reset the model before training:
         #init_params(self.net)
         print('\nTraining, epoch: %d' % epoch)
 
-        self.net.train()
+
         train_supervised_model = True
         for performance_estimator in performance_estimators:
             performance_estimator.init_performance_metrics()
@@ -202,17 +209,16 @@ class TrainModelDeconvolutionSplit:
         length = len(training_dataset)
         train_loader_subset = torch.utils.data.DataLoader(training_dataset,
                                                           batch_size=self.problem.mini_batch_size(),
-                                                          shuffle=False,
+                                                          shuffle=True,
                                                           num_workers=0)
-        self.optimizer_training = torch.optim.SGD(self.net.parameters(), lr=self.args.lr, momentum=self.args.momentum,
-                                                  weight_decay=self.args.L2)
 
         # we use binary cross-entropy for single label with smoothing.
         self.net.train()
         criterion = MSELoss()
 
-        self.image_encoder.train()
+
         self.image_generator.train()
+        self.image_encoder.train()
 
         for batch_idx, (inputs, _) in enumerate(train_loader_subset):
             num_batches += 1
@@ -222,20 +228,27 @@ class TrainModelDeconvolutionSplit:
 
             self.image_encoder.zero_grad()
             self.image_generator.zero_grad()
+            self.net.zero_grad()
             self.optimizer.zero_grad()
 
             image1, image2 = half_images(inputs, slope=get_random_slope(), cuda=self.use_cuda)
             # train the discriminator/generator pair on the first half of the image:
             encoded = self.image_encoder(image1)
-
+            #norm_encoded=encoded.norm(p=1)
             output = self.image_generator(encoded)
-            reconstituted_image = output + Variable(image1.data,requires_grad=False)
-            full_image = Variable(inputs, requires_grad=False)
-            optimized_loss = criterion(reconstituted_image, full_image)
+            full_image = Variable(inputs, volatile=True)
+            optimized_loss = criterion(output, image2)
             optimized_loss.backward()
             self.optimizer.step()
-            supervised_grad_norm = grad_norm(self.net.parameters())
-            performance_estimators.set_metric(batch_idx, "train_grad_norm", supervised_grad_norm)
+            if batch_idx == 0:
+                self.save_images(epoch, image1, image2, generated_image2=output, prefix="train")
+
+            encoder_grad_norm = grad_norm(self.image_encoder.parameters())
+            generator_grad_norm = grad_norm(self.image_generator.parameters())
+            net_grad_norm = grad_norm(self.net.parameters())
+            performance_estimators.set_metric(batch_idx, "encoder_grad_norm", encoder_grad_norm)
+            performance_estimators.set_metric(batch_idx, "generator_grad_norm", generator_grad_norm)
+            performance_estimators.set_metric(batch_idx, "net_grad_norm", net_grad_norm)
             performance_estimators.set_metric(batch_idx, "train_loss", optimized_loss.data[0])
             progress_bar(batch_idx * self.mini_batch_size,
                          length,
@@ -246,11 +259,14 @@ class TrainModelDeconvolutionSplit:
     def test(self, epoch, performance_estimators=None):
         criterion=MSELoss()
         print('\nTesting, epoch: %d' % epoch)
+        self.net.eval()
+        self.image_generator.eval()
+        self.image_encoder.eval()
+
         if performance_estimators is None:
             performance_estimators = PerformanceList()
             performance_estimators += [LossHelper("test_loss"), AccuracyHelper("test_")]
 
-        self.net.eval()
         for performance_estimator in performance_estimators:
             performance_estimator.init_performance_metrics()
 
@@ -333,18 +349,6 @@ class TrainModelDeconvolutionSplit:
 
             self.save_checkpoint(epoch, metric)
             self.best_performance_metrics = performance_estimators
-            if self.args.mode == "mixup":
-                if self.args.two_models:
-                    # we load the best model we saved previously as a second model:
-                    self.best_model = self.load_checkpoint()
-                    if self.use_cuda:
-                        self.best_model = self.best_model.cuda(self.args.second_gpu_index)
-                else:
-                    self.best_model = self.net
-
-                self.best_model_confusion_matrix = torch.from_numpy(self.confusion_matrix)
-                if self.use_cuda:
-                    self.best_model_confusion_matrix = self.best_model_confusion_matrix.cuda(self.args.second_gpu_index)
 
         if metric is not None and metric <= self.best_acc:
             self.failed_to_improve += 1
@@ -362,9 +366,14 @@ class TrainModelDeconvolutionSplit:
             print('Saving..')
             model = self.net
             model.eval()
-
+            generator=self.image_generator
+            generator.eval()
+            encoder=self.image_encoder
+            encoder.eval()
             state = {
                 'net': model.module if self.is_parallel else model,
+                'generator': generator.module if self.is_parallel else generator,
+                'encoder': encoder.module if self.is_parallel else encoder,
                 'best-model': self.best_model,
                 'confusion-matrix': self.best_model_confusion_matrix,
                 'acc': acc,
@@ -381,9 +390,13 @@ class TrainModelDeconvolutionSplit:
             os.mkdir('checkpoint')
         state = torch.load('./checkpoint/ckpt_{}.t7'.format(self.args.checkpoint_key))
         model = state['net']
-        model.cpu()
-        model.eval()
-        return model
+        generator = state['generator']
+        encoder = state['encoder']
+        for m in [model, generator, encoder]:
+             m.cpu()
+             m.eval()
+
+        return (model, generator, encoder)
 
     def epoch_is_test_epoch(self, epoch):
         epoch_is_one_of_last_ten = epoch > (self.start_epoch + self.args.num_epochs - 10)
@@ -410,7 +423,6 @@ class TrainModelDeconvolutionSplit:
             if previous_test_perfs is None or self.epoch_is_test_epoch(epoch):
                 perfs += self.test(epoch)
 
-            test_loss = perfs.get_metric("test_loss")
             if (not header_written):
                 header_written = True
                 self.log_performance_header(perfs)
@@ -422,20 +434,25 @@ class TrainModelDeconvolutionSplit:
 
         return perfs
 
-    def save_images(self,epoch, real_image1, real_image2, generated_image2):
+    def save_images(self,epoch, real_image1, real_image2, generated_image2, prefix="val"):
+        try:
+            os.stat("outputs")
+        except:
+            os.mkdir("outputs")
+
         save_image(real_image1.data,
-                   '%s/real_image1.png' % "outputs",
+                   '{}/{}-real_image1.png'.format("outputs",prefix),
                    normalize=True)
 
         save_image(real_image2.data,
-                   '%s/real_image2.png' % "outputs",
+                   '{}/{}-real_image2.png'.format(  "outputs" ,prefix),
                    normalize=True)
         self.image_encoder.eval()
         self.image_generator.eval()
         # train the discriminator/generator pair on the first half of the image:
 
         save_image(real_image1.data + generated_image2.data,
-                          '%s/fake_samples_split_epoch_%03d.png' % ("outputs", epoch),
+                          '{}/{}-fake_samples_split_epoch_{}.png'.format("outputs",prefix, epoch),
                           normalize=True)
 
 

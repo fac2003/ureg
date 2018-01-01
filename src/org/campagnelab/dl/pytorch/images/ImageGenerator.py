@@ -46,16 +46,31 @@ class ImageGenerator(nn.Module):
             self.resizer=Upsample(scale_factor=height/64.0)
         if height<64:
             self.resizer=AvgPool2d(int(64/height))
+        self.main.apply(weights_init)
         if use_cuda:
             self.main.cuda()
+            self.resizer.cuda()
 
-        self.main.apply(weights_init)
+
+
+    def parameters(self):
+        for param in  self.main.parameters():
+            yield param
+        for param in self.resizer.parameters():
+                yield param
+
+    def train(self):
+        self.main.train()
+
+
+    def eval(self):
+        self.main.eval()
 
     def forward(self, input):
         if isinstance(input.data, torch.cuda.FloatTensor) and self.ngpu > 1:
             output = nn.parallel.data_parallel(self.main, input, range(self.ngpu))
         else:
             output = self.main(input)
-        if self.resizer:
+        if self.resizer is not None:
             output=self.resizer(output)
         return output

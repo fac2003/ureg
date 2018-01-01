@@ -73,6 +73,8 @@ if __name__ == '__main__':
                         default=10)
     parser.add_argument('--max-accuracy', type=float, help='Maximum accuracy for early stopping a cycle.',
                         default=10.0)
+    parser.add_argument('--num-encoding-features', type=int, help='Number of features used to encode an image.',
+                        default=100)
     parser.add_argument('--constant-learning-rates', action='store_true',
                         help='Use constant learning rates, not schedules.')
 

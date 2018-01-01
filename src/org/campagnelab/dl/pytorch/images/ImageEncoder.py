@@ -9,7 +9,7 @@ class ImageEncoder(nn.Module):
         self.ngpu = ngpu
         self.main = model
         self.number_encoded_features=number_encoded_features
-        num_out=model.estimate_output_size_with_model(input_shape, model=model)
+        num_out=model.estimate_output_size_with_model(input_shape, model=model, use_cuda=use_cuda)
         self.projection = nn.Sequential(
             # state size. (ndf*8) x 4 x 4
             # reduce the number of state features progressively to nz

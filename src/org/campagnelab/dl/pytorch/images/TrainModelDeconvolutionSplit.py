@@ -144,16 +144,19 @@ class TrainModelDeconvolutionSplit:
 
             self.net = create_model_function(args.model, self.problem)
 
-        if self.use_cuda:
-            self.net.cuda()
-            if self.best_model is not None:
-                self.best_model.cuda()
-                self.best_model_confusion_matrix = self.best_model_confusion_matrix.cuda()
+
         self.image_encoder=ImageEncoder(model=self.net, number_encoded_features=64,
                                      input_shape=self.problem.example_size())
         self.image_generator=ImageGenerator(number_encoded_features=64,
                                             number_of_generator_features=64,
                                             output_shape=self.problem.example_size())
+        if self.use_cuda:
+            self.net.cuda()
+            self.image_encoder.cuda()
+            self.image_generator.cuda()
+            if self.best_model is not None:
+                self.best_model.cuda()
+                self.best_model_confusion_matrix = self.best_model_confusion_matrix.cuda()
         cudnn.benchmark = True
         all_params = []
         all_params += list(self.image_encoder.parameters())
@@ -221,7 +224,7 @@ class TrainModelDeconvolutionSplit:
             self.image_generator.zero_grad()
             self.optimizer.zero_grad()
 
-            image1, image2 = half_images(inputs, slope=get_random_slope())
+            image1, image2 = half_images(inputs, slope=get_random_slope(), cuda=self.use_cuda)
             # train the discriminator/generator pair on the first half of the image:
             encoded = self.image_encoder(image1)
 
@@ -256,7 +259,7 @@ class TrainModelDeconvolutionSplit:
             if self.use_cuda:
                 inputs = inputs.cuda()
 
-            image1, image2 = half_images(inputs, slope=get_random_slope())
+            image1, image2 = half_images(inputs, slope=get_random_slope(), cuda=self.use_cuda)
             # train the discriminator/generator pair on the first half of the image:
             encoded = self.image_encoder(image1)
 

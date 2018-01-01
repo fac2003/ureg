@@ -7,10 +7,12 @@ class EstimateFeatureSize(Module):
     """
     Module that helps estimate the number of features up to a point in a module being
     constructed. """
-    def estimate_output_size_with_model(self, input_shape, model):
+    def estimate_output_size_with_model(self, input_shape, model, use_cuda=False):
         """Calculate the convolution output size using a partially constructed model. """
         bs = 1
         input = Variable(torch.rand(bs, *input_shape))
+        if use_cuda:
+            input=input.cuda()
         output_feat = model.forward(input)
         n_size = output_feat.data.view(bs, -1).size(1)
         return n_size

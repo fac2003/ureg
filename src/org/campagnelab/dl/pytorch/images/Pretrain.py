@@ -14,6 +14,7 @@ from org.campagnelab.dl.pytorch.images.Cifar10Problem import Cifar10Problem
 from org.campagnelab.dl.pytorch.images.CrossValidatedProblem import CrossValidatedProblem
 from org.campagnelab.dl.pytorch.images.Problems import create_model
 from org.campagnelab.dl.pytorch.images.STL10Problem import STL10Problem
+from org.campagnelab.dl.pytorch.images.TrainModelDeconvolutionSplit import TrainModelDeconvolutionSplit
 from org.campagnelab.dl.pytorch.images.TrainModelSplit import TrainModelSplit, flatten
 from org.campagnelab.dl.pytorch.images.models import *
 
@@ -49,8 +50,10 @@ if __name__ == '__main__':
                         help='Number of epochs to run before stopping. Additional epochs when --resume.', default=200)
     parser.add_argument('--num-classes', type=int,
                         help='Number of classes to train with for pre-training..', default=10)
-    parser.add_argument('--num-shaving', '-u', type=int, help='Maximum number of unlabeled examples to use when shaving'
-                                                              'the network.', default=sys.maxsize)
+    parser.add_argument('--num-shaving', '-u', type=int, help='Maximum number of unlabeled examples to use when shaving',
+                        default = sys.maxsize)
+    parser.add_argument('--num-validation', "-x", type=int, help='Maximum number of validation examples',
+                                                               default=sys.maxsize)
     parser.add_argument('--momentum', type=float, help='Momentum for SGD.', default=0.9)
     parser.add_argument('--L2', type=float, help='L2 regularization.', default=1E-4)
     parser.add_argument('--dropout', type=float, help='Dropout rate during pretraining, '
@@ -70,6 +73,9 @@ if __name__ == '__main__':
                         default=10)
     parser.add_argument('--max-accuracy', type=float, help='Maximum accuracy for early stopping a cycle.',
                         default=10.0)
+    parser.add_argument('--constant-learning-rates', action='store_true',
+                        help='Use constant learning rates, not schedules.')
+
     args = parser.parse_args()
 
     print("Pre-training " + args.checkpoint_key)
@@ -101,16 +107,13 @@ if __name__ == '__main__':
 
     problem.describe()
 
-    model_trainer = TrainModelSplit(args=args, problem=problem, use_cuda=use_cuda)
+    model_trainer = TrainModelDeconvolutionSplit(args=args, problem=problem, use_cuda=use_cuda)
     if hasattr(args,'seed'):
         torch.manual_seed(args.seed)
         if use_cuda:
             torch.cuda.manual_seed(args.seed)
 
     model_trainer.init_model(create_model_function=create_model)
-    model_trainer.pre_train_with_half_images(num_cycles=args.num_cycles, num_classes=args.num_classes,
-                                             epochs_per_cycle=args.epochs_per_cycle,
-                                             amount_of_dropout=args.dropout,
-                                             max_acc=args.max_accuracy)
+    model_trainer.training_deconvolution()
 
     print("Finished pre-training "+args.checkpoint_key)

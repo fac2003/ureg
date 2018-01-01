@@ -226,13 +226,13 @@ if __name__ == '__main__':
             )
             self.projection=nn.Sequential(
                 # state size. (ndf*8) x 4 x 4
-                # reduce the number of state features progressively to ndf
+                # reduce the number of state features progressively to nz
                 nn.Linear(ndf * 8*4*4, ndf*8*4),
                 nn.LeakyReLU(0.2, inplace=True),
-                nn.Dropout(0.5),
+                nn.Dropout(0.5, inplace=True),
                 nn.Linear(ndf*8*4, nz*8),
                 nn.LeakyReLU(0.2, inplace=True),
-                nn.Dropout(0.5),
+                nn.Dropout(0.5, inplace=True),
                 nn.Linear(nz * 8, nz)
             )
 

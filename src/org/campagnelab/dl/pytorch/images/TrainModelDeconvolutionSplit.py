@@ -72,7 +72,7 @@ class TrainModelDeconvolutionSplit:
 
         self.args = args
         self.problem = problem
-        self.best_acc = 0
+        self.best_loss = sys.maxsize
         self.start_epoch = 0
         self.use_cuda = use_cuda
         self.mini_batch_size = problem.mini_batch_size()
@@ -134,7 +134,7 @@ class TrainModelDeconvolutionSplit:
                 self.net = checkpoint['net']
                 self.image_encoder = checkpoint['encoder']
                 self.image_generator = checkpoint['generator']
-                self.best_acc = checkpoint['acc']
+                self.best_loss = checkpoint['acc']
                 self.start_epoch = checkpoint['epoch']
                 self.best_model = checkpoint['best-model']
                 self.best_model_confusion_matrix = checkpoint['confusion-matrix']
@@ -169,7 +169,7 @@ class TrainModelDeconvolutionSplit:
         all_params += list(self.image_generator.main.parameters())
         all_params += list(self.image_encoder.projection.parameters())
 
-        self.optimizer = torch.optim.Adam(all_params, lr=self.args.lr, betas=(0.5, 0.999))
+        self.optimizer = torch.optim.Adam(all_params, lr=self.args.lr, betas=(0.5, 0.999), weight_decay=self.args.L2)
 
         self.scheduler_train = \
             construct_scheduler(self.optimizer, 'min', factor=0.5,
@@ -264,8 +264,8 @@ class TrainModelDeconvolutionSplit:
 
         for performance_estimator in performance_estimators:
             performance_estimator.init_performance_metrics()
-
-        for batch_idx, (inputs, _) in enumerate(self.problem.test_loader_range(0, self.args.num_validation)):
+        # we used unsup set to train, use training to validate:
+        for batch_idx, (inputs, _) in enumerate(self.problem.train_loader_subset(range(0, self.args.num_validation))):
 
             if self.use_cuda:
                 inputs = inputs.cuda()
@@ -332,31 +332,32 @@ class TrainModelDeconvolutionSplit:
         if self.best_performance_metrics is None:
             self.best_performance_metrics = performance_estimators
 
-        metric = performance_estimators.get_metric("test_accuracy")
-        if metric is not None and metric > self.best_acc:
+        metric = performance_estimators.get_metric("test_loss")
+        if metric is not None and metric <= self.best_loss:
             self.failed_to_improve = 0
 
             with open("best-{}-{}.tsv".format(kind, self.args.checkpoint_key), "a") as perf_file:
                 perf_file.write("\t".join(map(_format_nice, metrics)))
                 perf_file.write("\n")
 
-        if metric is not None and metric >= self.best_acc:
+        if metric is not None and metric <= self.best_loss:
             self.save_checkpoint(epoch, metric)
             self.best_performance_metrics = performance_estimators
 
-        if metric is not None and metric <= self.best_acc:
+        if metric is not None and metric > self.best_loss:
             self.failed_to_improve += 1
-            if self.failed_to_improve > self.args.abort_when_failed_to_improve:
+            if hasattr(self.args, "abort_when_failed_to_improve") and \
+                self.failed_to_improve > self.args.abort_when_failed_to_improve:
                 print("We failed to improve for {} epochs. Stopping here as requested.")
                 early_stop = True  # request early stopping
 
         return early_stop, self.best_performance_metrics
 
-    def save_checkpoint(self, epoch, acc):
+    def save_checkpoint(self, epoch, metric_value):
 
         # Save checkpoint.
 
-        if acc > self.best_acc:
+        if metric_value < self.best_loss:
             print('Saving..')
             model = self.net
             model.eval()
@@ -370,13 +371,13 @@ class TrainModelDeconvolutionSplit:
                 'encoder': encoder.module if self.is_parallel else encoder,
                 'best-model': self.best_model,
                 'confusion-matrix': self.best_model_confusion_matrix,
-                'acc': acc,
+                'acc': metric_value,
                 'epoch': epoch,
             }
             if not os.path.isdir('checkpoint'):
                 os.mkdir('checkpoint')
             torch.save(state, './checkpoint/ckpt_{}.t7'.format(self.args.checkpoint_key))
-            self.best_acc = acc
+            self.best_loss = metric_value
 
     def load_checkpoint(self):
 

@@ -9,20 +9,37 @@ class ImageEncoder(nn.Module):
                  ngpu=1, use_cuda=False):
         super(ImageEncoder, self).__init__()
         self.ngpu = ngpu
-        self.main = model.features
+        nc=3
+        ndf=number_encoded_features
+        self.main = nn.Sequential(
+                # input is (nc) x 64 x 64
+                nn.Conv2d(nc, ndf, 4, 2, 1, bias=False),
+                nn.LeakyReLU(0.2, inplace=True),
+                # state size. (ndf) x 32 x 32
+                nn.Conv2d(ndf, ndf * 2, 4, 2, 1, bias=False),
+                nn.BatchNorm2d(ndf * 2),
+                nn.LeakyReLU(0.2, inplace=True),
+                # state size. (ndf*2) x 16 x 16
+                nn.Conv2d(ndf * 2, ndf * 4, 4, 2, 1, bias=False),
+                nn.BatchNorm2d(ndf * 4),
+                nn.LeakyReLU(0.2, inplace=True),
+                # state size. (ndf*4) x 8 x 8
+                nn.Conv2d(ndf * 4, ndf * 8, 4, 2, 1, bias=False),
+                nn.BatchNorm2d(ndf * 8),
+                nn.LeakyReLU(0.2, inplace=True),
+            )
         self.number_encoded_features=number_encoded_features
         num_out=model.estimate_output_size(input_shape, forward_features_function=model.features_forward)
+        nz=number_encoded_features
         self.projection = nn.Sequential(
-            # state size. (ndf*8) x 4 x 4
-            # reduce the number of state features progressively to nz
-            nn.Linear(num_out, int(num_out/4)),
-            nn.LeakyReLU(0.2, inplace=True),
-            #nn.Dropout(0.5),
-            nn.Linear(int(num_out/4), int(num_out/8)),
-            nn.LeakyReLU(0.2, inplace=True),
-            #nn.Dropout(0.5),
-            nn.Linear(int(num_out/8), number_encoded_features)
-        )
+                # state size. (ndf*8) x 4 x 4
+                # reduce the number of state features progressively to nz
+                nn.Linear(ndf * 8*4*4, ndf*8*4),
+                nn.LeakyReLU(0.2, inplace=True),
+                nn.Linear(ndf*8*4, nz*8),
+                nn.LeakyReLU(0.2, inplace=True),
+                nn.Linear(nz * 8, nz)
+            )
 
         if use_cuda:
             self.projection=self.projection.cuda()

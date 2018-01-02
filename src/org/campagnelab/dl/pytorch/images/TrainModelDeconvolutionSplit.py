@@ -77,7 +77,7 @@ class TrainModelDeconvolutionSplit:
         self.use_cuda = use_cuda
         self.mini_batch_size = problem.mini_batch_size()
         self.net = None
-        self.optimizer_training = None
+        self.optimizer = None
         self.scheduler_train = None
         self.unsuploader = self.problem.reg_loader()
         self.trainloader = self.problem.train_loader()
@@ -166,7 +166,6 @@ class TrainModelDeconvolutionSplit:
         cudnn.benchmark = True
         all_params = []
 
-        all_params += list(self.net.features.parameters())
         all_params += list(self.image_generator.main.parameters())
         all_params += list(self.image_encoder.projection.parameters())
 
@@ -233,7 +232,7 @@ class TrainModelDeconvolutionSplit:
             # norm_encoded=encoded.norm(p=1)
             output = self.image_generator(encoded)
             full_image = Variable(inputs, requires_grad=False)
-            optimized_loss = criterion(output, full_image)
+            optimized_loss = criterion(output, image2)
             optimized_loss.backward()
             self.optimizer.step()
             if batch_idx == 0:

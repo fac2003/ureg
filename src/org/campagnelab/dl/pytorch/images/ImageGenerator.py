@@ -41,21 +41,13 @@ class ImageGenerator(nn.Module):
             nn.Tanh()
             # state size. (nc) x 64 x 64
         )
-        height=output_shape[1]
-        if height>64 :
-            self.resizer=Upsample(scale_factor=height/64.0)
-        if height<64:
-            self.resizer=AvgPool2d(int(64/height))
         if use_cuda:
             self.main.cuda()
-            self.resizer.cuda()
-
 
     def forward(self, input):
         if isinstance(input.data, torch.cuda.FloatTensor) and self.ngpu > 1:
             output = nn.parallel.data_parallel(self.main, input, range(self.ngpu))
         else:
             output = self.main(input)
-        if self.resizer is not None:
-            output=self.resizer(output)
+
         return output

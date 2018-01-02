@@ -326,14 +326,14 @@ if __name__ == '__main__':
             D_G_z2 = output.data.mean()
             optimizerG.step()
 
-            print('[%d/%d][%d/%d] Loss_D: %.4f Loss_G: %.4f D(x): %.4f D(G(z)): %.4f / %.4f'
-                  % (epoch, opt.niter, i, len(dataloader),
+            print('alpha= %.3f [%d/%d][%d/%d] Loss_D: %.4f Loss_G: %.4f D(x): %.4f D(G(z)): %.4f / %.4f'
+                  % (alpha, epoch, opt.niter, i, len(dataloader),
                      errD.data[0], errG.data[0], D_x, D_G_z1, D_G_z2))
             if i % 100 == 0:
                 vutils.save_image(real_cpu,
                                   '%s/real_samples.png' % opt.outf,
                                   normalize=True)
-                fake = netG(fixed_noise)
+                fake = netG(noisev)
                 vutils.save_image(fake.data,
                                   '%s/fake_samples_epoch_%03d.png' % (opt.outf, epoch),
                                   normalize=True)
@@ -341,3 +341,4 @@ if __name__ == '__main__':
         # do checkpointing
         torch.save(netG.state_dict(), '%s/netG_epoch_%d.pth' % (opt.outf, epoch))
         torch.save(netD.state_dict(), '%s/netD_epoch_%d.pth' % (opt.outf, epoch))
+        torch.save(netNoisePredictor.state_dict(), '%s/netNoisePredictor_epoch_%d.pth' % (opt.outf, epoch))

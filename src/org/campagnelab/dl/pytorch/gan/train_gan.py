@@ -299,7 +299,7 @@ if __name__ == '__main__':
 
             predicted_noise=predicted_noise.resize(batch_size, nz, 1, 1)
             # use a linear combination of pure noise and noise predicted from the image:
-            to_fit=noise*(1.0-alpha)+alpha*predicted_noise.data
+            to_fit=noise*alpha+(1-alpha)*predicted_noise.data
             noisev = Variable(to_fit)
 
             # adjust alpha at each epoch to progressively fit the prediction more than the noise:

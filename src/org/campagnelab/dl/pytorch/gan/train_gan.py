@@ -250,6 +250,7 @@ if __name__ == '__main__':
     if opt.cuda:
         netD.cuda()
         netG.cuda()
+        netNoisePredictor.cuda()
         criterion.cuda()
         mseCriterion.cuda()
         input, label = input.cuda(), label.cuda()

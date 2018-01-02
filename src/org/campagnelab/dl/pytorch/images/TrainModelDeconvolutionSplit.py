@@ -48,6 +48,7 @@ def print_params(epoch, net):
         params += [p for p in param.view(-1).data]
     print("epoch=" + str(epoch) + " " + " ".join(map(str, params)))
 
+
 class TrainModelDeconvolutionSplit:
     """Train a model using the unsupervised deconvolution split approach. This approach
     splits unsupervised images in two and trains to reconstruct one half from the other,
@@ -115,7 +116,7 @@ class TrainModelDeconvolutionSplit:
         model_built = False
         self.best_performance_metrics = None
         self.best_model = None
-        self.optimizer=None
+        self.optimizer = None
 
         if hasattr(args, 'resume') and args.resume:
             # Load checkpoint.
@@ -146,28 +147,30 @@ class TrainModelDeconvolutionSplit:
             print('==> Building model {}'.format(args.model))
 
             self.net = create_model_function(args.model, self.problem)
+            if self.use_cuda:
+                self.net.cuda()
 
+            self.image_encoder = ImageEncoder(model=self.net, number_encoded_features=self.args.num_encoding_features,
+                                              input_shape=self.problem.example_size(), use_cuda=self.use_cuda)
+            self.image_generator = ImageGenerator(number_encoded_features=self.args.num_encoding_features,
+                                                  number_of_generator_features=self.args.num_encoding_features,
+                                                  output_shape=self.problem.example_size(),
+                                                  use_cuda=self.use_cuda)
+            if self.use_cuda:
 
-            self.image_encoder=ImageEncoder(model=self.net, number_encoded_features=self.args.num_encoding_features,
-                                     input_shape=self.problem.example_size())
-            self.image_generator=ImageGenerator(number_encoded_features=self.args.num_encoding_features,
-                                            number_of_generator_features=self.args.num_encoding_features,
-                                            output_shape=self.problem.example_size(),use_cuda=self.use_cuda)
-        if self.use_cuda:
-            self.net.cuda()
-            self.image_encoder.cuda()
-            self.image_generator.cuda()
+                self.image_encoder.cuda()
+                self.image_generator.cuda()
             if self.best_model is not None:
                 self.best_model.cuda()
                 self.best_model_confusion_matrix = self.best_model_confusion_matrix.cuda()
         cudnn.benchmark = True
         all_params = []
 
-        all_params += list(self.image_generator.parameters())
-        all_params += list(self.image_encoder.parameters())
+        all_params += list(self.net.features.parameters())
+        all_params += list(self.image_generator.main.parameters())
+        all_params += list(self.image_encoder.projection.parameters())
 
         self.optimizer = torch.optim.Adam(all_params, lr=self.args.lr, betas=(0.5, 0.999))
-
 
         self.scheduler_train = \
             construct_scheduler(self.optimizer, 'min', factor=0.5,
@@ -175,7 +178,6 @@ class TrainModelDeconvolutionSplit:
                                 ureg_reset_every_n_epoch=self.args.reset_lr_every_n_epochs
                                 if hasattr(self.args, 'reset_lr_every_n_epochs')
                                 else None)
-
 
     def train_unsup_only(self, epoch,
                          performance_estimators=None
@@ -194,10 +196,7 @@ class TrainModelDeconvolutionSplit:
             performance_estimators += [FloatHelper("generator_grad_norm")]
             performance_estimators += [FloatHelper("net_grad_norm")]
 
-        # reset the model before training:
-        #init_params(self.net)
         print('\nTraining, epoch: %d' % epoch)
-
 
         train_supervised_model = True
         for performance_estimator in performance_estimators:
@@ -205,7 +204,7 @@ class TrainModelDeconvolutionSplit:
 
         num_batches = 0
         training_dataset = SubsetDataset(self.problem.unsup_set(),
-                                         range(0,self.args.num_shaving), get_label=lambda index: 1)
+                                         range(0, self.args.num_shaving), get_label=lambda index: 1)
         length = len(training_dataset)
         train_loader_subset = torch.utils.data.DataLoader(training_dataset,
                                                           batch_size=self.problem.mini_batch_size(),
@@ -213,10 +212,10 @@ class TrainModelDeconvolutionSplit:
                                                           num_workers=0)
 
         # we use binary cross-entropy for single label with smoothing.
-        self.net.train()
+
         criterion = MSELoss()
 
-
+        self.net.train()
         self.image_generator.train()
         self.image_encoder.train()
 
@@ -226,18 +225,15 @@ class TrainModelDeconvolutionSplit:
             if self.use_cuda:
                 inputs = inputs.cuda()
 
-            self.image_encoder.zero_grad()
-            self.image_generator.zero_grad()
-            self.net.zero_grad()
             self.optimizer.zero_grad()
 
             image1, image2 = half_images(inputs, slope=get_random_slope(), cuda=self.use_cuda)
             # train the discriminator/generator pair on the first half of the image:
             encoded = self.image_encoder(image1)
-            #norm_encoded=encoded.norm(p=1)
+            # norm_encoded=encoded.norm(p=1)
             output = self.image_generator(encoded)
-            full_image = Variable(inputs, volatile=True)
-            optimized_loss = criterion(output, image2)
+            full_image = Variable(inputs, requires_grad=False)
+            optimized_loss = criterion(output, full_image)
             optimized_loss.backward()
             self.optimizer.step()
             if batch_idx == 0:
@@ -257,7 +253,7 @@ class TrainModelDeconvolutionSplit:
         return performance_estimators
 
     def test(self, epoch, performance_estimators=None):
-        criterion=MSELoss()
+        criterion = MSELoss()
         print('\nTesting, epoch: %d' % epoch)
         self.net.eval()
         self.image_generator.eval()
@@ -281,8 +277,8 @@ class TrainModelDeconvolutionSplit:
 
             output = self.image_generator(encoded)
             reconstituted_image = output + image1
-            if batch_idx==0:
-                self.save_images(epoch,image1, image2, generated_image2=output)
+            if batch_idx == 0:
+                self.save_images(epoch, image1, image2, generated_image2=output)
             full_image = Variable(inputs, volatile=True)
             loss = criterion(reconstituted_image, full_image)
 
@@ -346,7 +342,6 @@ class TrainModelDeconvolutionSplit:
                 perf_file.write("\n")
 
         if metric is not None and metric >= self.best_acc:
-
             self.save_checkpoint(epoch, metric)
             self.best_performance_metrics = performance_estimators
 
@@ -366,9 +361,9 @@ class TrainModelDeconvolutionSplit:
             print('Saving..')
             model = self.net
             model.eval()
-            generator=self.image_generator
+            generator = self.image_generator
             generator.eval()
-            encoder=self.image_encoder
+            encoder = self.image_encoder
             encoder.eval()
             state = {
                 'net': model.module if self.is_parallel else model,
@@ -393,8 +388,8 @@ class TrainModelDeconvolutionSplit:
         generator = state['generator']
         encoder = state['encoder']
         for m in [model, generator, encoder]:
-             m.cpu()
-             m.eval()
+            m.cpu()
+            m.eval()
 
         return (model, generator, encoder)
 
@@ -407,7 +402,9 @@ class TrainModelDeconvolutionSplit:
         :return list of performance estimators that observed performance on the last epoch run.
         """
         header_written = False
-
+        init_params(self.net)
+        init_params(self.image_generator)
+        init_params(self.image_encoder)
         lr_train_helper = LearningRateHelper(scheduler=self.scheduler_train, learning_rate_name="train_lr")
         previous_test_perfs = None
         perfs = PerformanceList()
@@ -434,25 +431,22 @@ class TrainModelDeconvolutionSplit:
 
         return perfs
 
-    def save_images(self,epoch, real_image1, real_image2, generated_image2, prefix="val"):
+    def save_images(self, epoch, real_image1, real_image2, generated_image2, prefix="val"):
         try:
             os.stat("outputs")
         except:
             os.mkdir("outputs")
 
         save_image(real_image1.data,
-                   '{}/{}-real_image1.png'.format("outputs",prefix),
+                   '{}/{}-real_image1.png'.format("outputs", prefix),
                    normalize=True)
 
         save_image(real_image2.data,
-                   '{}/{}-real_image2.png'.format(  "outputs" ,prefix),
+                   '{}/{}-real_image2.png'.format("outputs", prefix),
                    normalize=True)
-        self.image_encoder.eval()
-        self.image_generator.eval()
+
         # train the discriminator/generator pair on the first half of the image:
 
         save_image(real_image1.data + generated_image2.data,
-                          '{}/{}-fake_samples_split_epoch_{}.png'.format("outputs",prefix, epoch),
-                          normalize=True)
-
-
+                   '{}/{}-fake_samples_split_epoch_{}.png'.format("outputs", prefix, epoch),
+                   normalize=True)

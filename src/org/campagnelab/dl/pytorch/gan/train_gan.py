@@ -215,11 +215,7 @@ if __name__ == '__main__':
             self.projection = nn.Sequential(
                 # state size. (ndf*8) x 4 x 4
                 # reduce the number of state features progressively to nz
-                nn.Linear(ndf*2, ndf * 8 * 4),
-                nn.LeakyReLU(0.2, inplace=True),
-                nn.Linear(ndf * 8 * 4, nz * 8),
-                nn.LeakyReLU(0.2, inplace=True),
-                nn.Linear(nz * 8, nz),
+                nn.Linear(ndf*2, nz),
                 nn.InstanceNorm1d(nz)
             )
 
@@ -262,7 +258,7 @@ if __name__ == '__main__':
     optimizerD = optim.Adam(netD.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
     optimizerG = optim.Adam(netG.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
     optimizerNP = optim.Adam(netNoisePredictor.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
-    alpha=1.0
+    alpha=0.5
     for epoch in range(opt.niter):
         for i, data in enumerate(dataloader, 0):
             ############################
@@ -329,7 +325,8 @@ if __name__ == '__main__':
             print('alpha= %.3f [%d/%d][%d/%d] Loss_D: %.4f Loss_G: %.4f D(x): %.4f D(G(z)): %.4f / %.4f'
                   % (alpha, epoch, opt.niter, i, len(dataloader),
                      errD.data[0], errG.data[0], D_x, D_G_z1, D_G_z2))
-            if i % 100 == 0:
+            if i == 0:
+                netG.eval()
                 vutils.save_image(real_cpu,
                                   '%s/real_samples.png' % opt.outf,
                                   normalize=True)
@@ -337,6 +334,7 @@ if __name__ == '__main__':
                 vutils.save_image(fake.data,
                                   '%s/fake_samples_epoch_%03d.png' % (opt.outf, epoch),
                                   normalize=True)
+                netG.train()
 
         # do checkpointing
         torch.save(netG.state_dict(), '%s/netG_epoch_%d.pth' % (opt.outf, epoch))

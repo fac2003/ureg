@@ -39,3 +39,10 @@ ${UREG}/bin/cv-with-mixup-stl10.sh -n 4000 -x 8000 -u 100000 \
    --cross-validations-folds ${UREG}/data/stl10_binary/fold_indices.txt \
    --max-epochs 1000  --load-pre-trained-model
 ````
+
+To train a modified GAN:
+
+````bash
+python bin/train_gan.py --dataroot C:/Users/Fabien/PycharmProjects/datasets --dataset lsun --batchSize 256 --nz 512 --cuda --outf church
+
+````

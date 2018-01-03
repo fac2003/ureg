@@ -67,6 +67,7 @@ class STL10_NT64Problem(Problem):
         self.num_workers=num_workers
         from PIL import Image
         self.transform_train = transforms.Compose([
+            transforms.RandomCrop(96, padding=4),
             transforms.Resize((64, 64)),
             #transforms.Grayscale(num_output_channels=3),
             transforms.ToTensor(),
@@ -76,6 +77,7 @@ class STL10_NT64Problem(Problem):
         ])
 
         self.transform_test = transforms.Compose([
+            transforms.RandomCrop(96, padding=4),
             transforms.Resize((64, 64)),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406],

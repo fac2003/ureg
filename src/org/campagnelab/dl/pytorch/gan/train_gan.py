@@ -20,7 +20,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset', required=True, help='cifar10 | lsun | imagenet | folder | lfw | fake')
     parser.add_argument('--dataroot', required=True, help='path to dataset')
-    parser.add_argument('--workers', type=int, help='number of data loading workers', default=2)
+    parser.add_argument('--workers', type=int, help='number of data loading workers', default=0)
     parser.add_argument('--batchSize', type=int, default=64, help='input batch size')
     parser.add_argument('--imageSize', type=int, default=64, help='the height / width of the input image to network')
     parser.add_argument('--nz', type=int, default=100, help='size of the latent z vector')
@@ -67,7 +67,7 @@ if __name__ == '__main__':
                                        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                                    ]))
     elif opt.dataset == 'lsun':
-        dataset = dset.LSUN(db_path=opt.dataroot, classes=['bedroom_train'],
+        dataset = dset.LSUN(db_path=opt.dataroot, classes=['church_outdoor_train'],
                             transform=transforms.Compose([
                                 transforms.Resize(opt.imageSize),
                                 transforms.CenterCrop(opt.imageSize),
@@ -335,7 +335,7 @@ if __name__ == '__main__':
             if i == 0:
                 netG.eval()
                 vutils.save_image(real_cpu,
-                                  '%s/real_samples.png' % opt.outf,
+                                  '%s/real_samples_%03d.png' % (opt.outf, epoch),
                                   normalize=True)
                 fake = netG(noisev)
                 vutils.save_image(fake.data,

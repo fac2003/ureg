@@ -81,6 +81,13 @@ if __name__ == '__main__':
                                    transforms.ToTensor(),
                                    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                                ]))
+    elif opt.dataset == 'stl10':
+        dataset = dset.CIFAR10(root=opt.dataroot, download=True,
+                               transform=transforms.Compose([
+                                   transforms.Resize(opt.imageSize),
+                                   transforms.ToTensor(),
+                                   transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+                               ]))
     elif opt.dataset == 'fake':
         dataset = dset.FakeData(image_size=(3, opt.imageSize, opt.imageSize),
                                 transform=transforms.ToTensor())

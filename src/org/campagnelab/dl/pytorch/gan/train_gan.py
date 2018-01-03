@@ -299,7 +299,10 @@ if __name__ == '__main__':
 
             # predict noise from image data:
             predicted_noise=netNoisePredictor(inputv)
-            loss = mseCriterion(predicted_noise, noisev)
+            predicted_noise=predicted_noise.resize(batch_size, nz, 1, 1)
+
+            fake = netG(predicted_noise.detach())
+            loss = mseCriterion(fake, inputv)
             loss.backward()
             optimizerNP.step()
 

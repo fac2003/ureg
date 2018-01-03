@@ -23,9 +23,9 @@ export UREG=<install-dir>/ureg/
 
 To pre-train a model with STL10:
 ````bash
-    ${UREG}/bin/pretrain.sh --mini-batch-size 100 --problem STL10 \
-     --epochs-per-cycle 100 --num-cycles 100 --num-classes 1000 \
-     --lr 0.1 --L2 0.
+    ${UREG}/bin/pretrain.sh --mini-batch-size 100 --lr 1E-4 \
+        -x 5000 -u 100000 --lr-patience 100 --checkpoint-key DECONV \
+        --num-encoding-features 256  --L2 1E-6 --problem CIFAR10_NT64
 ````
 To train a model with STL10:
 ````

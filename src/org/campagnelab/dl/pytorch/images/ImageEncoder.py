@@ -29,7 +29,6 @@ class ImageEncoder(nn.Module):
                 nn.LeakyReLU(0.2, inplace=True),
             )
         self.number_encoded_features=number_encoded_features
-        num_out=model.estimate_output_size(input_shape, forward_features_function=model.features_forward)
         nz=number_encoded_features
         self.projection = nn.Sequential(
                 # state size. (ndf*8) x 4 x 4

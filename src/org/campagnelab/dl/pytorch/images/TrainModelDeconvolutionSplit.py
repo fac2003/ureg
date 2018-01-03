@@ -231,7 +231,8 @@ class TrainModelDeconvolutionSplit:
             encoded = self.image_encoder(image1)
             # norm_encoded=encoded.norm(p=1)
             output = self.image_generator(encoded)
-            optimized_loss = criterion(output, image2)
+            full_image=Variable(inputs,requires_grad=False)
+            optimized_loss = criterion(output, full_image)
             optimized_loss.backward()
             self.optimizer.step()
 
@@ -278,7 +279,8 @@ class TrainModelDeconvolutionSplit:
 
             if batch_idx == 0:
                 self.save_images(epoch, image1, image2, generated_image2=output)
-            loss = criterion(output, image2)
+            full_image = Variable(inputs, requires_grad=False)
+            loss = criterion(output, full_image)
             performance_estimators.set_metric(batch_idx, "test_loss", loss.data[0])
 
             progress_bar(batch_idx * self.mini_batch_size, self.max_validation_examples,

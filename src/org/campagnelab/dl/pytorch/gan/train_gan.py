@@ -216,7 +216,7 @@ if __name__ == '__main__':
                 # state size. (ndf*8) x 4 x 4
                 # reduce the number of state features progressively to nz
                 nn.Linear(ndf*2, nz),
-                nn.InstanceNorm1d(nz)
+
             )
 
         def forward(self, input):
@@ -259,15 +259,21 @@ if __name__ == '__main__':
     optimizerG = optim.Adam(netG.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
     optimizerNP = optim.Adam(netNoisePredictor.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
     alpha=0.5
+
+    step=0
+    epoch_length=len(dataloader)
+    max_step = opt.niter * epoch_length
     for epoch in range(opt.niter):
         for i, data in enumerate(dataloader, 0):
             ############################
             # (1) Update D network: maximize log(D(x)) + log(1 - D(G(z)))
             ###########################
             # train with real
+
             netD.zero_grad()
             real_cpu, _ = data
             batch_size = real_cpu.size(0)
+
             if opt.cuda:
                 real_cpu = real_cpu.cuda()
             input.resize_as_(real_cpu).copy_(real_cpu)
@@ -300,7 +306,7 @@ if __name__ == '__main__':
             noisev = Variable(to_fit)
 
             # adjust alpha at each epoch to progressively fit the prediction more than the noise:
-            alpha = 1 - (epoch / opt.niter)
+            alpha = 1 - (step / max_step)
 
             fake = netG(noisev)
             labelv = Variable(label.fill_(fake_label))
@@ -322,6 +328,7 @@ if __name__ == '__main__':
             D_G_z2 = output.data.mean()
             optimizerG.step()
 
+            step+=1
             print('alpha= %.3f [%d/%d][%d/%d] Loss_D: %.4f Loss_G: %.4f D(x): %.4f D(G(z)): %.4f / %.4f'
                   % (alpha, epoch, opt.niter, i, len(dataloader),
                      errD.data[0], errG.data[0], D_x, D_G_z1, D_G_z2))

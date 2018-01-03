@@ -15,6 +15,7 @@ from org.campagnelab.dl.pytorch.images.Cifar10Problem import Cifar10Problem
 from org.campagnelab.dl.pytorch.images.CrossValidatedProblem import CrossValidatedProblem
 from org.campagnelab.dl.pytorch.images.Problems import create_model
 from org.campagnelab.dl.pytorch.images.STL10Problem import STL10Problem
+from org.campagnelab.dl.pytorch.images.STL10_NT64Problem import STL10_NT64Problem
 from org.campagnelab.dl.pytorch.images.TrainModelDeconvolutionSplit import TrainModelDeconvolutionSplit
 from org.campagnelab.dl.pytorch.images.TrainModelSplit import TrainModelSplit, flatten
 from org.campagnelab.dl.pytorch.images.models import *
@@ -93,10 +94,12 @@ if __name__ == '__main__':
 
     if args.problem == "CIFAR10":
         problem = Cifar10Problem(args.mini_batch_size)
-    if args.problem == "CIFAR10_NT64":
-            problem = Cifar10_NT64Problem(args.mini_batch_size)
+    elif args.problem == "CIFAR10_NT64":
+        problem = Cifar10_NT64Problem(args.mini_batch_size)
     elif args.problem == "STL10":
         problem = STL10Problem(args.mini_batch_size)
+    elif args.problem == "STL10_NT64":
+        problem = STL10_NT64Problem(args.mini_batch_size)
     else:
         print("Unsupported problem: " + args.problem)
         exit(1)

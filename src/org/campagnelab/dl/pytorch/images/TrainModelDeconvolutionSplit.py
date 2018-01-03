@@ -226,15 +226,15 @@ class TrainModelDeconvolutionSplit:
 
             self.optimizer.zero_grad()
 
-            image1, image2 = half_images(inputs, slope=get_random_slope(), cuda=self.use_cuda)
+            image1, image2, mask2 = half_images(inputs, slope=get_random_slope(), cuda=self.use_cuda)
             # train the discriminator/generator pair on the first half of the image:
             encoded = self.image_encoder(image1)
             # norm_encoded=encoded.norm(p=1)
             output = self.image_generator(encoded)
-            full_image = Variable(inputs, requires_grad=False)
             optimized_loss = criterion(output, image2)
             optimized_loss.backward()
             self.optimizer.step()
+
             if batch_idx == 0:
                 self.save_images(epoch, image1, image2, generated_image2=output, prefix="train")
 
@@ -270,17 +270,15 @@ class TrainModelDeconvolutionSplit:
             if self.use_cuda:
                 inputs = inputs.cuda()
 
-            image1, image2 = half_images(inputs, slope=get_random_slope(), cuda=self.use_cuda)
+            image1, image2, mask2 = half_images(inputs, slope=get_random_slope(), cuda=self.use_cuda)
             # train the discriminator/generator pair on the first half of the image:
             encoded = self.image_encoder(image1)
 
             output = self.image_generator(encoded)
-            reconstituted_image = output + image1
+
             if batch_idx == 0:
                 self.save_images(epoch, image1, image2, generated_image2=output)
-            full_image = Variable(inputs, volatile=True)
-            loss = criterion(reconstituted_image, full_image)
-
+            loss = criterion(output, image2)
             performance_estimators.set_metric(batch_idx, "test_loss", loss.data[0])
 
             progress_bar(batch_idx * self.mini_batch_size, self.max_validation_examples,

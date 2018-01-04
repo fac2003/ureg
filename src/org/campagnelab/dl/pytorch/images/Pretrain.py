@@ -68,6 +68,9 @@ if __name__ == '__main__':
 
     parser.add_argument('--checkpoint-key', help='random key to save/load checkpoint',
                         default=''.join(random.choices(string.ascii_uppercase, k=5)))
+    parser.add_argument('--pretrained-key', help='key to load a pretrained model (use with --pretrain)',
+                        default='DECONV')
+
     parser.add_argument('--lr-patience', default=10, type=int,
                         help='number of epochs to wait before applying LR schedule when loss does not improve.')
     parser.add_argument('--model', default="PreActResNet18", type=str,
@@ -88,10 +91,25 @@ if __name__ == '__main__':
                         default=64)
     parser.add_argument('--constant-learning-rates', action='store_true',
                         help='Use constant learning rates, not schedules.')
+    parser.add_argument('--cross-validation-folds', type=str,
+                        help='Use cross-validation with folds defined in the argument file.'
+                             ' The file follows the format of the STL-10 fold indices:'
+                             ' one line per fold, with zero-based integers of the training examples in the train split.'
+                             ' The validation examples are the complement indices in the train split.'
+                             ' When this argument is provided, training is done sequentially for each fold, the '
+                             ' checkpoint key is appended with the folder index and a summary performance file (cv-summary-[key].tsv) is written '
+                             'at the completion of cross-validation. ', default=None)
+    parser.add_argument('--cv-fold-min-perf', default=0, type=float,
+                        help='Stop cross-validation early if a fold does not'
+                             ' meet this minimum performance level (test accuracy).')
+    parser.add_argument('--cross-validation-indices', type=str,
+                        help='coma separated list of fold indices to evaluate. If the option '
+                             'is not speficied, all folds are evaluated ', default=None)
+    parser.add_argument('--seed', type=int,
+                        help='Random seed', default=random.randint(0, sys.maxsize))
 
     args = parser.parse_args()
 
-    print("Pre-training " + args.checkpoint_key)
 
     use_cuda = torch.cuda.is_available()
     if use_cuda: print("With CUDA")
@@ -120,16 +138,95 @@ if __name__ == '__main__':
 
     problem.describe()
 
-    model_trainer = TrainModelDeconvolutionSplit(args=args, problem=problem, use_cuda=use_cuda)
+
     if hasattr(args,'seed'):
         torch.manual_seed(args.seed)
         if use_cuda:
             torch.cuda.manual_seed(args.seed)
 
-    model_trainer.init_model(create_model_function=((lambda modelName, problem: nn.Linear(1, 1)) if args.pretrain else create_model))
     if args.pretrain:
-        model_trainer.training_deconvolution()
+        print("Pre-training " + args.checkpoint_key)
+
+        model_trainer = TrainModelDeconvolutionSplit(args=args, problem=problem, use_cuda=use_cuda)
+        model_trainer.init_model(
+            create_model_function=((lambda modelName, problem: nn.Linear(1, 1)) if args.pretrain else create_model))
+
         print("Finished pre-training " + args.checkpoint_key)
+        exit(0)
     else:
-        model_trainer.train_with_reconstructed_half()
-        print("Finished training " + args.checkpoint_key)
+
+        def get_metric_value(all_perfs, query_metric_name):
+            for perf in all_perfs:
+                metric = perf.get_metric(query_metric_name)
+                if metric is not None:
+                    return metric
+
+
+        def train_once(args, problem, use_cuda):
+            problem.describe()
+            model_trainer = TrainModelDeconvolutionSplit(args=args, problem=problem, use_cuda=use_cuda)
+
+            model_trainer.init_model(create_model_function=create_model)
+            torch.manual_seed(args.seed)
+            if use_cuda:
+                torch.cuda.manual_seed(args.seed)
+
+            model_trainer.init_model(create_model_function=create_model)
+
+            return    model_trainer.train_with_reconstructed_half()
+
+
+        if args.cross_validation_folds is None:
+            train_once(args, problem, use_cuda)
+            exit(0)
+        else:
+            # load cross validation folds:
+            fold_definitions = open(args.cross_validation_folds).readlines()
+            initial_checkpoint_key = args.checkpoint_key
+            all_perfs = []
+            fold_indices = [int(index) for index in args.cross_validation_indices.split(",")] if \
+                args.cross_validation_indices is not None else range(0, len(fold_definitions))
+
+            for fold_index, fold in enumerate(fold_definitions):
+                if fold_index in fold_indices:
+                    splitted = fold.split(sep=" ")
+                    splitted.remove("\n")
+                    train_indices = [int(index) for index in splitted]
+                    reduced_problem = CrossValidatedProblem(problem, train_indices)
+                    args.checkpoint_key = initial_checkpoint_key + "-" + str(fold_index)
+                    fold_perfs = train_once(copy.deepcopy(args), reduced_problem, use_cuda)
+
+                    all_perfs += [copy.deepcopy(fold_perfs)]
+
+                    if fold_perfs.get_metric("test_accuracy") < args.cv_fold_min_perf:
+                        break
+
+            metrics = ["train_loss", "test_loss", "test_accuracy"]
+            accumulators = [0] * len(metrics)
+            count = [0] * len(metrics)
+            accuracies = []
+            # aggregate statistics:
+            for fold_perfs in all_perfs:
+                for metric_index, metric_name in enumerate(metrics):
+                    metric = get_metric_value(fold_perfs, metric_name)
+                    if metric is not None:
+                        print("found value for " + metric_name + " " + str(metric))
+                        accumulators[metric_index] += metric
+                        count[metric_index] += 1
+                    if metric_name == "test_accuracy":
+                        accuracies.append(metric)
+
+            for metric_index, metric_name in enumerate(metrics):
+                accumulators[metric_index] /= count[metric_index]
+            test_accuracy_stdev = numpy.array(accuracies).std()
+            with open("cv-summary-{}.tsv".format(initial_checkpoint_key), "w") as perf_file:
+                perf_file.write("completed-folds\t")
+                perf_file.write("\t".join(map(str, metrics)))
+                perf_file.write("\ttest_accuracy_std")
+                perf_file.write("\n")
+                perf_file.write(str(len(all_perfs)))
+                perf_file.write("\t")
+                perf_file.write("\t".join(map(str, accumulators)))
+                perf_file.write("\t")
+                perf_file.write(str(test_accuracy_stdev))
+                perf_file.write("\n")

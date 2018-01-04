@@ -120,7 +120,9 @@ class TrainModelDeconvolutionSplit:
         self.optimizer = None
         # try loading a pre-trained model:
         encoder, generator, test_loss, epoch = self.load_pretrained()
-
+        if not args.pretrain and encoder is None:
+            print("You selected --pretrain, but not able to load pre-trained model with pretrained-key="+args.pretrained_key)
+            exit(1)
         if hasattr(args, 'resume') and args.resume:
             # Load checkpoint.
 
@@ -345,22 +347,21 @@ class TrainModelDeconvolutionSplit:
         if self.best_performance_metrics is None:
             self.best_performance_metrics = performance_estimators
 
-        metric = performance_estimators.get_metric("test_loss")
-        if metric is not None and metric <= self.best_loss:
+
+        if self.metric_is_better(performance_estimators):
             self.failed_to_improve = 0
 
             with open("best-{}-{}.tsv".format(kind, self.args.checkpoint_key), "a") as perf_file:
                 perf_file.write("\t".join(map(_format_nice, metrics)))
                 perf_file.write("\n")
 
-        if metric is not None and metric <= self.best_loss:
             if self.args.pretrain:
-                self.save_pretrained(epoch, metric)
+                self.save_pretrained(epoch, performance_estimators.get_metric("test_loss"))
             else:
                 self.save_checkpoint(epoch,  performance_estimators.get_metric("test_accuracy"))
             self.best_performance_metrics = performance_estimators
 
-        if metric is not None and metric > self.best_loss:
+        if not self.metric_is_better(performance_estimators):
             self.failed_to_improve += 1
             if hasattr(self.args, "abort_when_failed_to_improve") and \
                 self.failed_to_improve > self.args.abort_when_failed_to_improve:
@@ -416,7 +417,7 @@ class TrainModelDeconvolutionSplit:
 
     def load_pretrained(self):
         try:
-            state = torch.load('./checkpoint/pretrained_{}.t7'.format(self.args.checkpoint_key))
+            state = torch.load('./checkpoint/pretrained_{}.t7'.format(self.args.pretrained_key))
 
             encoder = state['encoder']
             generator = state['generator']
@@ -545,16 +546,23 @@ class TrainModelDeconvolutionSplit:
             outputs = self.net(unsup_image.detach())
 
             unsup_loss = self.criterion(outputs, targets)
+            unsup_loss.backward()
+            unsup_grad_norm = grad_norm(self.net.parameters())
+
+            optimizer_training.step()
             # outputs used to calculate the loss of the supervised model
             # must be done with the model prior to regularization:
+
+            self.net.zero_grad()
+            optimizer_training.zero_grad()
+
 
             outputs = self.net(inputs)
             supervised_loss = self.criterion(outputs, targets)
 
-            #supervised_grad_norm = grad_norm(self.net.parameters())
+            supervised_grad_norm = grad_norm(self.net.parameters())
 
-            loss=supervised_loss+unsup_loss
-            loss.backward()
+            supervised_loss.backward()
             unsup_grad_norm = grad_norm(self.net.parameters())
 
             optimizer_training.step()
@@ -641,3 +649,14 @@ class TrainModelDeconvolutionSplit:
         save_image( generated_image2.data,
                    '{}/{}-fake_samples_split_epoch_{}.png'.format("outputs", prefix, epoch),
                    normalize=True)
+
+    def metric_is_better(self, performance_estimators):
+
+        if self.args.pretrain:
+            metric = performance_estimators.get_metric("test_loss")
+            if metric is None: return False
+            return metric<= self.best_loss
+        else:
+            metric = performance_estimators.get_metric("test_accuracy")
+            if metric is None: return False
+            return metric>=self.best_acc

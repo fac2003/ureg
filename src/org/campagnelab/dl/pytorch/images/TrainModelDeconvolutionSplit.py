@@ -150,12 +150,14 @@ class TrainModelDeconvolutionSplit:
             if self.use_cuda:
                 self.net.cuda()
 
-            self.image_encoder = ImageEncoder(model=self.net, number_encoded_features=self.args.num_encoding_features,
+            self.image_encoder = ImageEncoder(model=self.net, number_encoder_features=self.args.num_encoder_features,
+                                              number_representation_features=self.args.num_representation_features,
                                               input_shape=self.problem.example_size(), use_cuda=self.use_cuda)
-            self.image_generator = ImageGenerator(number_encoded_features=self.args.num_encoding_features,
-                                                  number_of_generator_features=self.args.num_encoding_features,
+            self.image_generator = ImageGenerator(number_encoded_features=self.args.num_representation_features,
+                                                  number_of_generator_features=self.args.num_generator_features,
                                                   output_shape=self.problem.example_size(),
                                                   use_cuda=self.use_cuda)
+            print(self.image_encoder)
             if self.use_cuda:
 
                 self.image_encoder.cuda()
@@ -447,6 +449,6 @@ class TrainModelDeconvolutionSplit:
 
         # train the discriminator/generator pair on the first half of the image:
 
-        save_image(real_image1.data + generated_image2.data,
+        save_image( generated_image2.data,
                    '{}/{}-fake_samples_split_epoch_{}.png'.format("outputs", prefix, epoch),
                    normalize=True)

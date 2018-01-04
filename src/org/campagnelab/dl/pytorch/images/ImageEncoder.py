@@ -5,12 +5,14 @@ from org.campagnelab.dl.pytorch.images.ImageGenerator import weights_init
 
 
 class ImageEncoder(nn.Module):
-    def __init__(self, model, input_shape, number_encoded_features=100,
+    def __init__(self, model, input_shape, number_encoder_features=100,
+                 number_representation_features=100,
                  ngpu=1, use_cuda=False):
         super(ImageEncoder, self).__init__()
         self.ngpu = ngpu
         nc=3
-        ndf=number_encoded_features
+        ndf=number_encoder_features
+        self.nz=number_representation_features
         self.main = nn.Sequential(
                 # input is (nc) x 64 x 64
                 nn.Conv2d(nc, ndf, 4, 2, 1, bias=False),
@@ -28,16 +30,16 @@ class ImageEncoder(nn.Module):
                 nn.BatchNorm2d(ndf * 8),
                 nn.LeakyReLU(0.2, inplace=True),
             )
-        self.number_encoded_features=number_encoded_features
-        nz=number_encoded_features
+        self.number_encoded_features=number_encoder_features
+
         self.projection = nn.Sequential(
                 # state size. (ndf*8) x 4 x 4
                 # reduce the number of state features progressively to nz
                 nn.Linear(ndf * 8*4*4, ndf*8*4),
                 nn.LeakyReLU(0.2, inplace=True),
-                nn.Linear(ndf*8*4, nz*8),
+                nn.Linear(ndf*8*4, self.nz*8),
                 nn.LeakyReLU(0.2, inplace=True),
-                nn.Linear(nz * 8, nz)
+                nn.Linear(self.nz * 8, self.nz)
             )
 
         if use_cuda:
@@ -50,5 +52,5 @@ class ImageEncoder(nn.Module):
             output = self.main(input)
         output = output.view(output.size()[0], -1)
         output = self.projection(output)
-        output = output.view(output.size()[0], self.number_encoded_features, 1, 1)
+        output = output.view(output.size()[0], self.nz, 1, 1)
         return output

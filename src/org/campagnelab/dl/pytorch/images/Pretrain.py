@@ -75,8 +75,12 @@ if __name__ == '__main__':
                         default=10)
     parser.add_argument('--max-accuracy', type=float, help='Maximum accuracy for early stopping a cycle.',
                         default=10.0)
-    parser.add_argument('--num-encoding-features', type=int, help='Number of features used to encode an image.',
-                        default=100)
+    parser.add_argument('--num-encoder-features', type=int, help='Number of features used in the encoder.',
+                        default=64)
+    parser.add_argument('--num-generator-features', type=int, help='Number of features used in the generator.',
+                        default=64)
+    parser.add_argument('--num-representation-features', type=int, help='Number of features used to represent an image.',
+                        default=64)
     parser.add_argument('--constant-learning-rates', action='store_true',
                         help='Use constant learning rates, not schedules.')
 
@@ -92,12 +96,8 @@ if __name__ == '__main__':
     best_acc = 0  # best test accuracy
     start_epoch = 0  # start from epoch 0 or last checkpoint epoch
 
-    if args.problem == "CIFAR10":
-        problem = Cifar10Problem(args.mini_batch_size)
-    elif args.problem == "CIFAR10_NT64":
+    if args.problem == "CIFAR10_NT64":
         problem = Cifar10_NT64Problem(args.mini_batch_size)
-    elif args.problem == "STL10":
-        problem = STL10Problem(args.mini_batch_size)
     elif args.problem == "STL10_NT64":
         problem = STL10_NT64Problem(args.mini_batch_size)
     else:
@@ -121,7 +121,7 @@ if __name__ == '__main__':
         if use_cuda:
             torch.cuda.manual_seed(args.seed)
 
-    model_trainer.init_model(create_model_function=create_model)
+    model_trainer.init_model(create_model_function=lambda modelName, problem: nn.Linear(1, 1))
     model_trainer.training_deconvolution()
 
     print("Finished pre-training "+args.checkpoint_key)

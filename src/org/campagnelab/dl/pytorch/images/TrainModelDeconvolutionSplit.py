@@ -161,13 +161,15 @@ class TrainModelDeconvolutionSplit:
 
             self.image_encoder = ImageEncoder(model=self.net, number_encoder_features=self.args.num_encoder_features,
                                               number_representation_features=self.args.num_representation_features,
-                                              input_shape=self.problem.example_size(), use_cuda=self.use_cuda) \
+                                              input_shape=self.problem.example_size(), use_cuda=self.use_cuda,
+                                              ngpu=self.args.n_gpus) \
                 if encoder is None else encoder
 
             self.image_generator = ImageGenerator(number_encoded_features=self.args.num_representation_features,
                                                   number_of_generator_features=self.args.num_generator_features,
                                                   output_shape=self.problem.example_size(),
-                                                  use_cuda=self.use_cuda) \
+                                                  use_cuda=self.use_cuda,
+                                                  ngpu=self.args.n_gpus) \
                 if generator is None else generator
             print(self.image_encoder)
             if self.use_cuda:
@@ -245,7 +247,7 @@ class TrainModelDeconvolutionSplit:
             # train the discriminator/generator pair on the first half of the image:
             encoded = self.image_encoder(image1)
             # norm_encoded=encoded.norm(p=1)
-            output = self.image_generator(encoded)
+            output = self.image_generator(encoded,)
             full_image=Variable(inputs,requires_grad=False)
             optimized_loss = criterion(output, full_image)
             optimized_loss.backward()

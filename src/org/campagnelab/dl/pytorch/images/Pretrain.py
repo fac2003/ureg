@@ -54,10 +54,11 @@ if __name__ == '__main__':
                         help='Number of epochs to run before stopping. Additional epochs when --resume.', default=200)
     parser.add_argument('--num-classes', type=int,
                         help='Number of classes to train with for pre-training..', default=10)
-    parser.add_argument('--num-shaving', '-u', type=int, help='Maximum number of unlabeled examples to use when shaving',
-                        default = sys.maxsize)
+    parser.add_argument('--num-shaving', '-u', type=int,
+                        help='Maximum number of unlabeled examples to use when shaving',
+                        default=sys.maxsize)
     parser.add_argument('--num-validation', "-x", type=int, help='Maximum number of validation examples',
-                                                               default=sys.maxsize)
+                        default=sys.maxsize)
     parser.add_argument('--num-training', '-n', type=int, help='Maximum number of training examples to use.',
                         default=sys.maxsize)
 
@@ -81,13 +82,15 @@ if __name__ == '__main__':
                         default=1000)
     parser.add_argument('--epochs-per-cycle', type=int, help='Number of epochs per cycle.',
                         default=10)
+    parser.add_argument('--n-gpus', type=int, help='Use several gpus.', default=1)
     parser.add_argument('--max-accuracy', type=float, help='Maximum accuracy for early stopping a cycle.',
                         default=10.0)
     parser.add_argument('--num-encoder-features', type=int, help='Number of features used in the encoder.',
                         default=64)
     parser.add_argument('--num-generator-features', type=int, help='Number of features used in the generator.',
                         default=64)
-    parser.add_argument('--num-representation-features', type=int, help='Number of features used to represent an image.',
+    parser.add_argument('--num-representation-features', type=int,
+                        help='Number of features used to represent an image.',
                         default=64)
     parser.add_argument('--constant-learning-rates', action='store_true',
                         help='Use constant learning rates, not schedules.')
@@ -110,10 +113,11 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-
     use_cuda = torch.cuda.is_available()
-    if use_cuda: print("With CUDA")
-    else: print("With CPU")
+    if use_cuda:
+        print("With CUDA")
+    else:
+        print("With CPU")
 
     is_parallel = False
     best_acc = 0  # best test accuracy
@@ -136,10 +140,10 @@ if __name__ == '__main__':
             if metric is not None:
                 return metric
 
+
     problem.describe()
 
-
-    if hasattr(args,'seed'):
+    if hasattr(args, 'seed'):
         torch.manual_seed(args.seed)
         if use_cuda:
             torch.cuda.manual_seed(args.seed)
@@ -150,7 +154,7 @@ if __name__ == '__main__':
         model_trainer = TrainModelDeconvolutionSplit(args=args, problem=problem, use_cuda=use_cuda)
         model_trainer.init_model(
             create_model_function=((lambda modelName, problem: nn.Linear(1, 1)) if args.pretrain else create_model))
-
+        model_trainer.training_deconvolution()
         print("Finished pre-training " + args.checkpoint_key)
         exit(0)
     else:
@@ -173,7 +177,7 @@ if __name__ == '__main__':
 
             model_trainer.init_model(create_model_function=create_model)
 
-            return    model_trainer.train_with_reconstructed_half()
+            return model_trainer.train_with_reconstructed_half()
 
 
         if args.cross_validation_folds is None:

@@ -121,7 +121,7 @@ class TrainModelDeconvolutionSplit:
         # try loading a pre-trained model:
         encoder, generator, test_loss, epoch = self.load_pretrained()
         if not args.pretrain and encoder is None:
-            print("You selected --pretrain, but not able to load pre-trained model with pretrained-key="+args.pretrained_key)
+            print("You did not select --pretrain, and was not able to load pre-trained model with pretrained-key="+args.pretrained_key)
             exit(1)
         if hasattr(args, 'resume') and args.resume:
             # Load checkpoint.
@@ -393,7 +393,7 @@ class TrainModelDeconvolutionSplit:
             }
             if not os.path.isdir('checkpoint'):
                 os.mkdir('checkpoint')
-            torch.save(state, './checkpoint/pretrained_{}.t7'.format(self.args.checkpoint_key))
+            torch.save(state, './checkpoint/pretrained_{}.t7'.format(self.args.pretrained_key))
             self.best_loss = metric_value
 
     def save_checkpoint(self, epoch, acc):

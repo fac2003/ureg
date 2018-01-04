@@ -2,6 +2,7 @@ import torch
 from torch import nn
 
 from org.campagnelab.dl.pytorch.images.ImageGenerator import weights_init
+from org.campagnelab.dl.pytorch.images.utils import init_params
 
 
 class ImageEncoder(nn.Module):
@@ -41,6 +42,8 @@ class ImageEncoder(nn.Module):
                 nn.LeakyReLU(0.2, inplace=True),
                 nn.Linear(self.nz * 8, self.nz)
             )
+        init_params(self.main)
+        init_params(self.projection)
 
         if use_cuda:
             self.projection=self.projection.cuda()

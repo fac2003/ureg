@@ -2,6 +2,8 @@ import torch
 from torch import nn
 from torch.nn import Upsample, AvgPool2d, Module
 
+from org.campagnelab.dl.pytorch.images.utils import init_params
+
 
 def weights_init(m):
     classname = m.__class__.__name__
@@ -41,6 +43,8 @@ class ImageGenerator(nn.Module):
             nn.Tanh()
             # state size. (nc) x 64 x 64
         )
+        init_params(self.main)
+
         if use_cuda:
             self.main.cuda()
 

@@ -47,6 +47,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Evaluate split training against CIFAR10 & STL10')
     parser.add_argument('--lr', default=0.005, type=float, help='Learning rate.')
     parser.add_argument('--resume', '-r', action='store_true', help='resume from checkpoint.')
+    parser.add_argument('--pretrain', action='store_true', help='pretrain encoder and generator on unsupervised set.')
+
     parser.add_argument('--mini-batch-size', type=int, help='Size of the mini-batch.', default=128)
     parser.add_argument('--num-epochs', '--max-epochs', type=int,
                         help='Number of epochs to run before stopping. Additional epochs when --resume.', default=200)
@@ -56,6 +58,9 @@ if __name__ == '__main__':
                         default = sys.maxsize)
     parser.add_argument('--num-validation', "-x", type=int, help='Maximum number of validation examples',
                                                                default=sys.maxsize)
+    parser.add_argument('--num-training', '-n', type=int, help='Maximum number of training examples to use.',
+                        default=sys.maxsize)
+
     parser.add_argument('--momentum', type=float, help='Momentum for SGD.', default=0.9)
     parser.add_argument('--L2', type=float, help='L2 regularization.', default=1E-4)
     parser.add_argument('--dropout', type=float, help='Dropout rate during pretraining, '
@@ -121,7 +126,10 @@ if __name__ == '__main__':
         if use_cuda:
             torch.cuda.manual_seed(args.seed)
 
-    model_trainer.init_model(create_model_function=lambda modelName, problem: nn.Linear(1, 1))
-    model_trainer.training_deconvolution()
-
-    print("Finished pre-training "+args.checkpoint_key)
+    model_trainer.init_model(create_model_function=((lambda modelName, problem: nn.Linear(1, 1)) if args.pretrain else create_model))
+    if args.pretrain:
+        model_trainer.training_deconvolution()
+        print("Finished pre-training " + args.checkpoint_key)
+    else:
+        model_trainer.train_with_reconstructed_half()
+        print("Finished training " + args.checkpoint_key)

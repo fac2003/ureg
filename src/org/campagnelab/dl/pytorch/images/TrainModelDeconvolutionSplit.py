@@ -87,6 +87,7 @@ class TrainModelDeconvolutionSplit:
         self.failed_to_improve = 0
         self.confusion_matrix = None
         self.best_model_confusion_matrix = None
+        self.best_acc=0
 
     def init_model(self, create_model_function):
         """Resume training if necessary (args.--resume flag is True), or call the
@@ -117,6 +118,8 @@ class TrainModelDeconvolutionSplit:
         self.best_performance_metrics = None
         self.best_model = None
         self.optimizer = None
+        # try loading a pre-trained model:
+        encoder, generator, test_loss, epoch = self.load_pretrained()
 
         if hasattr(args, 'resume') and args.resume:
             # Load checkpoint.
@@ -125,23 +128,27 @@ class TrainModelDeconvolutionSplit:
 
             assert os.path.isdir('checkpoint'), 'Error: no checkpoint directory found!'
             checkpoint = None
+
             try:
                 checkpoint = torch.load('./checkpoint/ckpt_{}.t7'.format(args.checkpoint_key))
-            except                FileNotFoundError:
+            except FileNotFoundError:
                 pass
             if checkpoint is not None:
 
-                self.net = checkpoint['net']
-                self.image_encoder = checkpoint['encoder']
-                self.image_generator = checkpoint['generator']
-                self.best_loss = checkpoint['acc']
-                self.start_epoch = checkpoint['epoch']
-                self.best_model = checkpoint['best-model']
-                self.best_model_confusion_matrix = checkpoint['confusion-matrix']
+                self.net = checkpoint['net'] 
+                # use the pretrained data for encoder and generator if available:
+                self.image_encoder = checkpoint['encoder'] if encoder is None else encoder
+                self.image_generator = checkpoint['generator']  if generator is None else generator
+                self.best_loss = checkpoint['test_loss'] if not self.args.pretrain else test_loss
+                self.start_epoch = checkpoint['epoch'] if not self.args.pretrain else epoch
+
+                # rebuild a model fresh, we only
                 model_built = True
             else:
                 print("Could not load model checkpoint, unable to --resume.")
                 model_built = False
+                self.best_loss = test_loss
+                self.start_epoch = epoch
 
         if not model_built:
             print('==> Building model {}'.format(args.model))
@@ -152,11 +159,14 @@ class TrainModelDeconvolutionSplit:
 
             self.image_encoder = ImageEncoder(model=self.net, number_encoder_features=self.args.num_encoder_features,
                                               number_representation_features=self.args.num_representation_features,
-                                              input_shape=self.problem.example_size(), use_cuda=self.use_cuda)
+                                              input_shape=self.problem.example_size(), use_cuda=self.use_cuda) \
+                if encoder is None else encoder
+
             self.image_generator = ImageGenerator(number_encoded_features=self.args.num_representation_features,
                                                   number_of_generator_features=self.args.num_generator_features,
                                                   output_shape=self.problem.example_size(),
-                                                  use_cuda=self.use_cuda)
+                                                  use_cuda=self.use_cuda) \
+                if generator is None else generator
             print(self.image_encoder)
             if self.use_cuda:
 
@@ -170,6 +180,7 @@ class TrainModelDeconvolutionSplit:
 
         all_params += list(self.image_generator.main.parameters())
         all_params += list(self.image_encoder.projection.parameters())
+        all_params += list(self.image_encoder.main.parameters())
 
         self.optimizer = torch.optim.Adam(all_params, lr=self.args.lr, betas=(0.5, 0.999), weight_decay=self.args.L2)
 
@@ -228,7 +239,7 @@ class TrainModelDeconvolutionSplit:
 
             self.optimizer.zero_grad()
 
-            image1, image2, mask2 = half_images(inputs, slope=get_random_slope(), cuda=self.use_cuda)
+            image1, image2 = half_images(inputs, slope=get_random_slope(), cuda=self.use_cuda)
             # train the discriminator/generator pair on the first half of the image:
             encoded = self.image_encoder(image1)
             # norm_encoded=encoded.norm(p=1)
@@ -273,7 +284,7 @@ class TrainModelDeconvolutionSplit:
             if self.use_cuda:
                 inputs = inputs.cuda()
 
-            image1, image2, mask2 = half_images(inputs, slope=get_random_slope(), cuda=self.use_cuda)
+            image1, image2= half_images(inputs, slope=get_random_slope(), cuda=self.use_cuda)
             # train the discriminator/generator pair on the first half of the image:
             encoded = self.image_encoder(image1)
 
@@ -343,7 +354,10 @@ class TrainModelDeconvolutionSplit:
                 perf_file.write("\n")
 
         if metric is not None and metric <= self.best_loss:
-            self.save_checkpoint(epoch, metric)
+            if self.args.pretrain:
+                self.save_pretrained(epoch, metric)
+            else:
+                self.save_checkpoint(epoch,  performance_estimators.get_metric("test_accuracy"))
             self.best_performance_metrics = performance_estimators
 
         if metric is not None and metric > self.best_loss:
@@ -355,7 +369,7 @@ class TrainModelDeconvolutionSplit:
 
         return early_stop, self.best_performance_metrics
 
-    def save_checkpoint(self, epoch, metric_value):
+    def save_pretrained(self, epoch, metric_value):
 
         # Save checkpoint.
 
@@ -368,33 +382,55 @@ class TrainModelDeconvolutionSplit:
             encoder = self.image_encoder
             encoder.eval()
             state = {
-                'net': model.module if self.is_parallel else model,
+
                 'generator': generator.module if self.is_parallel else generator,
                 'encoder': encoder.module if self.is_parallel else encoder,
+                'test_loss': metric_value,
+                'epoch': epoch,
+            }
+            if not os.path.isdir('checkpoint'):
+                os.mkdir('checkpoint')
+            torch.save(state, './checkpoint/pretrained_{}.t7'.format(self.args.checkpoint_key))
+            self.best_loss = metric_value
+
+    def save_checkpoint(self, epoch, acc):
+
+        # Save checkpoint.
+
+        if acc > self.best_acc:
+            print('Saving..')
+            model = self.net
+            model.eval()
+
+            state = {
+                'net': model.module if self.is_parallel else model,
                 'best-model': self.best_model,
                 'confusion-matrix': self.best_model_confusion_matrix,
-                'acc': metric_value,
+                'acc': acc,
                 'epoch': epoch,
             }
             if not os.path.isdir('checkpoint'):
                 os.mkdir('checkpoint')
             torch.save(state, './checkpoint/ckpt_{}.t7'.format(self.args.checkpoint_key))
-            self.best_loss = metric_value
+            self.best_acc = acc
 
-    def load_checkpoint(self):
+    def load_pretrained(self):
+        try:
+            state = torch.load('./checkpoint/pretrained_{}.t7'.format(self.args.checkpoint_key))
 
-        if not os.path.isdir('checkpoint'):
-            os.mkdir('checkpoint')
-        state = torch.load('./checkpoint/ckpt_{}.t7'.format(self.args.checkpoint_key))
-        model = state['net']
-        generator = state['generator']
-        encoder = state['encoder']
-        for m in [model, generator, encoder]:
-            m.cpu()
-            m.eval()
-
-        return (model, generator, encoder)
-
+            encoder = state['encoder']
+            generator = state['generator']
+            test_loss=state['test_loss']
+            epoch=state['epoch']
+            for m in [generator, encoder]:
+                m.cpu()
+                m.eval()
+            print("Loaded pretrained encoder and generator for {} test_loss={} epoch={}".format( self.args.checkpoint_key,
+                                                                                                  test_loss, epoch))
+            return ( encoder, generator, test_loss, epoch)
+        except:
+            return (None,None,None,None)
+        
     def epoch_is_test_epoch(self, epoch):
         epoch_is_one_of_last_ten = epoch > (self.start_epoch + self.args.num_epochs - 10)
         return (epoch % self.args.test_every_n_epochs + 1) == 1 or epoch_is_one_of_last_ten
@@ -404,9 +440,7 @@ class TrainModelDeconvolutionSplit:
         :return list of performance estimators that observed performance on the last epoch run.
         """
         header_written = False
-        init_params(self.net)
-        init_params(self.image_generator)
-        init_params(self.image_encoder)
+
         lr_train_helper = LearningRateHelper(scheduler=self.scheduler_train, learning_rate_name="train_lr")
         previous_test_perfs = None
         perfs = PerformanceList()
@@ -432,6 +466,161 @@ class TrainModelDeconvolutionSplit:
                 return perfs
 
         return perfs
+
+    def train_with_reconstructed_half(self):
+        """Train the model using two half images: one half original from training set, the other reconstructed
+         with encoder/generator trained on unsup set.
+        """
+        header_written = False
+        self.optimizer = None
+        optimizer_training=torch.optim.Adam(self.net.parameters(), lr=self.args.lr, betas=(0.5, 0.999), weight_decay=self.args.L2)
+
+
+        lr_train_helper = LearningRateHelper(scheduler=self.scheduler_train, learning_rate_name="train_lr")
+        previous_test_perfs = None
+        perfs = PerformanceList()
+
+        print("Training with unsupervised half..")
+        for epoch in range(self.start_epoch, self.start_epoch + self.args.num_epochs):
+
+            perfs = PerformanceList()
+
+            perfs += self.train_with_two_halves(epoch, optimizer_training)
+
+            perfs += [lr_train_helper]
+            if previous_test_perfs is None or self.epoch_is_test_epoch(epoch):
+                perfs += self.test_acc(epoch)
+
+            if (not header_written):
+                header_written = True
+                self.log_performance_header(perfs)
+
+            early_stop, perfs = self.log_performance_metrics(epoch, perfs)
+            if early_stop:
+                # early stopping requested.
+                return perfs
+
+        return perfs
+
+    def train_with_two_halves(self, epoch, optimizer_training,
+              performance_estimators=None,
+              train_supervised_model=True,
+              ):
+
+        if performance_estimators is None:
+            performance_estimators = PerformanceList()
+            performance_estimators += [LossHelper("supervised_loss")]
+            performance_estimators += [LossHelper("unsup_loss")]
+
+            performance_estimators += [AccuracyHelper("train_")]
+            performance_estimators += [FloatHelper("supervised_grad_norm")]
+            performance_estimators += [FloatHelper("unsup_grad_norm")]
+            print('\nTraining, epoch: %d' % epoch)
+
+        self.net.train()
+        supervised_grad_norm = 1.
+        for performance_estimator in performance_estimators:
+            performance_estimator.init_performance_metrics()
+
+        unsupervised_loss_acc = 0
+        num_batches = 0
+        train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
+        self.image_encoder.eval()
+        self.image_generator.eval()
+
+        self.net.train()
+        for batch_idx, (inputs, targets) in enumerate(train_loader_subset):
+            num_batches += 1
+
+            if self.use_cuda:
+                inputs, targets = inputs.cuda(), targets.cuda()
+            self.net.zero_grad()
+            optimizer_training.zero_grad()
+            image1, image2 = half_images(inputs, slope=get_random_slope(), cuda=self.use_cuda)
+            # train the discriminator/generator pair on the first half of the image:
+            encoded = self.image_encoder(image1)
+            unsup_image = self.image_generator(encoded)
+
+            inputs, targets = Variable(inputs), Variable(targets, requires_grad=False)
+            outputs = self.net(unsup_image.detach())
+
+            unsup_loss = self.criterion(outputs, targets)
+            # outputs used to calculate the loss of the supervised model
+            # must be done with the model prior to regularization:
+
+            outputs = self.net(inputs)
+            supervised_loss = self.criterion(outputs, targets)
+
+            #supervised_grad_norm = grad_norm(self.net.parameters())
+
+            loss=supervised_loss+unsup_loss
+            loss.backward()
+            unsup_grad_norm = grad_norm(self.net.parameters())
+
+            optimizer_training.step()
+
+
+            performance_estimators.set_metric(batch_idx, "supervised_grad_norm", supervised_grad_norm)
+            performance_estimators.set_metric(batch_idx, "unsup_grad_norm", unsup_grad_norm)
+            performance_estimators.set_metric_with_outputs(batch_idx, "supervised_loss", supervised_loss.data[0],
+                                                           outputs, targets)
+            performance_estimators.set_metric_with_outputs(batch_idx, "unsup_loss", unsup_loss.data[0],
+                                                           outputs, targets)
+            performance_estimators.set_metric_with_outputs(batch_idx, "train_accuracy", supervised_loss.data[0],
+                                                           outputs, targets)
+            performance_estimators.set_metric_with_outputs(batch_idx, "train_loss", supervised_loss.data[0],
+                                                           outputs, targets)
+
+            progress_bar(batch_idx * self.mini_batch_size,
+                         min(self.max_regularization_examples, self.max_training_examples),
+                         " ".join([performance_estimator.progress_message() for performance_estimator in
+                                   performance_estimators]))
+
+            if (batch_idx + 1) * self.mini_batch_size > self.max_training_examples:
+                break
+
+        return performance_estimators
+
+    def test_acc(self, epoch, performance_estimators=None):
+        print('\nTesting, epoch: %d' % epoch)
+        if performance_estimators is None:
+            performance_estimators = PerformanceList()
+            performance_estimators += [LossHelper("test_loss"), AccuracyHelper("test_")]
+
+        self.net.eval()
+        for performance_estimator in performance_estimators:
+            performance_estimator.init_performance_metrics()
+        cm = ConfusionMeter(self.problem.num_classes(), normalized=False)
+
+        for batch_idx, (inputs, targets) in enumerate(self.problem.test_loader_range(0, self.args.num_validation)):
+
+            if self.use_cuda:
+                inputs, targets = inputs.cuda(), targets.cuda()
+            inputs, targets = Variable(inputs, volatile=True), Variable(targets, volatile=True)
+            outputs = self.net(inputs)
+            loss = self.criterion(outputs, targets)
+            # accumulate the confusion matrix:
+            _, predicted = torch.max(outputs.data, 1)
+
+            cm.add(predicted=predicted, target=targets.data)
+            performance_estimators.set_metric_with_outputs(batch_idx, "test_loss", loss.data[0], outputs, targets)
+            performance_estimators.set_metric_with_outputs(batch_idx, "test_accuracy", loss.data[0], outputs, targets)
+
+            progress_bar(batch_idx * self.mini_batch_size, self.max_validation_examples,
+                         performance_estimators.progress_message(["test_loss", "test_accuracy"]))
+
+            if ((batch_idx + 1) * self.mini_batch_size) > self.max_validation_examples:
+                break
+        # print()
+
+        # Apply learning rate schedule:
+        test_accuracy = performance_estimators.get_metric("test_accuracy")
+        assert test_accuracy is not None, "test_accuracy must be found among estimated performance metrics"
+        if not self.args.constant_learning_rates:
+            self.scheduler_train.step(test_accuracy, epoch)
+        self.confusion_matrix = cm.value().transpose()
+        return performance_estimators
+
 
     def save_images(self, epoch, real_image1, real_image2, generated_image2, prefix="val"):
         try:

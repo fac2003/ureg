@@ -61,4 +61,4 @@ def half_images(inputs, slope, cuda=False):
     mask1 = Variable(mask1, requires_grad=False)
     mask2 = Variable(mask2, requires_grad=False)
 
-    return uinputs.masked_fill(mask1, 0), uinputs2.masked_fill(mask2, 0), mask2
+    return uinputs.masked_fill(mask1, 0), uinputs2.masked_fill(mask2, 0)

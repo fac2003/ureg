@@ -86,7 +86,7 @@ if __name__ == '__main__':
                         default=1000)
     parser.add_argument('--epochs-per-cycle', type=int, help='Number of epochs per cycle.',
                         default=10)
-    parser.add_argument('--n-gpus', type=int, help='Use several gpus.', default=1)
+    parser.add_argument('--n-gpus', type=int, help='Use several gpus.', default=0)
     parser.add_argument('--max-accuracy', type=float, help='Maximum accuracy for early stopping a cycle.',
                         default=10.0)
     parser.add_argument('--num-encoder-features', type=int, help='Number of features used in the encoder.',

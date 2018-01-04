@@ -141,7 +141,11 @@ class TrainModelDeconvolutionSplit:
                 # use the pretrained data for encoder and generator if available:
                 self.image_encoder = checkpoint['encoder'] if encoder is None else encoder
                 self.image_generator = checkpoint['generator']  if generator is None else generator
-                self.best_loss = checkpoint['test_loss'] if not self.args.pretrain else test_loss
+                if self.args.pretrain:
+
+                    self.best_loss = checkpoint['test_loss']
+                else:
+                    self.best_acc = checkpoint['acc']
                 self.start_epoch = checkpoint['epoch'] if not self.args.pretrain else epoch
 
                 # rebuild a model fresh, we only
@@ -426,7 +430,10 @@ class TrainModelDeconvolutionSplit:
             test_loss=state['test_loss']
             epoch=state['epoch']
             for m in [generator, encoder]:
-                m.cpu()
+                if self.use_cuda:
+                    m.cuda()
+                else:
+                    m.cpu()
                 m.eval()
             print("Loaded pretrained encoder and generator for {} test_loss={} epoch={}".format( self.args.checkpoint_key,
                                                                                                   test_loss, epoch))
@@ -513,11 +520,13 @@ class TrainModelDeconvolutionSplit:
         if performance_estimators is None:
             performance_estimators = PerformanceList()
             performance_estimators += [LossHelper("supervised_loss")]
-            performance_estimators += [LossHelper("unsup_loss")]
+            if self.args.mode == "separate":
+                performance_estimators += [LossHelper("unsup_loss")]
 
             performance_estimators += [AccuracyHelper("train_")]
             performance_estimators += [FloatHelper("supervised_grad_norm")]
-            performance_estimators += [FloatHelper("unsup_grad_norm")]
+            if self.args.mode == "separate":
+                performance_estimators += [FloatHelper("unsup_grad_norm")]
             print('\nTraining, epoch: %d' % epoch)
 
         self.net.train()
@@ -572,7 +581,7 @@ class TrainModelDeconvolutionSplit:
                 optimizer_training.step()
 
             elif self.args.mode=="average":
-                inputs=(unsup_image.detach()+inputs)/2
+                inputs = (inputs + unsup_image.data) / 2
                 inputs, targets = Variable(inputs), Variable(targets, requires_grad=False)
 
                 outputs = self.net(inputs)
@@ -582,11 +591,13 @@ class TrainModelDeconvolutionSplit:
                 optimizer_training.step()
 
             performance_estimators.set_metric(batch_idx, "supervised_grad_norm", supervised_grad_norm)
-            performance_estimators.set_metric(batch_idx, "unsup_grad_norm", unsup_grad_norm)
+            if self.args.mode == "separate":
+                performance_estimators.set_metric(batch_idx, "unsup_grad_norm", unsup_grad_norm)
+                performance_estimators.set_metric_with_outputs(batch_idx, "unsup_loss", unsup_loss.data[0],
+                                                               outputs, targets)
             performance_estimators.set_metric_with_outputs(batch_idx, "supervised_loss", supervised_loss.data[0],
                                                            outputs, targets)
-            performance_estimators.set_metric_with_outputs(batch_idx, "unsup_loss", unsup_loss.data[0],
-                                                           outputs, targets)
+
             performance_estimators.set_metric_with_outputs(batch_idx, "train_accuracy", supervised_loss.data[0],
                                                            outputs, targets)
             performance_estimators.set_metric_with_outputs(batch_idx, "train_loss", supervised_loss.data[0],
@@ -626,10 +637,8 @@ class TrainModelDeconvolutionSplit:
                 inputs, targets = Variable(inputs, volatile=True), Variable(targets, volatile=True)
                 outputs = self.net(inputs)
             elif self.args.mode == "average":
-                inputs = (unsup_image.detach() + inputs) / 2
+                inputs = (inputs + unsup_image.data) / 2
                 inputs, targets = Variable(inputs), Variable(targets, requires_grad=False)
-
-                inputs, targets = Variable(inputs, volatile=True), Variable(targets, volatile=True)
                 outputs = self.net(inputs)
             loss = self.criterion(outputs, targets)
             # accumulate the confusion matrix:

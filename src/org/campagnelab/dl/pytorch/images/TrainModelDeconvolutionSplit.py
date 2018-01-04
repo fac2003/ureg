@@ -540,35 +540,46 @@ class TrainModelDeconvolutionSplit:
             self.net.zero_grad()
             optimizer_training.zero_grad()
             image1, image2 = half_images(inputs, slope=get_random_slope(), cuda=self.use_cuda)
-            # train the discriminator/generator pair on the first half of the image:
             encoded = self.image_encoder(image1)
             unsup_image = self.image_generator(encoded)
 
-            inputs, targets = Variable(inputs), Variable(targets, requires_grad=False)
-            outputs = self.net(unsup_image.detach())
+            if self.args.mode=="separate":
+                 # train the discriminator/generator pair on the first half of the image:
 
-            unsup_loss = self.criterion(outputs, targets)
-            unsup_loss.backward()
-            unsup_grad_norm = grad_norm(self.net.parameters())
+                inputs, targets = Variable(inputs), Variable(targets, requires_grad=False)
+                outputs = self.net(unsup_image.detach())
 
-            optimizer_training.step()
-            # outputs used to calculate the loss of the supervised model
-            # must be done with the model prior to regularization:
+                unsup_loss = self.criterion(outputs, targets)
+                unsup_loss.backward()
+                unsup_grad_norm = grad_norm(self.net.parameters())
 
-            self.net.zero_grad()
-            optimizer_training.zero_grad()
+                optimizer_training.step()
+                # outputs used to calculate the loss of the supervised model
+                # must be done with the model prior to regularization:
+
+                self.net.zero_grad()
+                optimizer_training.zero_grad()
 
 
-            outputs = self.net(inputs)
-            supervised_loss = self.criterion(outputs, targets)
+                outputs = self.net(inputs)
+                supervised_loss = self.criterion(outputs, targets)
 
-            supervised_grad_norm = grad_norm(self.net.parameters())
+                supervised_grad_norm = grad_norm(self.net.parameters())
 
-            supervised_loss.backward()
-            unsup_grad_norm = grad_norm(self.net.parameters())
+                supervised_loss.backward()
+                unsup_grad_norm = grad_norm(self.net.parameters())
 
-            optimizer_training.step()
+                optimizer_training.step()
 
+            elif self.args.mode=="average":
+                inputs=(unsup_image.detach()+inputs)/2
+                inputs, targets = Variable(inputs), Variable(targets, requires_grad=False)
+
+                outputs = self.net(inputs)
+                supervised_loss = self.criterion(outputs, targets)
+                supervised_grad_norm = grad_norm(self.net.parameters())
+                supervised_loss.backward()
+                optimizer_training.step()
 
             performance_estimators.set_metric(batch_idx, "supervised_grad_norm", supervised_grad_norm)
             performance_estimators.set_metric(batch_idx, "unsup_grad_norm", unsup_grad_norm)
@@ -606,8 +617,20 @@ class TrainModelDeconvolutionSplit:
 
             if self.use_cuda:
                 inputs, targets = inputs.cuda(), targets.cuda()
-            inputs, targets = Variable(inputs, volatile=True), Variable(targets, volatile=True)
-            outputs = self.net(inputs)
+            image1, image2 = half_images(inputs, slope=get_random_slope(), cuda=self.use_cuda)
+            encoded = self.image_encoder(image1)
+            unsup_image = self.image_generator(encoded)
+
+            if self.args.mode == "separate":
+
+                inputs, targets = Variable(inputs, volatile=True), Variable(targets, volatile=True)
+                outputs = self.net(inputs)
+            elif self.args.mode == "average":
+                inputs = (unsup_image.detach() + inputs) / 2
+                inputs, targets = Variable(inputs), Variable(targets, requires_grad=False)
+
+                inputs, targets = Variable(inputs, volatile=True), Variable(targets, volatile=True)
+                outputs = self.net(inputs)
             loss = self.criterion(outputs, targets)
             # accumulate the confusion matrix:
             _, predicted = torch.max(outputs.data, 1)

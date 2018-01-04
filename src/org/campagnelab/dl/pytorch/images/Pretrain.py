@@ -76,6 +76,10 @@ if __name__ == '__main__':
                         help='number of epochs to wait before applying LR schedule when loss does not improve.')
     parser.add_argument('--model', default="PreActResNet18", type=str,
                         help='The model to instantiate. One of VGG16,	ResNet18, ResNet50, ResNet101,ResNeXt29, ResNeXt29, DenseNet121, PreActResNet18, DPN92')
+    parser.add_argument('--mode', default="separate", type=str,
+                        help='How to combine the unupervised reconstructed image and the training set image? separate keeps them '
+                             'separate for training, average takes the average.')
+
     parser.add_argument('--problem', default="CIFAR10", type=str,
                         help='The problem, either CIFAR10 or STL10')
     parser.add_argument('--num-cycles', type=int, help='Number of pre-training cycles.',

@@ -185,7 +185,7 @@ class TrainModelDeconvolutionSplit:
                 self.best_model.cuda()
                 self.best_model_confusion_matrix = self.best_model_confusion_matrix.cuda()
         if self.start_epoch is None:
-            self.start_epoch=0
+            self.start_epoch=self.args.start_epoch
 
         cudnn.benchmark = True
         all_params = []
@@ -594,6 +594,16 @@ class TrainModelDeconvolutionSplit:
                 supervised_loss.backward()
                 optimizer_training.step()
 
+            elif self.args.mode=="uonly":
+                inputs =  unsup_image.data
+                inputs, targets = Variable(inputs), Variable(targets, requires_grad=False)
+
+                outputs = self.net(inputs)
+                supervised_loss = self.criterion(outputs, targets)
+                supervised_grad_norm = grad_norm(self.net.parameters())
+                supervised_loss.backward()
+                optimizer_training.step()
+
             performance_estimators.set_metric(batch_idx, "supervised_grad_norm", supervised_grad_norm)
             if self.args.mode == "separate":
                 performance_estimators.set_metric(batch_idx, "unsup_grad_norm", unsup_grad_norm)
@@ -640,10 +650,17 @@ class TrainModelDeconvolutionSplit:
 
                 inputs, targets = Variable(inputs, volatile=True), Variable(targets, volatile=True)
                 outputs = self.net(inputs)
+
             elif self.args.mode == "average":
                 inputs = (inputs + unsup_image.data) / 2
                 inputs, targets = Variable(inputs), Variable(targets, requires_grad=False)
                 outputs = self.net(inputs)
+
+            elif self.args.mode=="uonly":
+                inputs =  unsup_image.data
+                inputs, targets = Variable(inputs), Variable(targets, requires_grad=False)
+                outputs = self.net(inputs)
+
             loss = self.criterion(outputs, targets)
             # accumulate the confusion matrix:
             _, predicted = torch.max(outputs.data, 1)

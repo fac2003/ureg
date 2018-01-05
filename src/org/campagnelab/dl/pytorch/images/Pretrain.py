@@ -61,6 +61,8 @@ if __name__ == '__main__':
                         default=sys.maxsize)
     parser.add_argument('--num-training', '-n', type=int, help='Maximum number of training examples to use.',
                         default=sys.maxsize)
+    parser.add_argument('--start-epoch', type=int, help='Used to patch start epoch when not saved in a checkpoint.',
+                        default=None)
 
     parser.add_argument('--momentum', type=float, help='Momentum for SGD.', default=0.9)
     parser.add_argument('--L2', type=float, help='L2 regularization.', default=1E-4)

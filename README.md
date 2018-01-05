@@ -35,8 +35,8 @@ ${UREG}/bin/cv-with-mixup-stl10.sh -n 4000 -x 8000 -u 100000 \
    --mode mixup --lr-patience 10 \
    --alpha 0.9 --unsup-proportion 0.5 \
    --L2 6.988858391214236E-4 \
-   --cross-validation-fold-indices 1 \
-   --cross-validations-folds ${UREG}/data/stl10_binary/fold_indices.txt \
+   --cross-validation-indices 1 \
+   --cross-validation-folds ${UREG}/data/stl10_binary/fold_indices.txt \
    --max-epochs 1000  --load-pre-trained-model
 ````
 

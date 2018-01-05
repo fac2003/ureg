@@ -13,7 +13,17 @@ class EstimateFeatureSize(Module):
         input = Variable(torch.rand(bs, *input_shape))
         if use_cuda:
             input=input.cuda()
-        output_feat = model.forward(input)
+        output_feat = model(input)
+        n_size = output_feat.data.view(bs, -1).size(1)
+        return n_size
+
+    def estimate_output_size_with_dual_model(self, input_shape, model, use_cuda=False):
+        """Calculate the convolution output size using a partially constructed model. """
+        bs = 1
+        input = Variable(torch.rand(bs, *input_shape))
+        if use_cuda:
+            input=input.cuda()
+        output_feat,_, _ = model(input,input)
         n_size = output_feat.data.view(bs, -1).size(1)
         return n_size
 

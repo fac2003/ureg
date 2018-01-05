@@ -14,7 +14,9 @@ from org.campagnelab.dl.pytorch.images.FloatHelper import FloatHelper
 from org.campagnelab.dl.pytorch.images.LRHelper import LearningRateHelper
 from org.campagnelab.dl.pytorch.images.LossHelper import LossHelper
 from org.campagnelab.dl.pytorch.images.PerformanceList import PerformanceList
-from org.campagnelab.dl.pytorch.images.utils import progress_bar, grad_norm
+from org.campagnelab.dl.pytorch.images.models.dual import LossEstimator
+from org.campagnelab.dl.pytorch.images.models.vgg_dual import VGGDual
+from org.campagnelab.dl.pytorch.images.utils import progress_bar, grad_norm, init_params
 from org.campagnelab.dl.pytorch.ureg.LRSchedules import construct_scheduler
 
 
@@ -302,6 +304,75 @@ class TrainModelUnsupMixup:
 
         return performance_estimators
 
+    def train_with_fm_loss(self, epoch,
+                    performance_estimators=None
+                    ):
+
+        if performance_estimators is None:
+            performance_estimators = PerformanceList()
+            performance_estimators += [LossHelper("optimized_loss")]
+            performance_estimators += [LossHelper("train_loss")]
+            performance_estimators += [FloatHelper("fm_loss")]
+            # performance_estimators += [AccuracyHelper("train_")]
+            performance_estimators += [FloatHelper("train_grad_norm")]
+
+            print('\nTraining, epoch: %d' % epoch)
+
+        self.net.train()
+        supervised_grad_norm = 1.
+        for performance_estimator in performance_estimators:
+            performance_estimator.init_performance_metrics()
+
+        unsupervised_loss_acc = 0
+        num_batches = 0
+        train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
+        sec_train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
+        unsuploader_shuffled = self.problem.reg_loader_subset_range(0, self.args.num_shaving)
+        unsupiter = itertools.cycle(unsuploader_shuffled)
+
+
+        for batch_idx, ((inputs, targets),
+                        (uinputs, _)) in enumerate(zip(train_loader_subset                                                        ,
+                                                        unsupiter)):
+            num_batches += 1
+
+            if self.use_cuda:
+                inputs = inputs.cuda()
+                uinputs = uinputs.cuda()
+                targets = targets.cuda()
+
+            # outputs used to calculate the loss of the supervised model
+            # must be done with the model prior to regularization:
+            self.net.train()
+            self.net.zero_grad()
+            self.optimizer_training.zero_grad()
+            outputs, outputu, fm_loss = self.net(inputs,uinputs)
+
+            if train_supervised_model:
+                supervised_loss = self.criterion(outputs, targets)
+                optimized_loss = supervised_loss+fm_loss
+                optimized_loss.backward()
+                self.optimizer_training.step()
+                supervised_grad_norm = grad_norm(self.net.parameters())
+                performance_estimators.set_metric(batch_idx, "train_grad_norm", supervised_grad_norm)
+                performance_estimators.set_metric(batch_idx, "optimized_loss", optimized_loss.data[0])
+                performance_estimators.set_metric(batch_idx, "fm_loss", fm_loss.data[0])
+
+                performance_estimators.set_metric_with_outputs(batch_idx, "train_loss", supervised_loss.data[0],
+                                                               outputs, targets)
+                # performance_estimators.set_metric_with_outputs(batch_idx, "train_accuracy", supervised_loss.data[0],
+                #                                               outputs, targets)
+
+            progress_bar(batch_idx * self.mini_batch_size,
+                         min(self.max_regularization_examples, self.max_training_examples),
+                         performance_estimators.progress_message(["train_loss","train_accuracy"]))
+
+            if (batch_idx + 1) * self.mini_batch_size > self.max_training_examples:
+                break
+
+        return performance_estimators
+
+
     def mixup_inputs_targets(self, alpha, inputs1, inputs2, targets1, targets2):
         """" Implement mixup: combine inputs and targets in alpha amounts. """
         if self.args.one_mixup_per_batch:
@@ -576,6 +647,41 @@ class TrainModelUnsupMixup:
                 self.args.alpha = 0
             if self.args.alpha > 1:
                 self.args.alpha = 1
+
+            perfs += [lr_train_helper]
+            if previous_test_perfs is None or self.epoch_is_test_epoch(epoch):
+                perfs += self.test(epoch)
+
+            if (not header_written):
+                header_written = True
+                self.log_performance_header(perfs)
+
+            early_stop, perfs = self.log_performance_metrics(epoch, perfs)
+            if early_stop:
+                # early stopping requested.
+                return perfs
+
+        return perfs
+
+    def training_fm_loss(self):
+        """Train the model with unsupervised mixup. Returns the performance obtained
+           at the end of the configured training run.
+        :return list of performance estimators that observed performance on the last epoch run.
+        """
+        header_written = False
+        self.net=VGGDual(vgg_name="VGG16", input_shape=self.problem.example_size(), loss_estimator=LossEstimator())
+        # TODO: determine if init_params work with dual:
+        init_params(self.net)
+
+        lr_train_helper = LearningRateHelper(scheduler=self.scheduler_train, learning_rate_name="train_lr")
+        previous_test_perfs = None
+        perfs = PerformanceList()
+        train_loss = None
+        test_loss = None
+        for epoch in range(self.start_epoch, self.start_epoch + self.args.num_epochs):
+
+            perfs = PerformanceList()
+            perfs += self.train_with_fm_loss(epoch)
 
             perfs += [lr_train_helper]
             if previous_test_perfs is None or self.epoch_is_test_epoch(epoch):

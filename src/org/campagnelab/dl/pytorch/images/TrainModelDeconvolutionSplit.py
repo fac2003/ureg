@@ -123,6 +123,7 @@ class TrainModelDeconvolutionSplit:
         if not args.pretrain and encoder is None:
             print("You did not select --pretrain, and was not able to load pre-trained model with pretrained-key="+args.pretrained_key)
             exit(1)
+
         if hasattr(args, 'resume') and args.resume:
             # Load checkpoint.
 
@@ -183,6 +184,9 @@ class TrainModelDeconvolutionSplit:
             if self.best_model is not None:
                 self.best_model.cuda()
                 self.best_model_confusion_matrix = self.best_model_confusion_matrix.cuda()
+        if self.start_epoch is None:
+            self.start_epoch=0
+
         cudnn.benchmark = True
         all_params = []
 

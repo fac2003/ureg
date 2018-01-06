@@ -14,7 +14,7 @@ from org.campagnelab.dl.pytorch.images.FloatHelper import FloatHelper
 from org.campagnelab.dl.pytorch.images.LRHelper import LearningRateHelper
 from org.campagnelab.dl.pytorch.images.LossHelper import LossHelper
 from org.campagnelab.dl.pytorch.images.PerformanceList import PerformanceList
-from org.campagnelab.dl.pytorch.images.models.dual import LossEstimator
+from org.campagnelab.dl.pytorch.images.models.dual import LossEstimator_L1
 from org.campagnelab.dl.pytorch.images.models.vgg_dual import VGGDual
 from org.campagnelab.dl.pytorch.images.utils import progress_bar, grad_norm, init_params
 from org.campagnelab.dl.pytorch.ureg.LRSchedules import construct_scheduler
@@ -305,15 +305,14 @@ class TrainModelUnsupMixup:
         return performance_estimators
 
     def train_with_fm_loss(self, epoch,
-                    performance_estimators=None
-                    ):
+                    gamma=1E-5, performance_estimators=None):
 
         if performance_estimators is None:
             performance_estimators = PerformanceList()
             performance_estimators += [LossHelper("optimized_loss")]
             performance_estimators += [LossHelper("train_loss")]
             performance_estimators += [FloatHelper("fm_loss")]
-            # performance_estimators += [AccuracyHelper("train_")]
+            performance_estimators += [AccuracyHelper("train_")]
             performance_estimators += [FloatHelper("train_grad_norm")]
 
             print('\nTraining, epoch: %d' % epoch)
@@ -346,22 +345,26 @@ class TrainModelUnsupMixup:
             self.net.train()
             self.net.zero_grad()
             self.optimizer_training.zero_grad()
+            inputs, targets, uinputs = Variable(inputs), Variable(targets, requires_grad=False), Variable(uinputs, requires_grad=True)
+            if self.use_cuda:
+                inputs, targets, uinputs=inputs.cuda(),targets.cuda(), uinputs.cuda()
             outputs, outputu, fm_loss = self.net(inputs,uinputs)
 
-            if train_supervised_model:
-                supervised_loss = self.criterion(outputs, targets)
-                optimized_loss = supervised_loss+fm_loss
-                optimized_loss.backward()
-                self.optimizer_training.step()
-                supervised_grad_norm = grad_norm(self.net.parameters())
-                performance_estimators.set_metric(batch_idx, "train_grad_norm", supervised_grad_norm)
-                performance_estimators.set_metric(batch_idx, "optimized_loss", optimized_loss.data[0])
-                performance_estimators.set_metric(batch_idx, "fm_loss", fm_loss.data[0])
+            supervised_loss = self.criterion(outputs, targets)
+            optimized_loss = supervised_loss+gamma*fm_loss
+            optimized_loss.backward()
+            self.optimizer_training.step()
+            supervised_grad_norm = grad_norm(self.net.parameters())
+            performance_estimators.set_metric(batch_idx, "train_grad_norm", supervised_grad_norm)
+            performance_estimators.set_metric(batch_idx, "optimized_loss", optimized_loss.data[0])
+            performance_estimators.set_metric(batch_idx, "fm_loss", fm_loss)
 
-                performance_estimators.set_metric_with_outputs(batch_idx, "train_loss", supervised_loss.data[0],
-                                                               outputs, targets)
-                # performance_estimators.set_metric_with_outputs(batch_idx, "train_accuracy", supervised_loss.data[0],
-                #                                               outputs, targets)
+            performance_estimators.set_metric_with_outputs(batch_idx, "train_loss", supervised_loss.data[0],
+                                                           outputs, targets)
+            performance_estimators.set_metric_with_outputs(batch_idx, "train_accuracy", supervised_loss.data[0],
+                                                           outputs, targets)
+            # performance_estimators.set_metric_with_outputs(batch_idx, "train_accuracy", supervised_loss.data[0],
+            #                                               outputs, targets)
 
             progress_bar(batch_idx * self.mini_batch_size,
                          min(self.max_regularization_examples, self.max_training_examples),
@@ -493,7 +496,10 @@ class TrainModelUnsupMixup:
             if self.use_cuda:
                 inputs, targets = inputs.cuda(), targets.cuda()
             inputs, targets = Variable(inputs, volatile=True), Variable(targets, volatile=True)
-            outputs = self.net(inputs)
+            if hasattr(self.net, 'dual'):
+                outputs = self.net(inputs)
+            else:
+                outputs, _, _ =self.net(inputs,None)
             loss = self.criterion(outputs, targets)
             # accumulate the confusion matrix:
             _, predicted = torch.max(outputs.data, 1)
@@ -669,9 +675,14 @@ class TrainModelUnsupMixup:
         :return list of performance estimators that observed performance on the last epoch run.
         """
         header_written = False
-        self.net=VGGDual(vgg_name="VGG16", input_shape=self.problem.example_size(), loss_estimator=LossEstimator())
+        self.net=VGGDual(vgg_name="VGG16", input_shape=self.problem.example_size(), loss_estimator=LossEstimator_L1,                         )
+        if self.use_cuda:
+            self.net.cuda()
         # TODO: determine if init_params work with dual:
-        init_params(self.net)
+        #init_params(self.net)
+        self.net.apply(init_params)
+        self.optimizer_training = torch.optim.SGD(self.net.parameters(), lr=self.args.lr, momentum=self.args.momentum,
+                                                  weight_decay=self.args.L2)
 
         lr_train_helper = LearningRateHelper(scheduler=self.scheduler_train, learning_rate_name="train_lr")
         previous_test_perfs = None
@@ -681,7 +692,7 @@ class TrainModelUnsupMixup:
         for epoch in range(self.start_epoch, self.start_epoch + self.args.num_epochs):
 
             perfs = PerformanceList()
-            perfs += self.train_with_fm_loss(epoch)
+            perfs += self.train_with_fm_loss(epoch, self.args.gamma)
 
             perfs += [lr_train_helper]
             if previous_test_perfs is None or self.epoch_is_test_epoch(epoch):

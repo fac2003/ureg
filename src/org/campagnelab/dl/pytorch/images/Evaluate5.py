@@ -110,6 +110,8 @@ if __name__ == '__main__':
                              'at the completion of cross-validation. ', default=None)
     parser.add_argument('--cv-fold-min-perf', default=0, type=float, help='Stop cross-validation early if a fold does not'
                                                                           ' meet this minimum performance level (test accuracy).')
+    parser.add_argument('--gamma', default=0.001, type=float,                        help='Factor that multiplies fm_loss.')
+
     parser.add_argument('--cross-validation-indices', type=str,
                         help='coma separated list of fold indices to evaluate. If the option '
                              'is not speficied, all folds are evaluated ', default=None)
@@ -162,7 +164,7 @@ if __name__ == '__main__':
             return model_trainer.training_supervised()
         if args.mode == "mixup":
             return model_trainer.training_mixup()
-        if args.mode == "lm_loss":
+        if args.mode == "fm_loss":
             return model_trainer.training_fm_loss()
         else:
             print("unknown mode specified: " + args.mode)

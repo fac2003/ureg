@@ -14,7 +14,7 @@ from org.campagnelab.dl.pytorch.images.FloatHelper import FloatHelper
 from org.campagnelab.dl.pytorch.images.LRHelper import LearningRateHelper
 from org.campagnelab.dl.pytorch.images.LossHelper import LossHelper
 from org.campagnelab.dl.pytorch.images.PerformanceList import PerformanceList
-from org.campagnelab.dl.pytorch.images.models.dual import LossEstimator_L1
+from org.campagnelab.dl.pytorch.images.models.dual import LossEstimator_L1, LossEstimator_L1_cpu
 from org.campagnelab.dl.pytorch.images.models.vgg_dual import VGGDual
 from org.campagnelab.dl.pytorch.images.utils import progress_bar, grad_norm, init_params
 from org.campagnelab.dl.pytorch.ureg.LRSchedules import construct_scheduler
@@ -357,7 +357,7 @@ class TrainModelUnsupMixup:
             supervised_grad_norm = grad_norm(self.net.parameters())
             performance_estimators.set_metric(batch_idx, "train_grad_norm", supervised_grad_norm)
             performance_estimators.set_metric(batch_idx, "optimized_loss", optimized_loss.data[0])
-            performance_estimators.set_metric(batch_idx, "fm_loss", fm_loss)
+            performance_estimators.set_metric(batch_idx, "fm_loss", fm_loss.data[0])
 
             performance_estimators.set_metric_with_outputs(batch_idx, "train_loss", supervised_loss.data[0],
                                                            outputs, targets)
@@ -675,7 +675,7 @@ class TrainModelUnsupMixup:
         :return list of performance estimators that observed performance on the last epoch run.
         """
         header_written = False
-        self.net=VGGDual(vgg_name="VGG16", input_shape=self.problem.example_size(), loss_estimator=LossEstimator_L1,                         )
+        self.net=VGGDual(vgg_name="VGG16", input_shape=self.problem.example_size(), loss_estimator=LossEstimator_L1)
         if self.use_cuda:
             self.net.cuda()
         # TODO: determine if init_params work with dual:

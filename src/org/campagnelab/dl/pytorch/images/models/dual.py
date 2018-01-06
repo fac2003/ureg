@@ -6,32 +6,34 @@ from torch.nn import Module
 
 
 def LossEstimator_L1_cpu(xs, xu):
-    # xs=xs.detach()
-    # xu=xu.detach()
+    xs=xs.detach()
+    xu=xu.detach()
     loss = 0
     bs = xs.size()[0]
-
+    is_cuda=xs.is_cuda
     abs = torch.abs(xs - xu)
     xs = xs.cpu()
     xu = xu.cpu()
     abs=abs.cpu()
     n = 0
-    for index_s in range(xs.size()[0]):
+    for index_s in range(bs):
         norm = abs[index_s].norm(p=1)
-        for index_u in range(xu.size()[0]):
-            if index_s <= index_u:
-
+        for index_u in range(bs):
+            if index_u>=index_s:
                 # squared_norm = norm * norm
                 # regularize so that the features are either similar or orthogonal:
                 dot_product = xs[index_s].dot(xu[index_u])
-                loss = loss + torch.min(norm, dot_product).data[0]
+                loss = loss + torch.min(norm, dot_product)
                 n += 1
-    return loss / n
+    value=loss / n
+    return value.cuda() if is_cuda else value
 
 def LossEstimator_L1( xs, xu):
-        #xs=xs.detach()
-        #xu=xu.detach()
-        loss=0
+        xs=xs.detach()
+        xu=xu.detach()
+        loss_variable = Variable(torch.zeros(1), requires_grad=True)
+        if xs.is_cuda:
+            loss_variable = loss_variable.cuda()
         bs=xs.size()[0]
         xs=xs.view(bs,-1)
         xu=xu.view(bs,-1)
@@ -39,7 +41,7 @@ def LossEstimator_L1( xs, xu):
         n=0
         for index_s in range(bs):
             # expand x1 by copying values  in a batch-size by batch-size matrix of length num features.
-            x1=xs[index_s].expand(size=(bs,1,-1))
+            x1 = xs[index_s].expand(bs, 1, -1)
             # regularize so that the features are either similar or orthogonal:
             dot_product = x1.bmm(xu.view(bs,-1,1))
             for index_u in range(bs):
@@ -50,9 +52,9 @@ def LossEstimator_L1( xs, xu):
                     dot_prod = dot_product.view(bs,-1)[index_u]
                     #if bs > 1:
                     #    print("is={} iu={} norm={} dot_prod={}".format(index_s, index_u, norm.data[0], dot_prod.data[0]))
-                    loss=loss+torch.min(norm, dot_prod).data[0]
+                    loss_variable = loss_variable + torch.min(norm, dot_prod)
                     n+=1
-            return loss/n
+        return loss_variable / n
 
 class Dual(Module):
     def __init__(self, loss_estimator=None, delegate_module=None):
@@ -118,3 +120,18 @@ class SequentialDual(Module):
                 loss_weight+=self.loss_estimator(xs,xu)
         return (xs,xu, loss_weight)
 
+
+if __name__ == '__main__':
+    l_cpu = LossEstimator_L1_cpu
+    l_gpu = LossEstimator_L1
+
+    x= Variable(torch.ones(4,10), requires_grad=True)
+    colinear_loss= l_cpu(x, x*2)
+    answer=10
+    assert colinear_loss.data[0]==answer, "colinear loss {} must match {}".format(colinear_loss.data[0],answer)
+    a = Variable(torch.rand(10, 100), requires_grad=True)
+    b = Variable(torch.rand(10, 100), requires_grad=True)
+
+    data_cpu = l_cpu(a, b).data[0]
+    data_gpu = l_gpu(a, b).data[0]
+    assert data_cpu == data_gpu, "loss must match when calculated on cpu {} or GPU {}: ".format(data_cpu,data_gpu)

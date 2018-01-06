@@ -4,26 +4,55 @@ import torch
 from torch.autograd import Variable
 from torch.nn import Module
 
+
+def LossEstimator_L1_cpu(xs, xu):
+    # xs=xs.detach()
+    # xu=xu.detach()
+    loss = 0
+    bs = xs.size()[0]
+
+    abs = torch.abs(xs - xu)
+    xs = xs.cpu()
+    xu = xu.cpu()
+    abs=abs.cpu()
+    n = 0
+    for index_s in range(xs.size()[0]):
+        norm = abs[index_s].norm(p=1)
+        for index_u in range(xu.size()[0]):
+            if index_s <= index_u:
+
+                # squared_norm = norm * norm
+                # regularize so that the features are either similar or orthogonal:
+                dot_product = xs[index_s].dot(xu[index_u])
+                loss = loss + torch.min(norm, dot_product).data[0]
+                n += 1
+    return loss / n
+
 def LossEstimator_L1( xs, xu):
         #xs=xs.detach()
         #xu=xu.detach()
         loss=0
         bs=xs.size()[0]
-        xs=xs.cpu()
-        xu=xu.cpu()
-        abs = torch.abs(xs - xu)
+        xs=xs.view(bs,-1)
+        xu=xu.view(bs,-1)
 
         n=0
-        for index_s in range(xs.size()[0]):
-            for index_u in range(xu.size()[0]):
-                if index_s<=index_u:
-                    norm =abs[index_s].norm(p=1)
-                    #squared_norm = norm * norm
-                    # regularize so that the features are either similar or orthogonal:
-                    dot_product = xs[index_s].dot(xu[index_u])
-                    loss=loss+torch.min(norm, dot_product).data[0]
+        for index_s in range(bs):
+            # expand x1 by copying values  in a batch-size by batch-size matrix of length num features.
+            x1=xs[index_s].expand(size=(bs,1,-1))
+            # regularize so that the features are either similar or orthogonal:
+            dot_product = x1.bmm(xu.view(bs,-1,1))
+            for index_u in range(bs):
+                if index_u>=index_s:
+                    norm = (xs[index_s]-xu[index_u]).norm(p=1)
+                    #if bs>1:
+                    #    print("STOP")
+                    dot_prod = dot_product.view(bs,-1)[index_u]
+                    #if bs > 1:
+                    #    print("is={} iu={} norm={} dot_prod={}".format(index_s, index_u, norm.data[0], dot_prod.data[0]))
+                    loss=loss+torch.min(norm, dot_prod).data[0]
                     n+=1
-        return loss/n
+            return loss/n
 
 class Dual(Module):
     def __init__(self, loss_estimator=None, delegate_module=None):

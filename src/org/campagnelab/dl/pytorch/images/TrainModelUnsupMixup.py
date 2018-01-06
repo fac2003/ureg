@@ -325,7 +325,7 @@ class TrainModelUnsupMixup:
         unsupervised_loss_acc = 0
         num_batches = 0
         train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
-        sec_train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
+        #sec_train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
         unsuploader_shuffled = self.problem.reg_loader_subset_range(0, self.args.num_shaving)
         unsupiter = itertools.cycle(unsuploader_shuffled)
 

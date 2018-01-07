@@ -77,7 +77,7 @@ if __name__ == '__main__':
                         help='The model to instantiate. One of VGG16,	ResNet18, ResNet50, ResNet101,ResNeXt29, ResNeXt29, DenseNet121, PreActResNet18, DPN92')
     parser.add_argument('--problem', default="CIFAR10", type=str,
                         help='The problem, either CIFAR10 or STL10')
-    parser.add_argument('--mode', help='Training mode: supervised or mixup',
+    parser.add_argument('--mode', help='Training mode: supervised, mixup or fm_loss',
                         default="supervised")
     parser.add_argument("--reset-lr-every-n-epochs", type=int, help='Reset learning rate to initial value every n epochs.')
     parser.add_argument('--label-strategy',

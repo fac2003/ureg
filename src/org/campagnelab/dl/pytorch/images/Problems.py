@@ -2,10 +2,17 @@ from org.campagnelab.dl.pytorch.images.models \
     import VGG, ResNet18, PreActResNet18, GoogLeNet, DPN92, MobileNet, \
     ResNeXt29_2x64d, ShuffleNetG2, SENet18, DenseNet121, PreActResNet34, PreActResNet50, PreActResNet152, \
     PreActResNet101
+from org.campagnelab.dl.pytorch.images.models.dual import LossEstimator_sim
+from org.campagnelab.dl.pytorch.images.models.preact_resnet_dual import PreActResNet18Dual
+from org.campagnelab.dl.pytorch.images.models.vgg_dual import VGGDual
+from org.campagnelab.dl.pytorch.images.utils import init_params
 
 
 def vgg16(problem):
     return VGG('VGG16', problem.example_size())
+
+def vgg16dual(problem):
+    return VGGDual('VGG16', problem.example_size(),loss_estimator=LossEstimator_sim)
 
 
 def vgg19(problem):
@@ -18,6 +25,9 @@ def resnet18(problem):
 
 def preactresnet18(problem):
     return PreActResNet18(problem.example_size())
+
+def preactresnet18dual(problem):
+    return PreActResNet18Dual(problem.example_size(),loss_estimator=LossEstimator_sim)
 
 
 def preactresnet34(problem):
@@ -62,9 +72,11 @@ def senet18(problem):
 
 models = {
     "VGG16": vgg16,
+    "VGG16Dual": vgg16dual,
     "VGG19": vgg19,
     "ResNet18": resnet18,
     "PreActResNet18": preactresnet18,
+    "PreActResNet18Dual": preactresnet18dual,
     "PreActResNet34": preactresnet34,
     "PreActResNet50": preactresnet50,
     "PreActResNet101": preactresnet101,
@@ -79,11 +91,13 @@ models = {
 }
 
 
-def create_model(modelName,problem):
+def create_model(modelName, problem, dual=False):
+    modelName += ("Dual" if dual else "")
     function = models[modelName]
     if function is None:
         print("Wrong model name: " + modelName)
         exit(1)
     # construct the model specified on the command line:
     net = function(problem)
+    net.apply(init_params)
     return net

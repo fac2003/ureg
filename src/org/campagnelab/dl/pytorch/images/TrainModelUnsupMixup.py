@@ -146,7 +146,7 @@ class TrainModelUnsupMixup:
         if not model_built:
             print('==> Building model {}'.format(args.model))
 
-            self.net = create_model_function(args.model, self.problem)
+            self.net = create_model_function(args.model, self.problem, dual=self.args.mode=="fm_loss")
 
         if self.use_cuda:
             self.net.cuda()
@@ -678,16 +678,10 @@ class TrainModelUnsupMixup:
         """
         header_written = False
         loss_estimator=LossEstimator_sim
-        if not self.args.resume:
-            self.net=PreActResNet18Dual( input_shape=self.problem.example_size(), loss_estimator=loss_estimator)
-            if self.use_cuda:
-                self.net.cuda()
-            self.net.apply(init_params)
-        else:
-            # replace the loss function:
-            def set_loss(x):
-                if  hasattr(x, 'loss_estimator'): x.loss_estimator = loss_estimator
-            self.net.apply(set_loss)
+        # replace the loss function of the dual model:
+        def set_loss(x):
+            if  hasattr(x, 'loss_estimator'): x.loss_estimator = loss_estimator
+        self.net.apply(set_loss)
 
         self.optimizer_training = torch.optim.SGD(self.net.parameters(), lr=self.args.lr, momentum=self.args.momentum,
                                                   weight_decay=self.args.L2)

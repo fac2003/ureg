@@ -14,7 +14,8 @@ from org.campagnelab.dl.pytorch.images.FloatHelper import FloatHelper
 from org.campagnelab.dl.pytorch.images.LRHelper import LearningRateHelper
 from org.campagnelab.dl.pytorch.images.LossHelper import LossHelper
 from org.campagnelab.dl.pytorch.images.PerformanceList import PerformanceList
-from org.campagnelab.dl.pytorch.images.models.dual import LossEstimator_L1, LossEstimator_L1_cpu
+from org.campagnelab.dl.pytorch.images.models.dual import LossEstimator_L1, LossEstimator_L1_cpu, \
+    LossEstimator_orthogonal, LossEstimator_sim_orthogonal, LossEstimator_sim
 from org.campagnelab.dl.pytorch.images.models.vgg_dual import VGGDual
 from org.campagnelab.dl.pytorch.images.utils import progress_bar, grad_norm, init_params
 from org.campagnelab.dl.pytorch.ureg.LRSchedules import construct_scheduler
@@ -368,7 +369,7 @@ class TrainModelUnsupMixup:
 
             progress_bar(batch_idx * self.mini_batch_size,
                          min(self.max_regularization_examples, self.max_training_examples),
-                         performance_estimators.progress_message(["optimized_loss","train_accuracy"]))
+                         performance_estimators.progress_message(["optimized_loss","train_loss","train_accuracy"]))
 
             if (batch_idx + 1) * self.mini_batch_size > self.max_training_examples:
                 break
@@ -675,13 +676,18 @@ class TrainModelUnsupMixup:
         :return list of performance estimators that observed performance on the last epoch run.
         """
         header_written = False
+        loss_estimator=LossEstimator_sim_orthogonal
         if not self.args.resume:
-            self.net=VGGDual(vgg_name="VGG16", input_shape=self.problem.example_size(), loss_estimator=LossEstimator_L1)
+            self.net=VGGDual(vgg_name="VGG16", input_shape=self.problem.example_size(), loss_estimator=loss_estimator)
             if self.use_cuda:
                 self.net.cuda()
-        # TODO: determine if init_params work with dual:
-        #init_params(self.net)
             self.net.apply(init_params)
+        else:
+            # replace the loss function:
+            def set_loss(x):
+                if  hasattr(x, 'loss_estimator'): x.loss_estimator = loss_estimator
+            self.net.apply(set_loss)
+
         self.optimizer_training = torch.optim.SGD(self.net.parameters(), lr=self.args.lr, momentum=self.args.momentum,
                                                   weight_decay=self.args.L2)
 

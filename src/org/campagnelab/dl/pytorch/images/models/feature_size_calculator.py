@@ -36,3 +36,14 @@ class EstimateFeatureSize(Module):
 
         n_size = output.data.view(bs, -1).size(1)
         return n_size
+
+    def estimate_output_size_with_dual_function(self, input_shape, forward_features_function):
+        """Calculate the convolution output size using a forward function of a dual model
+        (e.g.,  pre-classifier to figure out the number of features that go into the classifier). """
+        bs = 1
+        input = Variable(torch.rand(bs, *input_shape))
+
+        outputs, outputu, loss = forward_features_function(input, input)
+
+        n_size = outputs.data.view(bs, -1).size(1)
+        return n_size

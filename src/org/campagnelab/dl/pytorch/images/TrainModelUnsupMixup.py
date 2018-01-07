@@ -16,6 +16,7 @@ from org.campagnelab.dl.pytorch.images.LossHelper import LossHelper
 from org.campagnelab.dl.pytorch.images.PerformanceList import PerformanceList
 from org.campagnelab.dl.pytorch.images.models.dual import LossEstimator_L1, LossEstimator_L1_cpu, \
     LossEstimator_orthogonal, LossEstimator_sim_orthogonal, LossEstimator_sim
+from org.campagnelab.dl.pytorch.images.models.preact_resnet_dual import PreActResNet18Dual
 from org.campagnelab.dl.pytorch.images.models.vgg_dual import VGGDual
 from org.campagnelab.dl.pytorch.images.utils import progress_bar, grad_norm, init_params
 from org.campagnelab.dl.pytorch.ureg.LRSchedules import construct_scheduler
@@ -497,7 +498,7 @@ class TrainModelUnsupMixup:
             if self.use_cuda:
                 inputs, targets = inputs.cuda(), targets.cuda()
             inputs, targets = Variable(inputs, volatile=True), Variable(targets, volatile=True)
-            if hasattr(self.net, 'dual'):
+            if not hasattr(self.net, 'is_dual'):
                 outputs = self.net(inputs)
             else:
                 outputs, _, _ =self.net(inputs,None)
@@ -676,9 +677,9 @@ class TrainModelUnsupMixup:
         :return list of performance estimators that observed performance on the last epoch run.
         """
         header_written = False
-        loss_estimator=LossEstimator_sim_orthogonal
+        loss_estimator=LossEstimator_sim
         if not self.args.resume:
-            self.net=VGGDual(vgg_name="VGG16", input_shape=self.problem.example_size(), loss_estimator=loss_estimator)
+            self.net=PreActResNet18Dual( input_shape=self.problem.example_size(), loss_estimator=loss_estimator)
             if self.use_cuda:
                 self.net.cuda()
             self.net.apply(init_params)

@@ -37,14 +37,15 @@ class PreActBlockDual(nn.Module):
 
     def forward(self, xs, xu):
         outs = F.relu(self.bn1(xs))
-        outu = F.relu(self.bn1(xu))
+        outu = F.relu(self.bn1(xu)) if xu is not None else None
         (shortcuts, shortcutu, agreement_loss_shortcut) = self.shortcut(outs, outu) if hasattr(self,
-                                                                                             'shortcut') else (0.0, 0.0, 0.0)
+                                                                                             'shortcut') \
+            else (0.0, 0.0, 0.0)
         outs, outu, agreement_loss1 = self.conv1(outs, outu)
-        outs, outu, agreement_loss2 = self.conv2(F.relu(self.bn2(outs)), F.relu(self.bn2(outu)))
+        outs, outu, agreement_loss2 = self.conv2(F.relu(self.bn2(outs)), F.relu(self.bn2(outu)) if outu is not None else None)
 
         outs += shortcuts
-        outu += shortcutu
+        if xu is not None: outu += shortcutu
         return outs, outu, agreement_loss1 + agreement_loss2 + agreement_loss_shortcut
 
 
@@ -75,11 +76,11 @@ class PreActBottleneckDual(nn.Module):
 
     def forward(self, xs, xu):
         outs = F.relu(self.bn1(xs))
-        outu = F.relu(self.bn1(xu))
+        if xu is not None: outu = F.relu(self.bn1(xu))
         shortcuts, shortcutu, loss_shortcut = self.shortcut(outs, outu) if hasattr(self, 'shortcut') else 0
         outs, outu, loss_conv1 = self.conv1(outs, outu)
-        outs, outu, loss_conv2 = self.conv2(F.relu(self.bn2(outs), F.relu(self.bn2(outu))))
-        outs, outu, loss_conv3 = self.conv3(F.relu(self.bn3(outs)), F.relu(self.bn3(outu)))
+        outs, outu, loss_conv2 = self.conv2(F.relu(self.bn2(outs), F.relu(self.bn2(outu)) if outu is not None else None))
+        outs, outu, loss_conv3 = self.conv3(F.relu(self.bn3(outs), F.relu(self.bn3(outu)) if outu is not None else None))
         outs += shortcuts
         outu += shortcutu
         return outs, outu, loss_shortcut + loss_conv1 + loss_conv2 + loss_conv3
@@ -124,9 +125,9 @@ class PreActResNetDual(EstimateFeatureSize):
         outs, outu, loss_layer3 = self.layer3(outs, outu)
         outs, outu, loss_layer4 = self.layer4(outs, outu)
         outs = F.avg_pool2d(outs, 4)
-        outu = F.avg_pool2d(outu, 4)
+        if outu is not None: outu = F.avg_pool2d(outu, 4)
         outs = outs.view(outs.size(0), -1)
-        outu = outu.view(outu.size(0), -1)
+        if outu is not None: outu = outu.view(outu.size(0), -1)
         outs, outu, loss_linear = self.linear(outs, outu)
         return outs, outu, loss_conv1 + loss_layer1 + loss_layer2 + loss_layer3 + loss_layer4 + loss_linear
 
@@ -172,4 +173,4 @@ def test():
     print(ys.size())
 
 
-test()
+#test()

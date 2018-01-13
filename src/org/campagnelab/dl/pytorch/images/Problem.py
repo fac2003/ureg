@@ -90,7 +90,13 @@ class Problem:
         return 0;
 
     def one_hot(self, class_indices):
+        cuda=class_indices.is_cuda
+        if cuda: class_indices=class_indices.cpu()
         y_onehot = class_indices.numpy()
         y_onehot = (numpy.arange(self.num_classes()) == y_onehot[:, None]).astype(numpy.float32)
-        return torch.from_numpy(y_onehot)
+        result= torch.from_numpy(y_onehot)
+        if cuda:
+            return result.cuda()
+        else:
+            return result
 

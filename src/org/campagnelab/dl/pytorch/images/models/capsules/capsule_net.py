@@ -79,7 +79,7 @@ class CapsNet3(EstimateFeatureSize):
 
         # Reconstruction network
         if use_reconstruction_loss:
-            self.decoder = Decoder(num_classes, output_unit_size, cuda_enabled)
+            self.decoder = Decoder(num_classes, output_unit_size, cuda_enabled, example_size=example_size)
 
     def forward(self, x):
         """

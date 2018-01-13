@@ -13,6 +13,8 @@ import torch.nn.functional as F
 
 import utils
 
+from org.campagnelab.dl.pytorch.images.models.capsules import caps_utils
+
 
 class Decoder(nn.Module):
     """
@@ -27,20 +29,22 @@ class Decoder(nn.Module):
     This Decoder network is used in training and prediction (testing).
     """
 
-    def __init__(self, num_classes, output_unit_size, cuda_enabled):
+    def __init__(self, num_classes, output_unit_size, cuda_enabled,
+                 example_size=(1,28,28)):
         """
         The decoder network consists of 3 fully connected layers, with
         512, 1024, 784 neurons each.
         """
         super(Decoder, self).__init__()
-
+        self.example_size=example_size
+        self.num_outputs=example_size[1]*example_size[0]*example_size[2]
         self.cuda_enabled = cuda_enabled
 
         fc1_output_size = 512
         fc2_output_size = 1024
         self.fc1 = nn.Linear(num_classes * output_unit_size, fc1_output_size) # input dim 10 * 16.
         self.fc2 = nn.Linear(fc1_output_size, fc2_output_size)
-        self.fc3 = nn.Linear(fc2_output_size, 784)
+        self.fc3 = nn.Linear(fc2_output_size, self.num_outputs)
         # Activation functions
         self.relu = nn.ReLU(inplace=True)
         self.sigmoid = nn.Sigmoid()
@@ -66,7 +70,7 @@ class Decoder(nn.Module):
         # Method 1: mask with y.
         # Note: we have not implement method 2 which is masking with true label.
         # masked_caps shape: [batch_size, 10, 16, 1]
-        masked_caps = utils.mask(x, self.cuda_enabled)
+        masked_caps = caps_utils.mask(x, self.cuda_enabled)
 
         """
         Second, reconstruct the images with 3 Fully Connected layers.
@@ -78,7 +82,6 @@ class Decoder(nn.Module):
         fc1_out = self.relu(self.fc1(vector_j))
         fc2_out = self.relu(self.fc2(fc1_out)) # shape: [batch_size, 1024]
         reconstruction = self.sigmoid(self.fc3(fc2_out)) # shape: [batch_size, 784]
-
-        assert reconstruction.size() == torch.Size([batch_size, 784])
+        assert reconstruction.size() == torch.Size([batch_size, self.num_outputs])
 
         return reconstruction

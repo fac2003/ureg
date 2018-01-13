@@ -16,7 +16,7 @@ def capsnet3(problem):
     return CapsNet3(example_size=problem.example_size(), num_conv_in_channel=3, num_conv_out_channel=256,
                     num_primary_unit=8,
                     num_classes=problem.num_classes(), output_unit_size=16, num_routing=3,
-                    use_reconstruction_loss=False, cuda_enabled=torch.cuda.is_available())
+                    use_reconstruction_loss=True, cuda_enabled=torch.cuda.is_available())
 
 
 def vgg16(problem):

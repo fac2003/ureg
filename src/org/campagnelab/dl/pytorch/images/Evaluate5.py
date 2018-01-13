@@ -166,6 +166,8 @@ if __name__ == '__main__':
             return model_trainer.training_mixup()
         if args.mode == "fm_loss":
             return model_trainer.training_fm_loss()
+        if args.mode == "capsules":
+            return model_trainer.training_supervised()
         else:
             print("unknown mode specified: " + args.mode)
             exit(1)

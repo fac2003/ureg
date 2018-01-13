@@ -11,6 +11,7 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 
+from org.campagnelab.dl.pytorch.images.models.capsules import caps_utils
 from org.campagnelab.dl.pytorch.images.models.capsules.caps_utils import squash
 
 
@@ -104,7 +105,7 @@ class CapsuleLayer(nn.Module):
 
             # Calculate routing or also known as coupling coefficients (c_ij).
             # c_ij shape: [1, 1152, 10, 1]
-            c_ij = utils.softmax(b_ij, dim=2)  # Convert routing logits (b_ij) to softmax.
+            c_ij = caps_utils.softmax(b_ij, dim=2)  # Convert routing logits (b_ij) to softmax.
             # c_ij shape from: [128, 1152, 10, 1] to: [128, 1152, 10, 1, 1]
             c_ij = torch.cat([c_ij] * batch_size, dim=0).unsqueeze(4)
 
@@ -121,7 +122,7 @@ class CapsuleLayer(nn.Module):
             #             num_classes, output_unit_size from u_hat, 1]
             # == [128, 1, 10, 16, 1]
             # So, the length of the output vector of a capsule is 16, which is in dim 3.
-            v_j = utils.squash(s_j, dim=3)
+            v_j = caps_utils.squash(s_j, dim=3)
 
             # in_channel is 1152.
             # v_j1 shape: [128, 1152, 10, 16, 1]

@@ -24,10 +24,11 @@ class CapsNet3(EstimateFeatureSize):
 
     def __init__(self, example_size, num_conv_in_channel,
                  num_conv_out_channel,
-                 num_primary_unit,
+
                  num_classes,
                  output_unit_size,
                  num_routing=3,
+                 num_primary_unit=8,
                  use_reconstruction_loss=False,
                  regularization_scale=0.0005,
                  cuda_enabled=False,):
@@ -37,33 +38,34 @@ class CapsNet3(EstimateFeatureSize):
         """
         super(CapsNet3, self).__init__()
 
-        primary_unit_size=example_size[1] * 6 * 6
+        num_conv_in_channel=example_size[0]
         self.cuda_enabled = cuda_enabled
 
         # Configurations used for image reconstruction.
         self.use_reconstruction_loss = use_reconstruction_loss
         self.image_width = example_size[1] #  image width
         self.image_height = example_size[2] #image height
-        self.image_channel = num_conv_in_channel # number of channels in image
+        self.image_channel =  example_size[0] # number of channels in image
 
         # Also known as lambda reconstruction. Default value is 0.0005.
         # We use sum of squared errors (SSE) similar to paper.
         self.regularization_scale = regularization_scale
-
+        kernel_size=9
         # Layer 1: Conventional Conv2d layer.
         self.conv1 = ConvLayer(in_channel=num_conv_in_channel,
                                out_channel=num_conv_out_channel,
-                               kernel_size=9)
-        num_primary_unit=self.estimate_output_size(example_size,self.forward_features)
+                               kernel_size=kernel_size)
         # PrimaryCaps
         # Layer 2: Conv2D layer with `squash` activation.
         self.primary = CapsuleLayer(in_unit=0,
                                     in_channel=num_conv_out_channel,
                                     num_unit=num_primary_unit,
-                                    unit_size=primary_unit_size, # capsule outputs
+                                    unit_size=0, # unit_size only needed when constructing input routed capsules
                                     use_routing=False,
                                     num_routing=num_routing,
                                     cuda_enabled=cuda_enabled)
+        primary_unit_size = self.estimate_output_size(example_size, self.forward_primary)
+
 
         # DigitCaps
         # Final layer: Capsule layer where the routing algorithm is.
@@ -94,15 +96,25 @@ class CapsNet3(EstimateFeatureSize):
         out_digit_caps = self.digits(out_primary_caps)
         return out_digit_caps
 
-    def forward_features(self, x):
+    def forward_conv1(self, x):
         """
         Defines the computation performed at every forward pass.
         """
         # x shape: [128, 1, 28, 28]. 128 is for the batch size.
         # out_conv1 shape: [128, 256, 20, 20]
         out_conv1 = self.conv1(x)
-
+        out_conv1= out_conv1.view(out_conv1.size()[0],-1)
         return out_conv1
+
+    def forward_primary(self, x):
+        """
+        Defines the computation performed at every forward pass.
+        """
+        # x shape: [128, 1, 28, 28]. 128 is for the batch size.
+        # out_conv1 shape: [128, 256, 20, 20]
+        out_conv1 = self.conv1(x)
+        out_primary_caps = self.primary(out_conv1)
+        return out_primary_caps[0,0]
 
     def loss(self, image, out_digit_caps, target, size_average=True):
         """Custom loss function

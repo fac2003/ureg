@@ -199,7 +199,7 @@ class TrainModelUnsupMixup:
             outputs = self.net(inputs)
 
 
-            if train_supervised_model:
+            if train_supervised_model and self.args.mode=="supervised":
                 # if self.ureg._which_one_model is not None:
                 #    self.ureg.estimate_example_weights(inputs)
 
@@ -215,6 +215,11 @@ class TrainModelUnsupMixup:
                                                                outputs, targets)
                 performance_estimators.set_metric_with_outputs(batch_idx, "train_loss", supervised_loss.data[0],
                                                                outputs, targets)
+            elif self.args.mode=="capsules":
+                one_hot_targets= Variable(self.problem.one_hot(targets.data),requires_grad=False)
+                (optimized_loss, capsule_loss, reconstruction_loss) = self.net.loss(inputs, outputs, one_hot_targets)
+                optimized_loss.backward()
+                self.optimizer_training.step()
 
             progress_bar(batch_idx * self.mini_batch_size,
                          min(self.max_regularization_examples, self.max_training_examples),
@@ -502,7 +507,16 @@ class TrainModelUnsupMixup:
                 outputs = self.net(inputs)
             else:
                 outputs, _, _ =self.net(inputs,None)
-            loss = self.criterion(outputs, targets)
+            if self.args.mode=="capsules":
+                one_hot_targets=Variable(self.problem.one_hot(targets.data),volatile=True)
+                loss, capsule_loss, _ =self.net.loss(inputs, outputs, one_hot_targets)
+                # ||vc|| also known as norm:
+                v_c = torch.sqrt((outputs**2).sum(dim=2, keepdim=True))
+                outputs=v_c.view(v_c.size()[0],-1)
+                # recover index of predicted class:
+                #_, outputs =torch.max(v_c.view(10,-1),dim=0)
+            else:
+                loss = self.criterion(outputs, targets)
             # accumulate the confusion matrix:
             _, predicted = torch.max(outputs.data, 1)
 
@@ -748,4 +762,5 @@ class TrainModelUnsupMixup:
                 return perfs
 
         return perfs
+
 

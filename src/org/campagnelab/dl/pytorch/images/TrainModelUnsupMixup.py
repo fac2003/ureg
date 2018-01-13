@@ -209,8 +209,6 @@ class TrainModelUnsupMixup:
                 self.optimizer_training.step()
                 supervised_grad_norm = grad_norm(self.net.parameters())
                 performance_estimators.set_metric(batch_idx, "train_grad_norm", supervised_grad_norm)
-                performance_estimators.set_metric_with_outputs(batch_idx, "optimized_loss", optimized_loss.data[0],
-                                                               outputs, targets)
                 performance_estimators.set_metric_with_outputs(batch_idx, "train_accuracy", supervised_loss.data[0],
                                                                outputs, targets)
                 performance_estimators.set_metric_with_outputs(batch_idx, "train_loss", supervised_loss.data[0],
@@ -220,6 +218,10 @@ class TrainModelUnsupMixup:
                 (optimized_loss, capsule_loss, reconstruction_loss) = self.net.loss(inputs, outputs, one_hot_targets)
                 optimized_loss.backward()
                 self.optimizer_training.step()
+
+            performance_estimators.set_metric_with_outputs(batch_idx, "optimized_loss", optimized_loss.data[0],
+                                                           outputs, targets)
+
 
             progress_bar(batch_idx * self.mini_batch_size,
                          min(self.max_regularization_examples, self.max_training_examples),

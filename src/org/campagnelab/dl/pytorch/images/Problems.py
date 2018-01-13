@@ -1,18 +1,30 @@
 from org.campagnelab.dl.pytorch.images.models \
     import VGG, ResNet18, PreActResNet18, GoogLeNet, DPN92, MobileNet, \
     ResNeXt29_2x64d, ShuffleNetG2, SENet18, DenseNet121, PreActResNet34, PreActResNet50, PreActResNet152, \
-    PreActResNet101
+    PreActResNet101, torch
+from org.campagnelab.dl.pytorch.images.models.capsules.capsule_net import CapsNet3
 from org.campagnelab.dl.pytorch.images.models.dual import LossEstimator_sim
 from org.campagnelab.dl.pytorch.images.models.preact_resnet_dual import PreActResNet18Dual
 from org.campagnelab.dl.pytorch.images.models.vgg_dual import VGGDual
 from org.campagnelab.dl.pytorch.images.utils import init_params
 
 
+def capsnet3(problem):
+    #parser.add_argument('--primary-unit-size', type=int,
+    #                    default=1152, help='primary unit size is 32 * 6 * 6. default=1152')
+
+    return CapsNet3(example_size=problem.example_size(), num_conv_in_channel=3, num_conv_out_channel=256,
+                    num_primary_unit=8,
+                    num_classes=problem.num_classes(), output_unit_size=16, num_routing=3,
+                    use_reconstruction_loss=False, cuda_enabled=torch.cuda.is_available())
+
+
 def vgg16(problem):
     return VGG('VGG16', problem.example_size())
 
+
 def vgg16dual(problem):
-    return VGGDual('VGG16', problem.example_size(),loss_estimator=LossEstimator_sim)
+    return VGGDual('VGG16', problem.example_size(), loss_estimator=LossEstimator_sim)
 
 
 def vgg19(problem):
@@ -26,18 +38,22 @@ def resnet18(problem):
 def preactresnet18(problem):
     return PreActResNet18(problem.example_size())
 
+
 def preactresnet18dual(problem):
-    return PreActResNet18Dual(problem.example_size(),loss_estimator=LossEstimator_sim)
+    return PreActResNet18Dual(problem.example_size(), loss_estimator=LossEstimator_sim)
 
 
 def preactresnet34(problem):
     return PreActResNet34(problem.example_size())
 
+
 def preactresnet50(problem):
     return PreActResNet50(problem.example_size())
 
+
 def preactresnet101(problem):
     return PreActResNet101(problem.example_size())
+
 
 def preactresnet152(problem):
     return PreActResNet152(problem.example_size())
@@ -62,9 +78,11 @@ def mobilenet(problem):
 def dpn92(problem):
     return DPN92(problem.example_size())
 
+
 # not converted to STL10, only works with CIFAR10:
 def shufflenetg2():
     return ShuffleNetG2()
+
 
 def senet18(problem):
     return SENet18(problem.example_size())
@@ -87,7 +105,8 @@ models = {
     "MobileNet": mobilenet,
     "DPN92": dpn92,
     "ShuffleNetG2": shufflenetg2,
-    "SENet18": senet18
+    "SENet18": senet18,
+    "CapsNet3": capsnet3
 }
 
 

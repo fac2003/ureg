@@ -725,8 +725,6 @@ class TrainModelUnsupMixup:
         lr_train_helper = LearningRateHelper(scheduler=self.scheduler_train, learning_rate_name="train_lr")
         previous_test_perfs = None
         perfs = PerformanceList()
-        if not self.args.resume:
-            self.net.remake_classifier(self.problem.num_classes(), self.use_cuda, 0)
 
         for epoch in range(self.start_epoch, self.start_epoch + self.args.num_epochs):
 

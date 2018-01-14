@@ -42,9 +42,13 @@ class Decoder(nn.Module):
 
         fc1_output_size = 512
         fc2_output_size = 1024
+        fc3_output_size = 4096
+        fc4_output_size = 4096*3
         self.fc1 = nn.Linear(num_classes * output_unit_size, fc1_output_size) # input dim 10 * 16.
         self.fc2 = nn.Linear(fc1_output_size, fc2_output_size)
-        self.fc3 = nn.Linear(fc2_output_size, self.num_outputs)
+        self.fc3 = nn.Linear(fc2_output_size, fc3_output_size)
+        self.fc4 = nn.Linear(fc3_output_size, fc4_output_size)
+        self.fc5 = nn.Linear(fc4_output_size, self.num_outputs)
         # Activation functions
         self.relu = nn.ReLU(inplace=True)
         #self.sigmoid = nn.Sigmoid()
@@ -84,8 +88,10 @@ class Decoder(nn.Module):
 
         # Forward pass of the network
         fc1_out = self.relu(self.fc1(vector_j))
-        fc2_out = self.relu(self.fc2(fc1_out)) # shape: [batch_size, 1024]
-        reconstruction = self.fc3(fc2_out) # shape: [batch_size, 784]
+        out = self.relu(self.fc2(fc1_out)) # shape: [batch_size, 1024]
+        out = self.relu(self.fc3(out)) # shape: [batch_size, 1024]
+        out = self.relu(self.fc4(out)) # shape: [batch_size, 1024]
+        reconstruction = self.fc5(out) # shape: [batch_size, 784]
         #reconstruction = self.sigmoid(self.fc3(fc2_out)) # shape: [batch_size, 784]
         assert reconstruction.size() == torch.Size([batch_size, self.num_outputs])
 

@@ -13,7 +13,7 @@ from torch.autograd import Variable
 
 from org.campagnelab.dl.pytorch.images.models.capsules import caps_utils
 from org.campagnelab.dl.pytorch.images.models.capsules.caps_utils import squash
-
+import torch.nn.functional as F
 
 class CapsuleLayer(nn.Module):
     """
@@ -105,7 +105,7 @@ class CapsuleLayer(nn.Module):
 
             # Calculate routing or also known as coupling coefficients (c_ij).
             # c_ij shape: [1, 1152, 10, 1]
-            c_ij = caps_utils.softmax(b_ij, dim=2)  # Convert routing logits (b_ij) to softmax.
+            c_ij = F.softmax(b_ij, dim=2)  # Convert routing logits (b_ij) to softmax.
             # c_ij shape from: [128, 1152, 10, 1] to: [128, 1152, 10, 1, 1]
             c_ij = torch.cat([c_ij] * batch_size, dim=0).unsqueeze(4)
 

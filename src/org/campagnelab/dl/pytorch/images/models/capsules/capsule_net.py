@@ -11,6 +11,7 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 
+from org.campagnelab.dl.pytorch.images.GradCam import GradCam, GradCamCapsule
 from org.campagnelab.dl.pytorch.images.models import EstimateFeatureSize
 from org.campagnelab.dl.pytorch.images.models.capsules.capsule_layer import CapsuleLayer
 from org.campagnelab.dl.pytorch.images.models.capsules.conv_layer import ConvLayer
@@ -37,7 +38,7 @@ class CapsNet3(EstimateFeatureSize):
         and assign them as member variables.
         """
         super(CapsNet3, self).__init__()
-
+        self.example_size=example_size
         num_conv_in_channel=example_size[0]
         self.cuda_enabled = cuda_enabled
 
@@ -65,12 +66,14 @@ class CapsNet3(EstimateFeatureSize):
                                     num_routing=num_routing,
                                     cuda_enabled=cuda_enabled)
         primary_unit_size = self.estimate_output_size(example_size, self.forward_primary)
-        print("capsule primary unit size: {}".format(primary_unit_size))
+        linear_out_size=64
+        self.linear=nn.Linear(primary_unit_size, linear_out_size)
+        print("capsule primary unit size: {}, reduced to {}".format(primary_unit_size,linear_out_size))
 
         # DigitCaps
         # Final layer: Capsule layer where the routing algorithm is.
         self.digits = CapsuleLayer(in_unit=num_primary_unit,
-                                   in_channel=primary_unit_size,
+                                   in_channel=linear_out_size,
                                    num_unit=num_classes,
                                    unit_size=output_unit_size, # 16D capsule per digit class
                                    use_routing=True,
@@ -80,6 +83,7 @@ class CapsNet3(EstimateFeatureSize):
         # Reconstruction network
         if use_reconstruction_loss:
             self.decoder = Decoder(num_classes, output_unit_size, cuda_enabled, example_size=example_size)
+        self.grad_cam=GradCamCapsule(model=self, example_size=self.example_size, use_cuda=self.cuda_enabled)
 
     def forward(self, x):
         """
@@ -91,6 +95,7 @@ class CapsNet3(EstimateFeatureSize):
         # out_primary_caps shape: [128, 8, 1152].
         # Total PrimaryCapsules has [32 × 6 × 6 = 1152] capsule outputs.
         out_primary_caps = self.primary(out_conv1)
+        out_primary_caps=self.linear(out_primary_caps)
         # out_digit_caps shape: [128, 10, 16, 1]
         # batch size: 128, 10 digit class, 16D capsule per digit class.
         out_digit_caps = self.digits(out_primary_caps)
@@ -153,6 +158,37 @@ class CapsNet3(EstimateFeatureSize):
 
         return total_loss, m_loss, (recon_loss * self.regularization_scale)
 
+    def focused_reconstruction_loss(self, image, gradients, out_digit_caps, target, size_average=True):
+        """Evaluate the reconstruction loss for the parts of the image that contribute to predicting targets
+
+        Args:
+            image: [batch_size, 1, 28, 28] MNIST samples.
+            gradients: gradient of the margin loss with respect to targets.
+            out_digit_caps: [batch_size, 10, 16, 1] The output from `DigitCaps` layer.
+            target: [batch_size, 10] One-hot MNIST dataset labels.
+            size_average: A boolean to enable mean loss (average loss over batch size).
+
+        Returns:
+            total_loss: A scalar Variable of total loss.
+            m_loss: A scalar of margin loss.
+            recon_loss: A scalar of reconstruction loss.
+        """
+        recon_loss=0
+        if self.training:
+            # identify the parts of the images that were informative with respect to the targets:
+            mask=self.grad_cam(image, out_digit_caps, target, gradients)
+            mask=Variable(mask, requires_grad=True)
+            # Reconstruct the image from the Decoder network
+            reconstruction = self.decoder(out_digit_caps, target)
+            # reconstruct the masked images:
+            recon_loss = self.reconstruction_loss(reconstruction, torch.dot(image,mask.expand_as(image)))
+
+            # Mean squared error
+            if size_average:
+                recon_loss = recon_loss.mean()
+
+        return recon_loss * self.regularization_scale
+
     def margin_loss(self, input, target):
         """
         Class loss
@@ -172,7 +208,7 @@ class CapsNet3(EstimateFeatureSize):
         v_c = torch.sqrt((input**2).sum(dim=2, keepdim=True))
 
         # Calculate left and right max() terms.
-        zero = Variable(torch.zeros(1))
+        zero = Variable(torch.zeros(1),requires_grad=True)
         if self.cuda_enabled:
             zero = zero.cuda()
         m_plus = 0.9

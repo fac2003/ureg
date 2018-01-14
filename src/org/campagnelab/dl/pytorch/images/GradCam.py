@@ -3,7 +3,9 @@ from torch.autograd import Variable
 from torch.autograd import Function
 from torchvision import models
 from torchvision import utils
-import cv2
+
+import cv2 #pip install opencv-python:
+
 import sys
 import numpy as np
 import argparse
@@ -134,6 +136,47 @@ class GradCam:
         cam = cam / np.max(cam)
         return cam
 
+
+class GradCamCapsule:
+    """
+    Use GradCam with a CapsNet to identify the parts of images that contribute the most to predicting
+    the targets.
+    """
+
+    def __init__(self, model, use_cuda, example_size=(32, 32)):
+        self.model = model
+        self.example_size = example_size
+        self.model.eval()
+        self.cuda = use_cuda
+        if self.cuda:
+            self.model = model.cuda()
+
+    def forward(self, input):
+        return self.model(input)
+
+    def __call__(self, input, out_digit_caps, targets, gradients):
+        grads_val = gradients.cpu().data.numpy()
+
+        target = input
+        target = target.cpu().data.numpy()[0, :]
+
+        weights = np.mean(grads_val, axis=(2, 3))
+        weights=weights[0, :]
+        cam = np.ones(target.shape[1:], dtype=np.float32)
+
+        for i, w in enumerate(weights):
+            cam += w * target[i, :, :]
+
+        cam = np.maximum(cam, 0)
+        cam = cv2.resize(cam, self.example_size[1:])
+        np_min = np.min(cam)
+        np_max = np.max(cam)
+        cam = cam - np_min
+        cam = cam / np_max
+        cam= torch.from_numpy(cam)
+        if self.cuda:
+            cam=cam.cuda()
+        return cam
 
 class GuidedBackpropReLU(Function):
     def forward(self, input):

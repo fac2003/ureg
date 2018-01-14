@@ -84,6 +84,7 @@ class TrainModelUnsupMixup:
         self.failed_to_improve = 0
         self.confusion_matrix = None
         self.best_model_confusion_matrix = None
+        self.published_reconstruction_loss=False
 
     def init_model(self, create_model_function):
         """Resume training if necessary (args.--resume flag is True), or call the
@@ -520,17 +521,27 @@ class TrainModelUnsupMixup:
             if self.use_cuda:
                 inputs, targets = inputs.cuda(), targets.cuda()
 
-            inputs, targets = Variable(inputs), Variable(targets, requires_grad=False)
+            inputs, targets = Variable(inputs,requires_grad=True), Variable(targets, requires_grad=False)
             # outputs used to calculate the loss of the supervised model
             # must be done with the model prior to regularization:
             self.net.train()
             self.optimizer_training.zero_grad()
             outputs = self.net(inputs)
+            one_hot_targets = Variable(self.problem.one_hot(targets.data), requires_grad=False)
 
-            one_hot_targets= Variable(self.problem.one_hot(targets.data),requires_grad=False)
-            (optimized_loss, capsule_loss, reconstruction_loss) = self.net.loss(inputs, outputs, one_hot_targets)
-            optimized_loss.backward()
-            self.optimizer_training.step()
+            if self.published_reconstruction_loss:
+                (optimized_loss, capsule_loss, reconstruction_loss) = self.net.loss(inputs, outputs, one_hot_targets)
+                optimized_loss.backward()
+                self.optimizer_training.step()
+            else:
+                margin_loss = self.net.margin_loss(outputs, one_hot_targets)
+                margin_loss = margin_loss.mean()
+                margin_loss.backward(retain_graph=True)
+                reconstruction_loss = self.net.focused_reconstruction_loss(inputs, inputs.grad, outputs, one_hot_targets)
+                reconstruction_loss.backward()
+                self.optimizer_training.step()
+                optimized_loss=margin_loss+reconstruction_loss
+                capsule_loss=margin_loss
 
             supervised_grad_norm = grad_norm(self.net.decoder.parameters())
             performance_estimators.set_metric(batch_idx, "train_grad_norm", supervised_grad_norm)

@@ -142,7 +142,7 @@ class CapsNet3(EstimateFeatureSize):
 
         total_loss = m_loss
 
-        if self.use_reconstruction_loss:
+        if self.use_reconstruction_loss and self.training:
             # Reconstruct the image from the Decoder network
             reconstruction = self.decoder(out_digit_caps, target)
             recon_loss = self.reconstruction_loss(reconstruction, image)

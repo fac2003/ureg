@@ -622,11 +622,11 @@ class TrainModelUnsupMixup:
 
         if not self.args.resume:
             with open("all-{}-{}.tsv".format(kind, self.args.checkpoint_key), "w") as perf_file:
-                perf_file.write("\t".join(map(str, metrics)))
+                perf_file.write(" ".join(map(str, metrics)))
                 perf_file.write("\n")
 
             with open("best-{}-{}.tsv".format(kind, self.args.checkpoint_key), "w") as perf_file:
-                perf_file.write("\t".join(map(str, metrics)))
+                perf_file.write(" ".join(map(str, metrics)))
                 perf_file.write("\n")
 
     def log_performance_metrics(self, epoch, performance_estimators, kind="perfs"):
@@ -641,7 +641,7 @@ class TrainModelUnsupMixup:
 
         early_stop = False
         with open("all-{}-{}.tsv".format(kind, self.args.checkpoint_key), "a") as perf_file:
-            perf_file.write("\t".join(map(_format_nice, metrics)))
+            perf_file.write(" ".join(map(_format_nice, metrics)))
             perf_file.write("\n")
         if self.best_performance_metrics is None:
             self.best_performance_metrics = performance_estimators
@@ -651,7 +651,7 @@ class TrainModelUnsupMixup:
             self.failed_to_improve = 0
 
             with open("best-{}-{}.tsv".format(kind, self.args.checkpoint_key), "a") as perf_file:
-                perf_file.write("\t".join(map(_format_nice, metrics)))
+                perf_file.write(" ".join(map(_format_nice, metrics)))
                 perf_file.write("\n")
 
         if metric is not None and metric >= self.best_acc:

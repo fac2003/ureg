@@ -65,7 +65,7 @@ class CapsNet3(EstimateFeatureSize):
                                     num_routing=num_routing,
                                     cuda_enabled=cuda_enabled)
         primary_unit_size = self.estimate_output_size(example_size, self.forward_primary)
-
+        print("capsule primary unit size: {}".format(primary_unit_size))
 
         # DigitCaps
         # Final layer: Capsule layer where the routing algorithm is.

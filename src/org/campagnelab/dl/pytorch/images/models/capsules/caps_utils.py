@@ -127,6 +127,50 @@ def mask(out_digit_caps, cuda_enabled=True):
     return masked
 
 
+def mask_with_true_labels(out_digit_caps, true_labels, cuda_enabled=True):
+    """
+    In the paper, they mask out all but the activity vector of the correct digit capsule.
+
+    This means:
+    a) during training, mask all but the capsule (1x16 vector) which match the ground-truth.
+    b) during testing, mask all but the longest capsule (1x16 vector).
+
+    Args:
+        out_digit_caps: [batch_size, 10, 16] Tensor output of `DigitCaps` layer.
+        true_labels: [batch_size, 10, 10] Tensor with one hot encoded classes
+    Returns:
+        masked: [batch_size, 10, 16, 1] The masked capsules tensors.
+    """
+
+    # b) Find the indices where true_label one hot encoding is not zero:
+    max_indices = true_labels.data.nonzero()
+
+
+    # Method 2: masking with true labels.
+    # c) In all batches, get the most active capsule
+    # It's not easy to understand the indexing process with max_index
+    # as we are 3D animal.
+    batch_size = out_digit_caps.size(0)
+    masked_v = [None] * batch_size # Python list
+    for batch_ix in range(batch_size):
+        # Batch sample
+        sample = out_digit_caps[batch_ix]
+
+        # Masks out the other capsules in this sample.
+        v = Variable(torch.zeros(sample.size()))
+        if cuda_enabled:
+            v = v.cuda()
+
+        # Get the maximum capsule index from this batch sample.
+        max_caps_index = max_indices[batch_ix]
+        v[max_caps_index] = sample[max_caps_index]
+        masked_v[batch_ix] = v # append v to masked_v
+
+    # Concatenates sequence of masked capsules tensors along the batch dimension.
+    masked = torch.stack(masked_v, dim=0)
+
+    return masked
+
 def save_image(image, file_name):
     """
     Save a given image into an image file

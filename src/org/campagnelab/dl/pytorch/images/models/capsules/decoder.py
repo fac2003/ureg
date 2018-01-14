@@ -67,10 +67,14 @@ class Decoder(nn.Module):
         """
         First, do masking.
         """
-        # Method 1: mask with y.
-        # Note: we have not implement method 2 which is masking with true label.
-        # masked_caps shape: [batch_size, 10, 16, 1]
-        masked_caps = caps_utils.mask(x, self.cuda_enabled)
+        if self.training:
+            # training phase, mask with true labels
+            masked_caps = caps_utils.mask_with_true_labels(x, true_labels=target, cuda_enabled=self.cuda_enabled)
+        else:
+            # Test phase
+            # mask with the longest vector in y.
+            # masked_caps shape: [batch_size, 10, 16, 1]
+            masked_caps = caps_utils.mask(x, self.cuda_enabled)
 
         """
         Second, reconstruct the images with 3 Fully Connected layers.

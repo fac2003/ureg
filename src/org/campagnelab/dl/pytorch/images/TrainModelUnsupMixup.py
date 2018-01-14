@@ -7,6 +7,7 @@ import torch
 from torch.autograd import Variable
 from torch.backends import cudnn
 from torch.nn import MSELoss, MultiLabelSoftMarginLoss
+from torch.optim import Adam
 from torchnet.meter import ConfusionMeter
 
 from org.campagnelab.dl.pytorch.images.AccuracyHelper import AccuracyHelper
@@ -490,6 +491,63 @@ class TrainModelUnsupMixup:
             exit(1)
         return targets2
 
+    def train_capsules(self, epoch,
+              performance_estimators=None,
+              train_supervised_model=True,
+              ):
+        if performance_estimators is None:
+            performance_estimators = PerformanceList()
+            performance_estimators += [LossHelper("optimized_loss")]
+            performance_estimators += [LossHelper("capsule_loss")]
+            performance_estimators += [LossHelper("reconstruction_loss")]
+
+            performance_estimators += [AccuracyHelper("train_")]
+            performance_estimators += [FloatHelper("train_grad_norm")]
+            print('\nTraining, epoch: %d' % epoch)
+
+        self.net.train()
+        supervised_grad_norm = 1.
+        for performance_estimator in performance_estimators:
+            performance_estimator.init_performance_metrics()
+
+        unsupervised_loss_acc = 0
+        num_batches = 0
+        train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
+
+        for batch_idx, (inputs, targets) in enumerate(train_loader_subset):
+            num_batches += 1
+
+            if self.use_cuda:
+                inputs, targets = inputs.cuda(), targets.cuda()
+
+            inputs, targets = Variable(inputs), Variable(targets, requires_grad=False)
+            # outputs used to calculate the loss of the supervised model
+            # must be done with the model prior to regularization:
+            self.net.train()
+            self.optimizer_training.zero_grad()
+            outputs = self.net(inputs)
+
+            one_hot_targets= Variable(self.problem.one_hot(targets.data),requires_grad=False)
+            (optimized_loss, capsule_loss, reconstruction_loss) = self.net.loss(inputs, outputs, one_hot_targets)
+            optimized_loss.backward()
+            self.optimizer_training.step()
+
+            supervised_grad_norm = grad_norm(self.net.decoder.parameters())
+            performance_estimators.set_metric(batch_idx, "train_grad_norm", supervised_grad_norm)
+            performance_estimators.set_metric(batch_idx, "optimized_loss", optimized_loss.data[0])
+            performance_estimators.set_metric(batch_idx,"reconstruction_loss", reconstruction_loss.data[0])
+            performance_estimators.set_metric(batch_idx,"capsule_loss", capsule_loss.data[0])
+
+            progress_bar(batch_idx * self.mini_batch_size,
+                         min(self.max_regularization_examples, self.max_training_examples),
+                         " ".join([performance_estimator.progress_message() for performance_estimator in
+                                   performance_estimators]))
+
+            if (batch_idx + 1) * self.mini_batch_size > self.max_training_examples:
+                break
+
+        return performance_estimators
+
     def test(self, epoch, performance_estimators=None):
         print('\nTesting, epoch: %d' % epoch)
         if performance_estimators is None:
@@ -742,13 +800,18 @@ class TrainModelUnsupMixup:
         lr_train_helper = LearningRateHelper(scheduler=self.scheduler_train, learning_rate_name="train_lr")
         previous_test_perfs = None
         perfs = PerformanceList()
+        if self.args.mode=="capsules":
+            self.optimizer_training = Adam(self.net.parameters(), lr=self.args.lr, betas=(0.5, 0.999))
 
         for epoch in range(self.start_epoch, self.start_epoch + self.args.num_epochs):
 
             perfs = PerformanceList()
 
-            perfs += self.train(epoch,
-                                     train_supervised_model=True)
+            if self.args.mode=="capsules":
+                perfs += self.train_capsules(epoch)
+            else:
+                perfs += self.train(epoch,
+                                    train_supervised_model=True)
 
             perfs += [lr_train_helper]
             if previous_test_perfs is None or self.epoch_is_test_epoch(epoch):

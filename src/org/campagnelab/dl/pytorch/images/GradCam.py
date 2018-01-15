@@ -148,35 +148,45 @@ class GradCamCapsule:
         self.example_size = example_size
         self.model.eval()
         self.cuda = use_cuda
+        self.relu= torch.nn.ReLU()
         if self.cuda:
             self.model = model.cuda()
 
     def forward(self, input):
         return self.model(input)
 
-    def __call__(self, input, out_digit_caps, targets, gradients):
+    def __call__(self, input, out_digit_caps, targets, gradients, floor=0):
+        batch_size = input.size()[0]
         grads_val = gradients.cpu().data.numpy()
+        masks = []
+        for image_index in range(batch_size):
+            target = input[image_index]
+            target = target.cpu().data.numpy()
 
-        target = input
-        target = target.cpu().data.numpy()[0, :]
+            weights = np.mean(grads_val, axis=(2, 3))
+            weights = weights[0, :]
+            cam = np.ones(target.shape[1:], dtype=np.float32)
 
-        weights = np.mean(grads_val, axis=(2, 3))
-        weights=weights[0, :]
-        cam = np.ones(target.shape[1:], dtype=np.float32)
+            for i, w in enumerate(weights):
+                cam += w * target[i, :, :]
 
-        for i, w in enumerate(weights):
-            cam += w * target[i, :, :]
-
-        cam = np.maximum(cam, 0)
-        cam = cv2.resize(cam, self.example_size[1:])
-        np_min = np.min(cam)
-        np_max = np.max(cam)
-        cam = cam - np_min
-        cam = cam / np_max
-        cam= torch.from_numpy(cam)
+            cam = np.maximum(cam, 0)
+            cam = cv2.resize(cam, self.example_size[1:])
+            np_min = np.min(cam)
+            np_max = np.max(cam)
+            cam = cam - np_min
+            cam = cam / np_max
+            cam = torch.from_numpy(cam)
+            # expand across channels:
+            cam=cam.expand_as(input[0])
+            masks += [cam]
+        result = torch.stack(masks,dim=0)
         if self.cuda:
-            cam=cam.cuda()
-        return cam
+            result = result.cuda()
+        # keep only positive contributions to the class:
+        #result= torch.max(result,torch.zeros(input.size()))
+        return result;
+
 
 class GuidedBackpropReLU(Function):
     def forward(self, input):

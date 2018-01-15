@@ -504,6 +504,7 @@ class TrainModelUnsupMixup:
 
             performance_estimators += [AccuracyHelper("train_")]
             performance_estimators += [FloatHelper("train_grad_norm")]
+            #performance_estimators += [FloatHelper("reconstruct_grad_norm")]
             print('\nTraining, epoch: %d' % epoch)
 
         self.net.train()
@@ -525,6 +526,7 @@ class TrainModelUnsupMixup:
             # outputs used to calculate the loss of the supervised model
             # must be done with the model prior to regularization:
             self.net.train()
+            self.net.zero_grad()
             self.optimizer_training.zero_grad()
             outputs = self.net(inputs)
             one_hot_targets = Variable(self.problem.one_hot(targets.data), requires_grad=False)
@@ -533,10 +535,12 @@ class TrainModelUnsupMixup:
                 (optimized_loss, capsule_loss, reconstruction_loss) = self.net.loss(inputs, outputs, one_hot_targets)
                 optimized_loss.backward()
                 self.optimizer_training.step()
+                reconstruct_grad_norm=0
             else:
                 margin_loss = self.net.margin_loss(outputs, one_hot_targets)
                 margin_loss = margin_loss.mean()
                 margin_loss.backward(retain_graph=True)
+                #reconstruct_grad_norm = grad_norm(inputs.grad)
                 reconstruction_loss = self.net.focused_reconstruction_loss(inputs, inputs.grad, outputs, one_hot_targets)
                 reconstruction_loss.backward()
                 self.optimizer_training.step()
@@ -545,14 +549,16 @@ class TrainModelUnsupMixup:
 
             supervised_grad_norm = grad_norm(self.net.decoder.parameters())
             performance_estimators.set_metric(batch_idx, "train_grad_norm", supervised_grad_norm)
+            #performance_estimators.set_metric(batch_idx, "reconstruct_grad_norm", reconstruct_grad_norm)
             performance_estimators.set_metric(batch_idx, "optimized_loss", optimized_loss.data[0])
             performance_estimators.set_metric(batch_idx,"reconstruction_loss", reconstruction_loss.data[0])
             performance_estimators.set_metric(batch_idx,"capsule_loss", capsule_loss.data[0])
 
             progress_bar(batch_idx * self.mini_batch_size,
-                         min(self.max_regularization_examples, self.max_training_examples),
-                         " ".join([performance_estimator.progress_message() for performance_estimator in
-                                   performance_estimators]))
+                         self.max_training_examples,
+                         performance_estimators.progress_message(["optimized_loss","capsule_loss","reconstruction_loss"]))
+
+
 
             if (batch_idx + 1) * self.mini_batch_size > self.max_training_examples:
                 break

@@ -135,7 +135,7 @@ class CapsNet3(EstimateFeatureSize):
             m_loss: A scalar of margin loss.
             recon_loss: A scalar of reconstruction loss.
         """
-        recon_loss = 1e-6
+        recon_loss = 0
         m_loss = self.margin_loss(out_digit_caps, target)
         if size_average:
             m_loss = m_loss.mean()
@@ -176,12 +176,12 @@ class CapsNet3(EstimateFeatureSize):
         recon_loss=0
         if self.training and not numpy.isnan(gradients.cpu().data.numpy().sum()):
             # identify the parts of the images that were informative with respect to the targets:
-            mask=self.grad_cam(image, out_digit_caps, target, gradients)
+            mask=self.grad_cam(image, out_digit_caps, target, gradients,floor=0)
             mask=Variable(mask, requires_grad=True)
             # Reconstruct the image from the Decoder network
             reconstruction = self.decoder(out_digit_caps, target)
             # reconstruct the masked images:
-            recon_loss = self.reconstruction_loss(reconstruction, torch.dot(image,mask.expand_as(image)))
+            recon_loss = self.reconstruction_loss(reconstruction, torch.dot(image,mask))
 
             # Mean squared error
             if size_average:

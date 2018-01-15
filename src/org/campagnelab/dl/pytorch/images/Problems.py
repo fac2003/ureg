@@ -9,14 +9,22 @@ from org.campagnelab.dl.pytorch.images.models.vgg_dual import VGGDual
 from org.campagnelab.dl.pytorch.images.utils import init_params
 
 
-def capsnet3(problem):
-    #parser.add_argument('--primary-unit-size', type=int,
-    #                    default=1152, help='primary unit size is 32 * 6 * 6. default=1152')
+def capsnet3_8_64(problem):
 
     return CapsNet3(example_size=problem.example_size(), num_conv_in_channel=3, num_conv_out_channel=256,
                     num_primary_unit=8,
                     num_classes=problem.num_classes(), output_unit_size=16, num_routing=3,
-                    use_reconstruction_loss=True, cuda_enabled=torch.cuda.is_available())
+                    use_reconstruction_loss=True, cuda_enabled=torch.cuda.is_available(),
+                    capsule_out_size=64)
+
+
+def capsnet3_24_8(problem):
+
+    return CapsNet3(example_size=problem.example_size(), num_conv_in_channel=3, num_conv_out_channel=256,
+                    num_primary_unit=24,
+                    num_classes=problem.num_classes(), output_unit_size=16, num_routing=3,
+                    use_reconstruction_loss=True, cuda_enabled=torch.cuda.is_available(),
+                    capsule_out_size=8)
 
 
 def vgg16(problem):
@@ -106,7 +114,9 @@ models = {
     "DPN92": dpn92,
     "ShuffleNetG2": shufflenetg2,
     "SENet18": senet18,
-    "CapsNet3": capsnet3
+    "CapsNet3_8_64": capsnet3_8_64,
+    "CapsNet3_24_8": capsnet3_24_8,
+
 }
 
 

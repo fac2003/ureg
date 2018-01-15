@@ -6,7 +6,7 @@ https://arxiv.org/abs/1710.09829
 
 Author: Cedric Chee
 """
-
+import numpy
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
@@ -32,7 +32,7 @@ class CapsNet3(EstimateFeatureSize):
                  num_primary_unit=8,
                  use_reconstruction_loss=False,
                  regularization_scale=0.0005,
-                 cuda_enabled=False,):
+                 cuda_enabled=False, capsule_out_size=64):
         """
         In the constructor we instantiate one ConvLayer module and two CapsuleLayer modules
         and assign them as member variables.
@@ -66,7 +66,7 @@ class CapsNet3(EstimateFeatureSize):
                                     num_routing=num_routing,
                                     cuda_enabled=cuda_enabled)
         primary_unit_size = self.estimate_output_size(example_size, self.forward_primary)
-        linear_out_size=64
+        linear_out_size=capsule_out_size
         self.linear=nn.Linear(primary_unit_size, linear_out_size)
         print("capsule primary unit size: {}, reduced to {}".format(primary_unit_size,linear_out_size))
 
@@ -135,7 +135,7 @@ class CapsNet3(EstimateFeatureSize):
             m_loss: A scalar of margin loss.
             recon_loss: A scalar of reconstruction loss.
         """
-        recon_loss = 0
+        recon_loss = 1e-6
         m_loss = self.margin_loss(out_digit_caps, target)
         if size_average:
             m_loss = m_loss.mean()
@@ -174,7 +174,7 @@ class CapsNet3(EstimateFeatureSize):
             recon_loss: A scalar of reconstruction loss.
         """
         recon_loss=0
-        if self.training:
+        if self.training and not numpy.isnan(gradients.cpu().data.numpy().sum()):
             # identify the parts of the images that were informative with respect to the targets:
             mask=self.grad_cam(image, out_digit_caps, target, gradients)
             mask=Variable(mask, requires_grad=True)
@@ -186,6 +186,9 @@ class CapsNet3(EstimateFeatureSize):
             # Mean squared error
             if size_average:
                 recon_loss = recon_loss.mean()
+        else:
+            recon_loss=Variable(torch.ones(1), requires_grad=True)
+            if self.cuda_enabled: recon_loss = recon_loss.cuda()
 
         return recon_loss * self.regularization_scale
 
@@ -209,6 +212,7 @@ class CapsNet3(EstimateFeatureSize):
 
         # Calculate left and right max() terms.
         zero = Variable(torch.zeros(1),requires_grad=True)
+        zero=zero+1E-6
         if self.cuda_enabled:
             zero = zero.cuda()
         m_plus = 0.9

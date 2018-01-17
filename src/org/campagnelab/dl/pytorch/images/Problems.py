@@ -5,6 +5,8 @@ from org.campagnelab.dl.pytorch.images.models \
 from org.campagnelab.dl.pytorch.images.models.capsules.capsule_net import CapsNet3
 from org.campagnelab.dl.pytorch.images.models.dual import LossEstimator_sim
 from org.campagnelab.dl.pytorch.images.models.preact_resnet_dual import PreActResNet18Dual
+from org.campagnelab.dl.pytorch.images.models.preact_resnet_recursive import PreActResNet18Recursive
+from org.campagnelab.dl.pytorch.images.models.recursive import VGGRecursive
 from org.campagnelab.dl.pytorch.images.models.vgg_dual import VGGDual
 from org.campagnelab.dl.pytorch.images.utils import init_params
 
@@ -38,6 +40,25 @@ def capsnet3_24_8(problem):
 def vgg16(problem):
     return VGG('VGG16', problem.example_size())
 
+def vgg11_recursive(problem):
+    return VGGRecursive('VGG11', problem.example_size())
+
+
+
+def vgg13_recursive(problem):
+    return VGGRecursive('VGG13', problem.example_size())
+
+
+def vgg16_recursive(problem):
+    return VGGRecursive('VGG16', problem.example_size())
+
+def vgg19_recursive(problem):
+    return VGGRecursive('VGG19', problem.example_size())
+
+
+def vgg256_recursive(problem):
+    return VGGRecursive('VGG256', problem.example_size())
+
 
 def vgg16dual(problem):
     return VGGDual('VGG16', problem.example_size(), loss_estimator=LossEstimator_sim)
@@ -50,6 +71,8 @@ def vgg19(problem):
 def resnet18(problem):
     return ResNet18(problem.example_size())
 
+def preactresnet18_recursive(problem):
+    return PreActResNet18Recursive(input_shape=problem.example_size())
 
 def preactresnet18(problem):
     return PreActResNet18(problem.example_size())
@@ -106,10 +129,16 @@ def senet18(problem):
 
 models = {
     "VGG16": vgg16,
+    "VGG11Recursive": vgg11_recursive,
+    "VGG13Recursive": vgg13_recursive,
+    "VGG16Recursive": vgg16_recursive,
+    "VGG19Recursive": vgg19_recursive,
+    "VGG256Recursive": vgg256_recursive,
     "VGG16Dual": vgg16dual,
     "VGG19": vgg19,
     "ResNet18": resnet18,
     "PreActResNet18": preactresnet18,
+    "PreActResNet18Recursive": preactresnet18_recursive,
     "PreActResNet18Dual": preactresnet18dual,
     "PreActResNet34": preactresnet34,
     "PreActResNet50": preactresnet50,

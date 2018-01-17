@@ -227,7 +227,7 @@ class TrainModelUnsupMixup:
 
 
             progress_bar(batch_idx * self.mini_batch_size,
-                         min(self.max_regularization_examples, self.max_training_examples),
+                         self.max_training_examples,
                          " ".join([performance_estimator.progress_message() for performance_estimator in
                                    performance_estimators]))
 

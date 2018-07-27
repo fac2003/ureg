@@ -16,9 +16,9 @@ Common to all platforms:
 ````bash
 pip install torchvision
 pip install git+https://github.com/pytorch/tnt.git@master
+pip install scipy
 export UREG=<install-dir>/ureg/
 ````
-
 # Training
 
 To pre-train a model with STL10:
